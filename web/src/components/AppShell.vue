@@ -13,6 +13,9 @@ import {
   MessageSquareText,
   Phone,
   PhoneCall,
+  Forward,
+  Server,
+  UserRound,
   Settings,
   TestTube2,
   UsersRound,
@@ -61,9 +64,11 @@ import {
   loadContacts
 } from '../state/workspace'
 import AudioSettingsMenu from './AudioSettingsMenu.vue'
+import AppearanceToggle from './AppearanceToggle.vue'
 import DialerPanel from './DialerPanel.vue'
 import GlobalSearch from './GlobalSearch.vue'
 import IncomingCallModeControl from './IncomingCallModeControl.vue'
+import LineStatusStrip from './LineStatusStrip.vue'
 import OverlayDialog from './OverlayDialog.vue'
 
 const route = useRoute()
@@ -169,6 +174,8 @@ const mobileSettingsSection = computed(() => {
     pairing: t('settings.iosApp'),
     devices: t('settings.devices'),
     telegram: t('settings.telegram'),
+            bark: t('settings.bark'),
+            f50: t('settings.f50'),
     connectivity: t('settings.tls'),
     diagnostics: t('settings.diagnostics'),
     about: t('settings.about')
@@ -404,10 +411,10 @@ onBeforeUnmount(() => {
       <RouterLink
         class="brand-mark"
         :to="{ name: 'dashboard' }"
-        :aria-label="`ModemDeck ${t('shell.home')}`"
+        :aria-label="`HomeSIM ${t('shell.home')}`"
       >
-        <span>M</span>
-        <strong>Modem<br />Deck</strong>
+        <span><img src="/favicon.svg" width="40" height="40" alt="" /></span>
+        <strong>HomeSIM</strong>
       </RouterLink>
 
       <nav class="rail__primary">
@@ -425,9 +432,18 @@ onBeforeUnmount(() => {
       </nav>
 
       <nav class="rail__secondary">
+        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'telegram' }" :to="{ name: 'settings', params: { section: 'telegram' } }" :title="t('homesim.forward')">
+          <Forward :size="22" /><span>{{ t('homesim.forward') }}</span>
+        </RouterLink>
+        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && ['devices', 'diagnostics', 'about'].includes(String(route.params.section)) }" :to="{ name: 'settings', params: { section: 'devices' } }" :title="t('homesim.system')">
+          <Server :size="22" /><span>{{ t('homesim.system') }}</span>
+        </RouterLink>
+        <RouterLink class="rail-link" :to="{ name: 'settings', params: { section: 'preferences' } }" :title="t('homesim.profile')">
+          <UserRound :size="22" /><span>{{ t('homesim.profile') }}</span>
+        </RouterLink>
         <RouterLink
           class="rail-link"
-          :class="{ 'is-current': route.name === 'settings' }"
+          :class="{ 'is-current': route.name === 'settings' && !['devices', 'diagnostics', 'about', 'telegram'].includes(String(route.params.section)) }"
           :to="{ name: 'settings' }"
           :title="t('shell.settings')"
         >
@@ -450,49 +466,58 @@ onBeforeUnmount(() => {
           <ArrowLeft :size="20" />
         </button>
         <div class="mobile-brand">{{ mobilePageTitle }}</div>
-        <GlobalSearch />
-        <div
-          v-if="fixtureMode"
-          class="fixture-badge"
-          :title="t('shell.fixtureDataHint')"
-        >
-          <TestTube2 :size="15" />
-          {{ t('shell.fixtureData') }}
+        <div class="shell-header__loc">
+          <div class="shell-location" aria-hidden="true">
+            <span>HomeSIM</span><span>/</span><strong>{{ mobilePageTitle }}</strong>
+          </div>
+          <LineStatusStrip />
         </div>
-        <div
-          class="shell-header__controls"
-          :class="{ 'is-hidden-on-mobile': mobileDrilldownControlsHidden }"
-        >
-          <IncomingCallModeControl v-if="sessionState.role === 'admin'" />
-          <button
-            class="icon-button"
-            :class="{ 'is-active': browserNotificationState.active }"
-            type="button"
-            :disabled="
-              browserNotificationState.requesting ||
-              !browserNotificationState.secureContext ||
-              !browserNotificationState.supported ||
-              (browserNotificationState.permission === 'denied' &&
-                !browserNotificationState.preferenceEnabled)
-            "
-            :title="browserNotificationTitle"
-            :aria-label="browserNotificationTitle"
-            :aria-pressed="browserNotificationState.active"
-            @click="toggleBrowserNotifications"
+        <GlobalSearch />
+        <div class="shell-header__right">
+          <div
+            v-if="fixtureMode"
+            class="fixture-badge"
+            :title="t('shell.fixtureDataHint')"
           >
-            <BellRing v-if="browserNotificationState.active" :size="19" />
-            <BellOff v-else :size="19" />
-          </button>
-          <AudioSettingsMenu />
-          <button
-            class="icon-button shell-dialer-toggle"
-            type="button"
-            :title="t('shell.openDialer')"
-            :aria-label="t('shell.openDialer')"
-            @click="openDialer()"
+            <TestTube2 :size="15" />
+            {{ t('homesim.fixture') }}
+          </div>
+          <div
+            class="shell-header__controls"
+            :class="{ 'is-hidden-on-mobile': mobileDrilldownControlsHidden }"
           >
-            <PhoneCall :size="19" />
-          </button>
+            <IncomingCallModeControl v-if="sessionState.role === 'admin'" />
+            <AppearanceToggle />
+            <button
+              class="icon-button"
+              :class="{ 'is-active': browserNotificationState.active }"
+              type="button"
+              :disabled="
+                browserNotificationState.requesting ||
+                !browserNotificationState.secureContext ||
+                !browserNotificationState.supported ||
+                (browserNotificationState.permission === 'denied' &&
+                  !browserNotificationState.preferenceEnabled)
+              "
+              :title="browserNotificationTitle"
+              :aria-label="browserNotificationTitle"
+              :aria-pressed="browserNotificationState.active"
+              @click="toggleBrowserNotifications"
+            >
+              <BellRing v-if="browserNotificationState.active" :size="19" />
+              <BellOff v-else :size="19" />
+            </button>
+            <AudioSettingsMenu />
+            <button
+              class="icon-button shell-dialer-toggle"
+              type="button"
+              :title="t('shell.openDialer')"
+              :aria-label="t('shell.openDialer')"
+              @click="openDialer()"
+            >
+              <PhoneCall :size="19" />
+            </button>
+          </div>
         </div>
       </header>
 

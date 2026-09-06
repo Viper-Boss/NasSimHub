@@ -26,9 +26,9 @@ withDefaults(
   width: 9px;
   height: 9px;
   flex: 0 0 9px;
-  background: var(--accent);
+  background: var(--danger);
   border-radius: 50%;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
 }
 
 .unread-dot.is-compact {
@@ -37,7 +37,7 @@ withDefaults(
   flex-basis: 10px;
   border: 2px solid var(--surface);
   box-shadow:
-    0 0 0 1px rgb(12 98 79 / 52%),
+    0 0 0 1px color-mix(in srgb, var(--danger) 52%, transparent),
     0 1px 2px rgb(16 24 40 / 18%);
 }
 </style>

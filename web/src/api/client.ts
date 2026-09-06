@@ -4,6 +4,7 @@ import type {
   ListQuery,
   ModemDeckGateway
 } from './gateway'
+import { emptyIntegrationDraft, integrationDraftProblem, type HomeSIMIntegrationDraft } from './homesim'
 import {
   callActionContract,
   callLeaseContract,
@@ -2459,3 +2460,190 @@ const fixtureGateway = fixtureMode
 export const gateway: ConfiguredModemDeckGateway = fixtureGateway
   ? configureFixture(fixtureGateway)
   : realGateway
+
+export async function backupContactsToNAS(): Promise<{ filename: string; count: number; created_at: string }> {
+  if (fixtureMode) throw new Error('当前为演示模式，未连接飞牛服务器，没有生成 NAS 备份。')
+  const result = await writeJSON(`${API_ROOT}/contacts/backup`, 'POST', {}, 201) as Record<string, unknown>
+  if (typeof result?.filename !== 'string' || typeof result.count !== 'number' || typeof result.created_at !== 'string') throw new Error('备份响应无效，请检查服务器备份目录后再决定是否重试。')
+  return { filename: result.filename, count: result.count, created_at: result.created_at }
+}
+
+export async function getHomeSIMIntegrationDraft(): Promise<HomeSIMIntegrationDraft> {
+  if (fixtureMode) return emptyIntegrationDraft()
+  const result = await get(`${API_ROOT}/settings/homesim`) as { draft: HomeSIMIntegrationDraft }
+  if (!result?.draft?.ai || !result.draft.spam || !result.draft.identity || !Number.isInteger(result.draft.revision)) throw new Error('接入配置响应无效。')
+  return result.draft
+}
+
+export async function saveHomeSIMIntegrationDraft(draft: HomeSIMIntegrationDraft): Promise<HomeSIMIntegrationDraft> {
+  if (fixtureMode) throw new Error('当前为演示模式，接入草稿未保存到 NAS。')
+  const problem = integrationDraftProblem(draft)
+  if (problem) throw new Error(problem)
+  const result = await writeJSON(`${API_ROOT}/settings/homesim`, 'PUT', draft, 200) as { draft: HomeSIMIntegrationDraft }
+  if (!result?.draft?.ai || !Number.isInteger(result.draft.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
+  return result.draft
+}
+
+export type HomeSIMBarkSettings = {
+  revision: number
+  server_url: string
+  credential_ref: string
+  group: string
+  sound: string
+}
+
+export async function getHomeSIMBarkSettings(): Promise<HomeSIMBarkSettings> {
+  if (fixtureMode) {
+    return { revision: 1, server_url: 'https://api.day.app', credential_ref: 'HOMESIM_BARK_KEY', group: 'HomeSIM', sound: '' }
+  }
+  const result = await get(`${API_ROOT}/settings/homesim/bark`) as { settings: HomeSIMBarkSettings }
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || typeof result.settings.server_url !== 'string') {
+    throw new Error('Bark 设置响应无效。')
+  }
+  return result.settings
+}
+
+export async function saveHomeSIMBarkSettings(settings: HomeSIMBarkSettings): Promise<HomeSIMBarkSettings> {
+  if (fixtureMode) throw new Error('当前为演示模式，Bark 设置未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/bark`, 'PUT', settings, 200) as { settings: HomeSIMBarkSettings }
+  if (!result?.settings || !Number.isInteger(result.settings.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
+  return result.settings
+}
+
+export async function sendHomeSIMBarkTestPush(): Promise<{ sent: boolean; status: number }> {
+  if (fixtureMode) throw new Error('当前为演示模式，未连接服务器，没有发送测试推送。')
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/bark/test`, 'POST', {}, 200) as { sent: boolean; status: number }
+  if (!result?.sent) throw new Error('测试推送响应无效，请检查服务器日志。')
+  return result
+}
+
+export type HomeSIMPhoneGeo = { province: string; city: string; carrier: string }
+
+// Offline region lookup on the server (phone.dat). Returns null when the
+// server has no record for the prefix or the request fails; callers fall
+// back to the built-in prefix table.
+export async function fetchHomeSIMPhoneGeo(number: string): Promise<HomeSIMPhoneGeo | null> {
+  if (fixtureMode) return null
+  try {
+    const result = await get(`${API_ROOT}/homesim/phone-geo?number=${encodeURIComponent(number)}`) as {
+      province?: string
+      city?: string
+      carrier?: string
+    }
+    if (!result || typeof result.province !== 'string' || !result.province) return null
+    return {
+      province: result.province,
+      city: typeof result.city === 'string' ? result.city : '',
+      carrier: typeof result.carrier === 'string' ? result.carrier : ''
+    }
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// F50 (ZTE 5G MiFi) — the second supported device type. The gateway proxies
+// the stock ZTE web backend; the F50 exposes SMS + traffic + signal but no
+// voice calls.
+
+export type HomeSIMF50Settings = {
+  revision: number
+  base_url: string
+  username: string
+  credential_ref: string
+}
+
+export type HomeSIMF50Status = {
+  NetworkType: string
+  Provider: string
+  Signalbar: string
+  RSRP: string
+  RSRQ: string
+  SNR: string
+  Bands: string
+  RealtimeRxThrpt: string
+  RealtimeTxThrpt: string
+  MonthlyRxBytes: string
+  MonthlyTxBytes: string
+  BillingDay: string
+  Temperature: string
+  CPUTemp: string
+  WifiStaNum: string
+  SMSUnread: string
+  FirmwareWA: string
+}
+
+export type HomeSIMF50Message = {
+  ID: string
+  Number: string
+  Content: string
+  Date: string
+  Tag: string
+}
+
+export async function getHomeSIMF50Settings(): Promise<HomeSIMF50Settings> {
+  if (fixtureMode) {
+    return { revision: 1, base_url: 'http://192.168.0.1', username: 'admin', credential_ref: 'HOMESIM_F50_PASSWORD' }
+  }
+  const result = await get(`${API_ROOT}/settings/homesim/f50`) as { settings: HomeSIMF50Settings }
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || typeof result.settings.base_url !== 'string') {
+    throw new Error('F50 设置响应无效。')
+  }
+  return result.settings
+}
+
+export async function saveHomeSIMF50Settings(settings: HomeSIMF50Settings): Promise<HomeSIMF50Settings> {
+  if (fixtureMode) throw new Error('当前为演示模式，F50 设置未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/f50`, 'PUT', settings, 200) as { settings: HomeSIMF50Settings }
+  if (!result?.settings || !Number.isInteger(result.settings.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
+  return result.settings
+}
+
+const f50MockStatus = (): HomeSIMF50Status => ({
+  NetworkType: '5G SA',
+  Provider: 'CHINA MOBILE',
+  Signalbar: '4',
+  RSRP: '-87',
+  RSRQ: '-10',
+  SNR: '13',
+  Bands: 'n78',
+  RealtimeRxThrpt: '12.5KB/s',
+  RealtimeTxThrpt: '3.2KB/s',
+  MonthlyRxBytes: '19964354560',
+  MonthlyTxBytes: '2040109466',
+  BillingDay: '1',
+  Temperature: '41',
+  CPUTemp: '44',
+  WifiStaNum: '2',
+  SMSUnread: '1',
+  FirmwareWA: 'F50 2.3.2'
+})
+
+const f50MockMessages = (): HomeSIMF50Message[] => [
+  { ID: '7', Number: '+8613901898834', Content: '【建设银行】您尾号8834的储蓄卡账户完成一笔快捷支付交易，验证码 739264，有效期5分钟。', Date: '26;09;06;14;20;00', Tag: '0' },
+  { ID: '6', Number: '+8613801662210', Content: '这个周末回家吃饭吗？', Date: '26;09;06;14;00;00', Tag: '1' }
+]
+
+export async function getF50Status(): Promise<HomeSIMF50Status> {
+  if (fixtureMode) return f50MockStatus()
+  const result = await get(`${API_ROOT}/homesim/f50/status`) as { status: HomeSIMF50Status }
+  if (!result?.status || typeof result.status.NetworkType !== 'string') throw new Error('F50 状态响应无效。')
+  return result.status
+}
+
+export async function getF50SMSList(page = 0): Promise<HomeSIMF50Message[]> {
+  if (fixtureMode) return f50MockMessages()
+  const result = await get(`${API_ROOT}/homesim/f50/sms?page=${encodeURIComponent(String(page))}`) as { messages: HomeSIMF50Message[] }
+  if (!result || !Array.isArray(result.messages)) throw new Error('F50 短信响应无效。')
+  return result.messages
+}
+
+export async function sendF50SMS(number: string, content: string): Promise<void> {
+  if (fixtureMode) throw new Error('当前为演示模式，未连接 F50 设备，没有真实发送短信。')
+  await writeJSON(`${API_ROOT}/homesim/f50/sms/send`, 'POST', { number, content }, 200)
+}
+
+export async function markF50SMSRead(ids: string[]): Promise<void> {
+  if (fixtureMode) return
+  await writeJSON(`${API_ROOT}/homesim/f50/sms/read`, 'POST', { ids }, 200)
+}

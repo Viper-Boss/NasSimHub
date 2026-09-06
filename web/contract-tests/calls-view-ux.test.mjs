@@ -41,8 +41,9 @@ test('call history marks only calls with playable recordings', async () => {
   )
   assert.match(
     row,
-    /v-if="hasRecording"[\s\S]*?class="call-list-item__recording"[\s\S]*?:aria-label="t\('calls\.hasRecording'\)"[\s\S]*?<AudioLines/
+    /v-if="hasRecording"[\s\S]*?class="homesim-recording-toggle"[\s\S]*?:aria-expanded="expandedRecording"[\s\S]*?<AudioLines/
   )
+  assert.match(row, /<div v-if="expandedRecording" class="homesim-call-playback"[\s\S]*?<RecordingPlayer/)
   assert.match(calls, /loadRecordingEntries\(\)/)
 })
 

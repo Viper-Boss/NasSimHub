@@ -8,6 +8,8 @@ import ListItemAvatarStatus from './ListItemAvatarStatus.vue'
 import ListItemStatusRail from './ListItemStatusRail.vue'
 import { useI18n } from 'vue-i18n'
 import { Star } from '@lucide/vue'
+import { computed } from 'vue'
+import { analyzeSms } from '../utils/smsInsight'
 
 const props = withDefaults(
   defineProps<{
@@ -37,6 +39,7 @@ const emit = defineEmits<{
   favorite: [thread: MessageThread]
 }>()
 const { t } = useI18n()
+const insight = computed(() => analyzeSms(props.thread.last_content || ''))
 </script>
 
 <template>
@@ -70,6 +73,9 @@ const { t } = useI18n()
     </ListItemAvatarStatus>
     <span class="list-item__content">
       <strong>{{ name }}</strong>
+      <span v-if="insight.category !== 'normal'" class="homesim-sms-category" :title="t('homesim.localAnalysis')">
+        {{ t(`homesim.category.${insight.category}`) }}
+      </span>
       <span class="message-thread-meta">
         <LineTag :line="line" :fallback="lineFallback" />
         <small>{{ thread.last_content || peer }}</small>

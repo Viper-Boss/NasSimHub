@@ -122,7 +122,7 @@ test('all communication list panes expose selection and their eligible batch act
   assert.match(messageRow, /import ListItemAvatarStatus from/)
   assert.match(
     callRow,
-    /<ListItemStatusRail[\s\S]*?class="call-list-item__recording"[\s\S]*?<template #favorite>[\s\S]*?<Star/
+    /<ListItemStatusRail[\s\S]*?<template #favorite>[\s\S]*?<Star[\s\S]*?<aside class="homesim-call-recording"/
   )
   assert.match(
     messageRow,

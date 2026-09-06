@@ -99,6 +99,8 @@ coverage.out
 # Temporary files
 *.tmp
 *.temp
+__pycache__/
+*.local.json
 .cache/
 /server
 /reader

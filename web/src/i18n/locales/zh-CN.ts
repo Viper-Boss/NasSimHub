@@ -1,4 +1,10 @@
+import { nasPreflightZH } from '../nasPreflight'
+
+import { homesimZH } from '../homesimData'
+
 export default {
+  homesim: homesimZH,
+  nasPreflight: nasPreflightZH,
   common: {
     cancel: '取消',
     close: '关闭',
@@ -271,6 +277,10 @@ export default {
     recordingDescription: '默认录音设置',
     telegram: 'Telegram',
     telegramDescription: '通过 Telegram Bot 推送',
+    bark: "Bark 推送",
+    barkDescription: "通过 Bark 服务器推送到 iPhone",
+    f50: "F50 设备",
+    f50Description: "中兴 F50 随身WiFi：短信收发、流量监控与实时状态",
     iosApp: '配对',
     iosAppDescription: '将当前账户与 iPhone 配对',
     tls: '接入',

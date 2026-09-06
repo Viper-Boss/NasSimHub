@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { LoaderCircle, LogIn, UserRoundPlus } from '@lucide/vue'
+import AppearanceToggle from '../components/AppearanceToggle.vue'
 import { login, sessionState, setup as setupAdministrator } from '../state/session'
 import {
   minimumPasswordCharacters,
@@ -84,10 +85,11 @@ async function submit(): Promise<void> {
 
 <template>
   <main class="login-page">
-    <header class="login-brand" aria-label="ModemDeck">
-      <span>M</span>
-      <strong>ModemDeck</strong>
+    <header class="login-brand" aria-label="HomeSIM">
+      <span><img src="/favicon.svg" width="54" height="54" alt="" /></span>
+      <strong>{{ t('homesim.brand') }}</strong>
     </header>
+    <div class="login-appearance"><AppearanceToggle /></div>
 
     <section class="login-panel" aria-labelledby="login-title">
       <header>

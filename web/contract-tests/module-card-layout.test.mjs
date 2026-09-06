@@ -13,7 +13,7 @@ const [dashboard, devicePanel, moduleCard] = await Promise.all([
 
 function cssBlock(source, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] || ''
+  return source.replace(/\r\n/g, '\n').match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] || ''
 }
 
 test('dashboard keeps stable module-card tracks', () => {

@@ -1,4 +1,10 @@
+import { nasPreflightEN } from '../nasPreflight'
+
+import { homesimEN } from '../homesimData'
+
 export default {
+  homesim: homesimEN,
+  nasPreflight: nasPreflightEN,
   "common": {
     "cancel": "キャンセル",
     "close": "閉じる",
@@ -271,6 +277,10 @@ export default {
     "recordingDescription": "デフォルトの録音動作",
     "telegram": "Telegram",
     "telegramDescription": "Telegram ボットによる配信",
+    "bark": "Bark 通知",
+    "barkDescription": "Barkサーバー経由でiPhoneに通知",
+    "f50": "F50 デバイス",
+    "f50Description": "ZTE F50 モバイルルーター：SMS・通信量・ライブステータス",
     "iosApp": "ペアリング",
     "iosAppDescription": "このアカウントを iPhone とペアリング",
     "tls": "アクセス",

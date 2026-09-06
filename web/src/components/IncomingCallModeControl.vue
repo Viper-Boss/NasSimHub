@@ -250,6 +250,7 @@ onBeforeUnmount(() => {
   color: var(--text);
   font-size: 12px;
   font-weight: 650;
+  white-space: nowrap;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;

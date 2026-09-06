@@ -14,7 +14,9 @@ import {
   LoaderCircle,
   LogOut,
   RadioTower,
+  BellRing,
   Send,
+  Wifi,
   ShieldCheck,
   SlidersHorizontal,
   UserRound,
@@ -65,16 +67,20 @@ const loadContactSyncSettings = () => import('../components/ContactSyncSettings.
 const loadDeviceConfigurationPanel = () =>
   import('../components/DeviceConfigurationPanel.vue')
 const loadDiagnosticsPanel = () => import('../components/DiagnosticsPanel.vue')
+const NasPreflightPanel = defineAsyncComponent(() => import('../components/NasPreflightPanel.vue'))
 const loadPairingSettingsPanel = () =>
   import('../components/PairingSettingsPanel.vue')
 const loadConnectivitySettingsPanel = () =>
   import('../components/ConnectivitySettingsPanel.vue')
 const loadTelegramSettingsForm = () => import('../components/TelegramSettingsForm.vue')
+const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsPanel.vue')
+const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
 
 const AccountPreferencesPanel = defineAsyncComponent(loadAccountPreferencesPanel)
 const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel)
 const UserSettingsPanel = defineAsyncComponent(loadUserSettingsPanel)
 const AudioSettingsForm = defineAsyncComponent(loadAudioSettingsForm)
+const HomeSIMServicesPanel = defineAsyncComponent(() => import('../components/HomeSIMServicesPanel.vue'))
 const AboutSettingsPanel = defineAsyncComponent(loadAboutSettingsPanel)
 const ContactSyncSettings = defineAsyncComponent(loadContactSyncSettings)
 const DeviceConfigurationPanel = defineAsyncComponent(loadDeviceConfigurationPanel)
@@ -84,6 +90,8 @@ const ConnectivitySettingsPanel = defineAsyncComponent(
   loadConnectivitySettingsPanel
 )
 const TelegramSettingsForm = defineAsyncComponent(loadTelegramSettingsForm)
+const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
+const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
 
 const route = useRoute()
 const router = useRouter()
@@ -154,6 +162,18 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     label: t('settings.telegram'),
     description: t('settings.telegramDescription'),
     icon: Send
+  },
+  {
+    id: 'bark',
+    label: t('settings.bark'),
+    description: t('settings.barkDescription'),
+    icon: BellRing
+  },
+  {
+    id: 'f50',
+    label: t('settings.f50'),
+    description: t('settings.f50Description'),
+    icon: Wifi
   },
   {
     id: 'connectivity',
@@ -269,6 +289,10 @@ function preloadSection(section: SettingsSection): void {
         return loadDeviceConfigurationPanel
       case 'telegram':
         return loadTelegramSettingsForm
+      case 'bark':
+        return loadBarkSettingsPanel
+      case 'f50':
+        return loadF50DevicePanel
       case 'pairing':
         return loadPairingSettingsPanel
       case 'connectivity':
@@ -439,6 +463,16 @@ onMounted(() => {
           <h2>{{ currentTitle }}</h2>
         </header>
 
+        <div v-if="isAdmin && ['devices', 'diagnostics', 'about'].includes(selectedSection)" class="homesim-system-header">
+          <nav class="homesim-route-links" :aria-label="t('homesim.system')">
+            <RouterLink :class="{ 'is-current': selectedSection === 'devices' }" :to="{ name: 'settings', params: { section: 'devices' } }"><RadioTower :size="17" />{{ t('settings.devices') }}</RouterLink>
+            <RouterLink :class="{ 'is-current': selectedSection === 'diagnostics' }" :to="{ name: 'settings', params: { section: 'diagnostics' } }"><Activity :size="17" />{{ t('settings.diagnostics') }}</RouterLink>
+            <RouterLink :to="{ name: 'recordings' }">{{ t('shell.recordings') }}</RouterLink>
+            <RouterLink :to="{ name: 'traffic' }">{{ t('shell.traffic') }}</RouterLink>
+          </nav>
+        </div>
+        <p v-if="selectedSection === 'telegram'" class="homesim-integration-note homesim-integration-note--header">{{ t('homesim.forwardHint') }}</p>
+
         <SettingsContentTransition :content-key="selectedSection">
           <SettingsAsyncBoundary
             :loading-title="t('common.loading')"
@@ -472,6 +506,7 @@ onMounted(() => {
 
             <div v-else-if="selectedSection === 'audio'" class="settings-content">
               <PageContentFrame mode="reading">
+                <HomeSIMServicesPanel v-if="isAdmin" />
                 <AudioSettingsForm />
               </PageContentFrame>
             </div>
@@ -490,6 +525,18 @@ onMounted(() => {
               <TelegramSettingsForm />
             </div>
 
+            <div v-else-if="selectedSection === 'bark'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <BarkSettingsPanel />
+              </PageContentFrame>
+            </div>
+
+            <div v-else-if="selectedSection === 'f50'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <F50DevicePanel />
+              </PageContentFrame>
+            </div>
+
             <div v-else-if="selectedSection === 'pairing'" class="settings-content">
               <PageContentFrame mode="reading">
                 <PairingSettingsPanel />
@@ -504,6 +551,8 @@ onMounted(() => {
 
             <div v-else-if="selectedSection === 'diagnostics'" class="settings-content">
               <PageContentFrame mode="fluid">
+                <p class="homesim-integration-note">{{ t('homesim.systemHint') }}</p>
+                <NasPreflightPanel />
                 <DiagnosticsPanel />
               </PageContentFrame>
             </div>

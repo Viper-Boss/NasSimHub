@@ -50,7 +50,7 @@ import {
   recordingCatalogState,
   refreshRecordingWorkspace
 } from '../state/recording'
-import { openDialerAndCall } from '../state/ui'
+import { openDialer, openDialerAndCall } from '../state/ui'
 import {
   bootstrapResource,
   callsResource,
@@ -637,7 +637,14 @@ onBeforeUnmount(() => {
             ? callsResource.data.length
             : undefined
         "
-      />
+      >
+        <template #actions>
+          <RouterLink class="secondary-button" :to="{ name: 'settings', params: { section: 'audio' } }">{{ t('homesim.services.title') }}</RouterLink>
+          <button type="button" class="pane-create-button" :title="t('shell.openDialer')" @click="openDialer()">
+            <Phone :size="18" /><span>{{ t('dialer.title') }}</span>
+          </button>
+        </template>
+      </WorkspaceListHeader>
       <CommunicationListToolbar
         class="pane-search--calls"
         :has-line-filter="lines.length > 1"

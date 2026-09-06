@@ -7,6 +7,8 @@ export type SettingsSection =
   | 'pairing'
   | 'devices'
   | 'telegram'
+  | 'bark'
+  | 'f50'
   | 'connectivity'
   | 'diagnostics'
   | 'about'
@@ -27,6 +29,8 @@ export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
   'users',
   'devices',
   'telegram',
+  'bark',
+  'f50',
   'connectivity',
   'diagnostics',
   'about'

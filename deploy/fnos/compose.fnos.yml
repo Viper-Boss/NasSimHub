@@ -1,0 +1,32 @@
+# Merge from the repository root with docker-compose.yml. No cloud/OTA service.
+name: nas-comm-gateway
+services:
+  hardware:
+    container_name: nas-comm-hardware
+    image: nas-comm-hardware:fnos-local-0.1
+  api:
+    container_name: nas-comm-api
+    image: nas-comm-api:fnos-local-0.1
+    environment:
+      MODEMDECK_RECORDINGS_PATH: /var/lib/modemdeck/recordings
+    volumes:
+      - type: bind
+        source: ${MODEMDECK_DATA_DIR:?Set an absolute dedicated NAS data directory}
+        target: /var/lib/modemdeck
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MODEMDECK_RECORDINGS_DIR:?Set an absolute dedicated NAS recordings directory}
+        target: /var/lib/modemdeck/recordings
+        bind:
+          create_host_path: false
+  modemdeck:
+    container_name: nas-comm-web
+    image: nas-comm-web:fnos-local-0.1
+    volumes:
+      - type: bind
+        source: ${MODEMDECK_DATA_DIR:?Set an absolute dedicated NAS data directory}/tls
+        target: /var/lib/modemdeck/tls
+        read_only: true
+        bind:
+          create_host_path: false

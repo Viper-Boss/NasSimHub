@@ -24,6 +24,12 @@ import LineSelector from '../components/LineSelector.vue'
 import ListSkeleton from '../components/ListSkeleton.vue'
 import ListSelectionToggle from '../components/ListSelectionToggle.vue'
 import MessageThreadListItem from '../components/MessageThreadListItem.vue'
+import SmsCodeShelf from '../components/SmsCodeShelf.vue'
+import SelectControl from '../components/SelectControl.vue'
+import SimOverviewButton from '../components/SimOverviewButton.vue'
+import SmsCodeButton from '../components/SmsCodeButton.vue'
+import { analyzeSms, signatureGroups } from '../utils/smsInsight'
+import { groupedPhone, messageTime } from '../utils/homesimDisplay'
 import SearchField from '../components/SearchField.vue'
 import SelectableListRow from '../components/SelectableListRow.vue'
 import StatePanel from '../components/StatePanel.vue'
@@ -88,7 +94,6 @@ import {
   threadsPagination,
   threadsResource
 } from '../state/workspace'
-import { formatRelativeDate } from '../utils/format'
 import { lineTagFallback, lineTagLine } from '../utils/lineIdentity'
 import {
   findRecipientThread,
@@ -127,6 +132,8 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const search = ref('')
+const signatureFilter = ref('')
+const senderGroups = computed(() => signatureGroups(threadsResource.data))
 const messageFilter = ref<MessageReadFilter>(
   props.embeddedThreadKey || props.embeddedCompose
     ? 'all'
@@ -235,6 +242,7 @@ const filteredThreads = computed(() => {
       ? undefined
       : lines.value.find(line => lineKey(line) === lineFilterKey.value)
   return threadsResource.data.filter(thread => {
+    if (signatureFilter.value && !senderGroups.value.find(group => group.source === signatureFilter.value)?.keys.includes(thread.key)) return false
     if (filteredLine && !threadUsesLine(thread, filteredLine)) return false
     if (favoriteOnly.value && !thread.favorite) return false
     if (
@@ -932,6 +940,7 @@ onBeforeUnmount(() => {
         "
       >
         <template #actions>
+          <SimOverviewButton />
           <button
             class="pane-create-button mobile-list-fab"
             type="button"
@@ -989,6 +998,18 @@ onBeforeUnmount(() => {
           />
         </template>
       </CommunicationListToolbar>
+      <SmsCodeShelf
+        v-if="threadsResource.status === 'ready' && !selecting"
+        :threads="threadsResource.data"
+        :line-filter="lineFilterKey"
+        @select="key => router.push(messageThreadRoute(key))"
+      />
+      <div v-if="senderGroups.length && !selecting" class="homesim-signature-filter">
+        <label><span>{{ t('homesim.signatureGroup') }}</span>
+          <SelectControl v-model="signatureFilter" :label="t('homesim.signatureGroup')" :options="[{ value: '', label: t('common.all') }, ...senderGroups.map(group => ({ value: group.source, label: `${group.source} · ${group.keys.length} ${t('homesim.senderNumbers')}${group.unread ? ' · ●' : ''}` }))]" />
+        </label>
+        <small v-if="signatureFilter">{{ t('homesim.signatureHint') }}</small>
+      </div>
       <p
         v-if="
           threadsResource.status === 'ready' &&
@@ -1332,8 +1353,12 @@ onBeforeUnmount(() => {
             >
               <div class="message-bubble">
                 <p>{{ message.content }}</p>
+                <div v-if="message.direction === 'incoming' && analyzeSms(message.content).code" class="homesim-bubble-code">
+                  <code>{{ analyzeSms(message.content).code }}</code>
+                  <SmsCodeButton :code="analyzeSms(message.content).code" />
+                </div>
                 <span>
-                  {{ formatRelativeDate(message.timestamp) }}
+                  {{ groupedPhone(message.peer) }} · <time :datetime="message.timestamp">{{ messageTime(message.timestamp) }}</time>
                   <template
                     v-if="
                       message.direction === 'outgoing' &&

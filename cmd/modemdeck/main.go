@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -353,17 +354,18 @@ func run(
 		}
 	}
 	api, err := httpapi.New(repository, httpapi.Options{
-		Communications:       communications,
-		DeviceConfigurations: communications,
-		LineServices:         communications,
-		CallPolicies:         communications,
-		MessagePolicies:      communications,
-		CallMedia:            callMedia,
-		CallLeases:           callLeases,
-		Recording:            recordings,
-		Network:              networkRuntime,
-		TelegramSettings:     telegramSettings,
-		TLSSettings:          tlsSettingsService{manager: tlsCertificates},
+		ContactBackupDirectory: filepath.Join(filepath.Dir(databasePath), "backups", "contacts"),
+		Communications:         communications,
+		DeviceConfigurations:   communications,
+		LineServices:           communications,
+		CallPolicies:           communications,
+		MessagePolicies:        communications,
+		CallMedia:              callMedia,
+		CallLeases:             callLeases,
+		Recording:              recordings,
+		Network:                networkRuntime,
+		TelegramSettings:       telegramSettings,
+		TLSSettings:            tlsSettingsService{manager: tlsCertificates},
 		CloudflareOriginTLS: &cloudflareOriginTLSService{
 			manager:    cloudflareOriginTLS,
 			cloudflare: cloudflareGateway,

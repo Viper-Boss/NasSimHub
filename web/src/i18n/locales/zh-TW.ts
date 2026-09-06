@@ -1,4 +1,10 @@
+import { nasPreflightEN } from '../nasPreflight'
+
+import { homesimEN } from '../homesimData'
+
 export default {
+  homesim: homesimEN,
+  nasPreflight: nasPreflightEN,
   common: {
     cancel: '取消',
     close: '關閉',
@@ -271,6 +277,10 @@ export default {
     recordingDescription: '預設錄音設定',
     telegram: 'Telegram',
     telegramDescription: '通過 Telegram Bot 推送',
+    bark: "Bark 推播",
+    barkDescription: "透過 Bark 伺服器推送到 iPhone",
+    f50: "F50 裝置",
+    f50Description: "中興 F50 隨身WiFi：簡訊收發、流量監控與即時狀態",
     iosApp: '配對',
     iosAppDescription: '將目前賬戶與 iPhone 配對',
     tls: '接入',

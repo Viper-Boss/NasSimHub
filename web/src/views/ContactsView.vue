@@ -14,6 +14,7 @@ import type { Contact, ContactInput } from '../api/types'
 import BatchActionBar from '../components/BatchActionBar.vue'
 import BaseAvatar from '../components/BaseAvatar.vue'
 import ContactEditor from '../components/ContactEditor.vue'
+import ContactBackupButton from '../components/ContactBackupButton.vue'
 import ContactNumberActions from '../components/ContactNumberActions.vue'
 import InfiniteScrollTrigger from '../components/InfiniteScrollTrigger.vue'
 import ListItemAvatarStatus from '../components/ListItemAvatarStatus.vue'
@@ -324,6 +325,7 @@ onBeforeUnmount(() => {
           </button>
         </template>
       </WorkspaceListHeader>
+      <ContactBackupButton v-if="contactsResource.status === 'ready'" />
       <CommunicationListToolbar>
         <template #primary>
           <ListSelectionToggle

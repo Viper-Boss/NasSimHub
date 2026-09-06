@@ -53,6 +53,16 @@ export type ServingRadio = {
   source?: string
 }
 
+// 套餐余量（可选项）：后端提供时顶栏显示流量/短信/通话三个圆环
+export type LineQuota = {
+  data_used: number
+  data_total: number
+  sms_used: number
+  sms_total: number
+  voice_used: number
+  voice_total: number
+}
+
 export type LineSummary = {
   id: string
   iccid: string
@@ -88,6 +98,7 @@ export type LineSummary = {
   radio_desired_enabled_known: boolean
   signal_quality?: number
   signal_snr?: number
+  quota?: LineQuota
   capabilities?: CommunicationCapabilities
   module_only?: boolean
 }

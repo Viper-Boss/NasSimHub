@@ -8,6 +8,7 @@ import type {
   ContactPhone,
   Device,
   DeviceSIM,
+  LineQuota,
   LineSummary,
   Message,
   MessageThread,
@@ -387,6 +388,21 @@ export function parseDeviceResponse(value: unknown): Device {
   return parseDevice(source.device)
 }
 
+function parseLineQuota(value: unknown): LineQuota | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const source = value as JsonRecord
+  const quota: LineQuota = {
+    data_used: numberValue(source, 'data_used'),
+    data_total: numberValue(source, 'data_total'),
+    sms_used: numberValue(source, 'sms_used'),
+    sms_total: numberValue(source, 'sms_total'),
+    voice_used: numberValue(source, 'voice_used'),
+    voice_total: numberValue(source, 'voice_total')
+  }
+  if (!quota.data_total && !quota.sms_total && !quota.voice_total) return undefined
+  return quota
+}
+
 export function parseLine(value: unknown): LineSummary {
   const source = objectValue(value, 'line')
   const rawAccessTechnologies = nullableNumber(source, 'access_technologies')
@@ -438,6 +454,7 @@ export function parseLine(value: unknown): LineSummary {
     ),
     signal_quality: nullableNumber(source, 'signal_quality') ?? undefined,
     signal_snr: rawSignalSNR ?? undefined,
+    quota: parseLineQuota(source.quota),
     capabilities: parseCommunicationCapabilities(source.capabilities, 'line.capabilities')
   }
   return line

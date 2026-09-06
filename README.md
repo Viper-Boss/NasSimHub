@@ -1,3 +1,33 @@
+# 家卡 HomeSIM
+
+> 家庭 4G/5G SIM 卡网关：网页收发短信、打电话（需 EG25-G 类模组）、流量监控、Bark/Telegram 推送与多设备接入。
+> 已支持：EG25-G（USB/AT，主线路）+ 中兴 F50 随身WiFi（HTTP，短信/流量/状态）。
+
+**本仓库是 [ModemDeck](https://github.com/human-agent65535/ModemDeck) 的非商业衍生作品**，沿用上游 **PolyForm Noncommercial 1.0.0** 协议发布：可自由使用、修改与分发源码，但仅限非商业用途，且必须保留 [LICENSE](LICENSE)、[NOTICE.md](NOTICE.md)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与上游署名（[UPSTREAM.md](UPSTREAM.md)）。
+
+## 快速开始（前端演示）
+
+```cmd
+cd web
+preview.cmd
+:: 打开 http://127.0.0.1:5174
+```
+
+## 主要能力
+
+- 短信收发与验证码识别（本地分类：验证码/银行/快递/运营商/营销）
+- 网页打电话（WebRTC，EG25-G 语音）+ 通话录音（NAS 保存）
+- 多设备：EG25-G USB 模组 / 中兴 F50 随身WiFi（HTTP）
+- 顶栏 SIM 状态条：信号/4G/VoLTE/套餐余量圆环/号码归属地
+- 转发渠道：Telegram（已接）、Bark 设置与测试（执行器待接）、拦截策略（待执行器）
+- 系统运维：模块管理、诊断、流量、录音库、NAS 预检
+
+交接文档见 [HANDOFF-CN.md](HANDOFF-CN.md)（含全部接口契约与待办）。
+
+---
+
+以下为上游 ModemDeck 的原始说明：
+
 # ModemDeck（中文）
 
 [![许可证：PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/License-PolyForm--Noncommercial--1.0.0-blue.svg)](LICENSE)

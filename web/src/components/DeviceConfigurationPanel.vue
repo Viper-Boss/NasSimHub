@@ -30,6 +30,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { gateway } from '../api/client'
+import { simCommandProblem } from '../utils/simSafety'
 import { ApiError } from '../api/types'
 import { useInitialLoadBarrier } from '../composables/useInitialLoadBarrier'
 import { useSettingsMutation } from '../composables/useSettingsMutation'
@@ -156,6 +157,8 @@ const simOperation = ref<SIMOperation>('send_pin')
 const simPIN = ref('')
 const simPUK = ref('')
 const simNewPIN = ref('')
+const simRepeatPIN = ref('')
+const simLastFailure = ref('')
 const simProtectionEnabled = ref(true)
 const simPending = ref(false)
 let lineServiceGeneration = 0
@@ -1156,6 +1159,16 @@ async function loadSIM(force = false): Promise<void> {
 
 async function applySIMCommand(): Promise<void> {
   if (!selectedLineID.value || simPending.value) return
+  const targetLine = selectedLineID.value
+  const targetSIM = simStatus.value?.identifier
+  const input = {
+    operation: simOperation.value,
+    ...(simOperation.value === 'send_puk' ? { puk: simPUK.value, new_pin: simNewPIN.value } : { pin: simPIN.value }),
+    ...(simOperation.value === 'change_pin' ? { new_pin: simNewPIN.value } : {}),
+    ...(simOperation.value === 'enable_pin' ? { enabled: simProtectionEnabled.value } : {})
+  }
+  const problem = simCommandProblem(simStatus.value, input, simRepeatPIN.value)
+  if (problem) { simLastFailure.value = problem; return }
   const label: Record<SIMOperation, string> = {
     send_pin: t('device.submitPIN'),
     send_puk: t('device.submitPUK'),
@@ -1164,30 +1177,32 @@ async function applySIMCommand(): Promise<void> {
       : t('device.disablePINProtection'),
     change_pin: t('device.changePIN')
   }
+  simPending.value = true
   const confirmed = await requestConfirmation({
     title: `${label[simOperation.value]}？`,
+    message: t('homesim.simWarning'),
+    tone: 'danger',
     confirmLabel: t('device.confirm')
   })
-  if (!confirmed) return
-  simPending.value = true
+  if (!confirmed) { simPending.value = false; return }
   simError.value = ''
+  simLastFailure.value = ''
   try {
-    await gateway.commandSIM(selectedLineID.value, {
-      operation: simOperation.value,
-      ...(simPIN.value ? { pin: simPIN.value } : {}),
-      ...(simPUK.value ? { puk: simPUK.value } : {}),
-      ...(simNewPIN.value ? { new_pin: simNewPIN.value } : {}),
-      ...(simOperation.value === 'enable_pin'
-        ? { enabled: simProtectionEnabled.value }
-        : {})
-    })
+    const fresh = await gateway.getSIMStatus(targetLine)
+    if (selectedLineID.value !== targetLine || !targetSIM || fresh.identifier !== targetSIM) throw new Error(t('homesim.simChanged'))
+    simStatus.value = fresh
+    const freshProblem = simCommandProblem(fresh, input, simRepeatPIN.value)
+    if (freshProblem) throw new Error(freshProblem)
+    await gateway.commandSIM(targetLine, input)
     simPIN.value = ''
     simPUK.value = ''
     simNewPIN.value = ''
     await loadSIM(true)
-  } catch (error) {
-    simError.value = error instanceof Error ? error.message : t('device.simOperationFailed')
+  } catch {
+    simLastFailure.value = t('homesim.simUncertain')
+    await loadSIM(true)
   } finally {
+    simPIN.value = ''; simPUK.value = ''; simNewPIN.value = ''; simRepeatPIN.value = ''
     simPending.value = false
   }
 }
@@ -2241,6 +2256,8 @@ onMounted(() => {
 
           <section class="configuration-section">
             <header><ShieldAlert :size="18" /><h4>PIN</h4></header>
+            <p class="homesim-sim-notice">{{ t('homesim.simNotice') }}</p>
+            <p v-if="simLastFailure" class="inline-error" role="alert">{{ simLastFailure }}</p>
             <form class="sim-form" @submit.prevent="applySIMCommand">
               <div class="field">
                 <span>{{ t('device.operation') }}</span>
@@ -2263,15 +2280,23 @@ onMounted(() => {
                 <span>{{ t('device.newPIN') }}</span>
                 <input v-model="simNewPIN" type="password" inputmode="numeric" maxlength="8" autocomplete="off" />
               </label>
+              <label v-if="simOperation === 'send_puk' || simOperation === 'change_pin'">
+                <span>{{ t('homesim.repeatPIN') }}</span>
+                <input v-model="simRepeatPIN" type="password" inputmode="numeric" maxlength="8" autocomplete="off" />
+              </label>
               <label v-if="simOperation === 'enable_pin'" class="inline-check">
                 <input v-model="simProtectionEnabled" class="ui-check" type="checkbox" />
                 <span>{{ t('device.enableProtection') }}</span>
               </label>
-              <button class="primary-action" type="submit" :disabled="simPending">
+              <button class="primary-action" type="submit" :disabled="simPending || simLoadStatus !== 'ready'">
                 <LoaderCircle v-if="simPending" class="spin" :size="16" />
                 {{ t('device.apply') }}
               </button>
             </form>
+            <div class="homesim-sim-notice">
+              <label><input class="ui-check" type="checkbox" disabled /> {{ t('homesim.autoUnlockOff') }}</label>
+              <p>{{ t('homesim.autoUnlockHint') }}</p>
+            </div>
           </section>
         </template>
 

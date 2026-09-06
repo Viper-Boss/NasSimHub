@@ -67,7 +67,7 @@ withDefaults(
   justify-content: flex-end;
   padding: 20px;
   overflow: hidden;
-  background: #fbfcfd;
+  background: var(--background);
 }
 
 .conversation-skeleton--framed .conversation-skeleton__viewport {

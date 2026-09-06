@@ -1,4 +1,10 @@
+import { nasPreflightEN } from '../nasPreflight'
+
+import { homesimEN } from '../homesimData'
+
 export default {
+  homesim: homesimEN,
+  nasPreflight: nasPreflightEN,
   common: {
     cancel: 'Cancel',
     close: 'Close',
@@ -271,6 +277,10 @@ export default {
     recordingDescription: 'Default recording behavior',
     telegram: 'Telegram',
     telegramDescription: 'Delivery through Telegram bots',
+    bark: "Bark Push",
+    barkDescription: "Push notifications to iPhone through Bark servers",
+    f50: "F50 Device",
+    f50Description: "ZTE F50 MiFi: SMS, traffic and live status over HTTP",
     iosApp: 'Pairing',
     iosAppDescription: 'Pair this account with an iPhone',
     tls: 'Access',

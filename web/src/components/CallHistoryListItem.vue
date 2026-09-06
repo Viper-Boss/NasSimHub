@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   AudioLines,
@@ -12,6 +12,9 @@ import CommunicationAvatar from './CommunicationAvatar.vue'
 import LineTag from './LineTag.vue'
 import ListItemAvatarStatus from './ListItemAvatarStatus.vue'
 import ListItemStatusRail from './ListItemStatusRail.vue'
+import RecordingPlayer from './RecordingPlayer.vue'
+import { recordingCatalogState } from '../state/recording'
+import { groupedPhone } from '../utils/homesimDisplay'
 
 const props = withDefaults(
   defineProps<{
@@ -38,6 +41,8 @@ const emit = defineEmits<{
   select: [call: CallRecord]
 }>()
 const { t } = useI18n()
+const expandedRecording = ref(false)
+const recordings = computed(() => recordingCatalogState.data.filter(item => item.call_id === props.call.id && item.playable && item.download_url))
 
 const directionLabel = computed(() => {
   if (props.call.missed) return t('dashboard.missedCall')
@@ -51,6 +56,7 @@ const showNumber = computed(
 </script>
 
 <template>
+  <div class="homesim-call-row">
   <button
     class="list-item call-list-item"
     :class="{
@@ -89,7 +95,7 @@ const showNumber = computed(
       <span class="call-list-item__meta">
         <LineTag :line="line" :fallback="lineFallback" />
         <small>
-          {{ directionLabel }}<template v-if="showNumber"> · {{ number }}</template>
+          {{ directionLabel }}<template v-if="showNumber"> · {{ groupedPhone(number) }}</template>
         </small>
       </span>
     </span>
@@ -97,15 +103,6 @@ const showNumber = computed(
       :date="formatRelativeDate(call.started_at)"
       :date-time="call.started_at"
     >
-      <span
-        v-if="hasRecording"
-        class="call-list-item__recording"
-        role="img"
-        :aria-label="t('calls.hasRecording')"
-        :title="t('calls.hasRecording')"
-      >
-        <AudioLines :size="15" aria-hidden="true" />
-      </span>
       <template #favorite>
         <Star
           v-if="call.favorite"
@@ -117,9 +114,27 @@ const showNumber = computed(
       </template>
     </ListItemStatusRail>
   </button>
+  <aside class="homesim-call-recording" @click.stop>
+    <button v-if="hasRecording" type="button" class="homesim-recording-toggle" :aria-expanded="expandedRecording" @click="expandedRecording = !expandedRecording">
+      <AudioLines :size="16" /><span>{{ t('recordings.title') }}</span>
+    </button>
+    <span v-else class="homesim-no-recording">—</span>
+  </aside>
+  <div v-if="expandedRecording" class="homesim-call-playback" @click.stop>
+    <RecordingPlayer v-for="item in recordings" :key="item.id" :src="item.download_url!" :label="`${name} · ${t('recordings.playback')}`" compact />
+    <p v-if="!recordings.length">{{ t('recordings.pending') }}</p>
+  </div>
+  </div>
 </template>
 
 <style scoped>
+.homesim-call-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px; border-bottom: 1px solid var(--border); }
+.homesim-call-row > .list-item { border-bottom: 0; min-width: 0; }
+.homesim-call-recording { display: grid; place-items: center; }
+.homesim-recording-toggle { display: flex; align-items: center; gap: 5px; padding: 8px; color: var(--accent); background: var(--accent-soft); border-radius: 12px; font-size: 12px; }
+.homesim-no-recording { color: var(--faint); }
+.homesim-call-playback { grid-column: 1 / -1; display: grid; gap: 12px; padding: 6px 20px 16px 64px; }
+.homesim-call-playback p { color: var(--muted); font-size: 12px; }
 .call-list-item__meta {
   display: flex;
   width: 100%;

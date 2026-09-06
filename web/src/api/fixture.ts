@@ -94,7 +94,7 @@ const MAIN_ICCID = '8986012345678900001'
 const TRAVEL_ICCID = '8984045678901230002'
 const MAIN_IMSI = '001010000000001'
 const TRAVEL_IMSI = '001020000000002'
-const MAIN_PHONE = '+1 202 555 0101'
+const MAIN_PHONE = '+86 138 0000 0000'
 const TRAVEL_PHONE = '+1 202 555 0102'
 const ALEX_NAME = 'Alex Rowan'
 const ALEX_PHONE = '+1 202 555 0103'
@@ -262,6 +262,26 @@ const messagesByThread: Record<string, Message[]> = {
       delivery_status: ''
     }
   ]
+}
+
+// Explicit development fixtures only. These messages never enter production
+// storage and must not be represented as real bank messages or valid codes.
+if (import.meta.env?.DEV && import.meta.env?.VITE_MODEMDECK_FIXTURE === '1') {
+  const examples = [
+    ['106900000001', '建设银行', '739264'],
+    ['106900000002', '中信银行', '482915'],
+    ['106900000003', '中国建设银行', '165803']
+  ]
+  examples.forEach(([peer, source, code], index) => {
+    const lineID = 'line-fixture-main'
+    const number = peer!
+    const key = fixtureThreadKey(lineID, number)
+    const id = `homesim-demo-code-${index}`
+    const timestamp = new Date(Date.now() - index * 60000).toISOString()
+    const content = `【${source}】演示验证码 ${code}。仅用于 HomeSIM 界面预览，不来自银行，不可用于真实业务。`
+    threads.push({ key, line_id: lineID, peer: number, contact_name: `${source} · 演示`, last_message_id: id, last_timestamp: timestamp, last_content: content, unread_count: 1, marked_unread: false, favorite: false })
+    messagesByThread[key] = [{ id, line_id: lineID, peer: number, direction: 'incoming', content, timestamp, type: 1, status: 1, delivery_status: '' }]
+  })
 }
 
 const calls: CallRecord[] = [
@@ -477,13 +497,13 @@ function fixtureLines(count: number): LineSummary[] {
       iccid: MAIN_ICCID,
       imsi: MAIN_IMSI,
       phone_number: MAIN_PHONE,
-      operator: 'Aurora Mobile',
-      home_operator_code: '00101',
-      home_operator_name: 'Aurora Mobile',
-      home_country_iso: 'ZZ',
-      serving_operator_code: '00101',
-      serving_operator_name: 'Aurora Mobile',
-      serving_country_iso: 'ZZ',
+      operator: '中国移动',
+      home_operator_code: '46000',
+      home_operator_name: '中国移动',
+      home_country_iso: 'CN',
+      serving_operator_code: '46000',
+      serving_operator_name: '中国移动',
+      serving_country_iso: 'CN',
       registration_state_known: true,
       registration_state_code: 1,
       registration_state: 'home',
@@ -508,6 +528,14 @@ function fixtureLines(count: number): LineSummary[] {
         source: 'quectel-qnwinfo'
       },
       signal_quality: 82,
+      quota: {
+        data_used: 18.6,
+        data_total: 20,
+        sms_used: 118,
+        sms_total: 200,
+        voice_used: 132,
+        voice_total: 500
+      },
       capabilities: {
         modem: true,
         sim: true,

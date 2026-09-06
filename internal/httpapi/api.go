@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
@@ -268,36 +269,44 @@ type NetworkService interface {
 }
 
 type Options struct {
-	HealthProbe           HealthProbe
-	Capabilities          CapabilitySource
-	Communications        CommunicationService
-	DeviceConfigurations  DeviceConfigurationService
-	LineServices          LineService
-	CallPolicies          CallPolicyService
-	MessagePolicies       MessagePolicyService
-	CallMedia             CallMediaService
-	CallLeases            CallLeaseService
-	Recording             RecordingService
-	Network               NetworkService
-	TelegramSettings      TelegramSettingsService
-	TLSSettings           TLSSettingsService
-	CloudflareOriginTLS   CloudflareOriginTLSService
-	MobilePairing         mobilepairing.Availability
-	IOSCallTests          IOSCallTestService
-	RTCConfiguration      rtcconfig.Provider
-	Authenticator         Authenticator
-	SecureCookies         bool
-	Logger                *slog.Logger
-	DiagnosticLogs        diagnostics.LogSource
-	MessageEvents         messageevents.Source
-	RuntimeEvents         runtimeevents.Source
-	UpdateChecker         UpdateChecker
-	UpdateManager         UpdateManager
-	ApplicationVersion    string
-	disableAuthentication bool
+	ContactBackupDirectory string
+	HealthProbe            HealthProbe
+	Capabilities           CapabilitySource
+	Communications         CommunicationService
+	DeviceConfigurations   DeviceConfigurationService
+	LineServices           LineService
+	CallPolicies           CallPolicyService
+	MessagePolicies        MessagePolicyService
+	CallMedia              CallMediaService
+	CallLeases             CallLeaseService
+	Recording              RecordingService
+	Network                NetworkService
+	TelegramSettings       TelegramSettingsService
+	TLSSettings            TLSSettingsService
+	CloudflareOriginTLS    CloudflareOriginTLSService
+	MobilePairing          mobilepairing.Availability
+	IOSCallTests           IOSCallTestService
+	RTCConfiguration       rtcconfig.Provider
+	Authenticator          Authenticator
+	SecureCookies          bool
+	Logger                 *slog.Logger
+	DiagnosticLogs         diagnostics.LogSource
+	MessageEvents          messageevents.Source
+	RuntimeEvents          runtimeevents.Source
+	UpdateChecker          UpdateChecker
+	UpdateManager          UpdateManager
+	ApplicationVersion     string
+	disableAuthentication  bool
 }
 
 type API struct {
+	contactBackupMu            sync.Mutex
+	homeSIMDraftMu             sync.Mutex
+	homeSIMQuotaMu             sync.Mutex
+	homeSIMBarkMu              sync.Mutex
+	homeSIMCallFilterMu        sync.Mutex
+	homeSIMF50Mu               sync.Mutex
+	contactBackupDirectory     string
 	repository                 Repository
 	healthProbe                HealthProbe
 	capabilities               CapabilitySource
@@ -349,6 +358,7 @@ func New(repository Repository, options Options) (*API, error) {
 		healthProbe, _ = options.Communications.(HealthProbe)
 	}
 	return &API{
+		contactBackupDirectory:     options.ContactBackupDirectory,
 		repository:                 repository,
 		healthProbe:                healthProbe,
 		capabilities:               options.Capabilities,
@@ -460,6 +470,28 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.contactsCollection(response, request)
 	case "/api/v1/contacts/batch":
 		api.contactsBatch(response, request)
+	case "/api/v1/contacts/backup":
+		api.postOnly(response, request, api.backupContacts)
+	case "/api/v1/settings/homesim":
+		api.homeSIMDraft(response, request)
+	case "/api/v1/settings/homesim/quotas":
+		api.homeSIMQuotas(response, request)
+	case "/api/v1/settings/homesim/bark":
+		api.homeSIMBark(response, request)
+	case "/api/v1/settings/homesim/bark/test":
+		api.postOnly(response, request, api.homeSIMBarkTest)
+	case "/api/v1/settings/homesim/call-filter":
+		api.homeSIMCallFilter(response, request)
+	case "/api/v1/homesim/f50/status":
+		api.getOnly(response, request, api.f50Status)
+	case "/api/v1/homesim/f50/sms":
+		api.getOnly(response, request, api.f50SMSList)
+	case "/api/v1/homesim/f50/sms/send":
+		api.postOnly(response, request, api.f50SMSSend)
+	case "/api/v1/homesim/f50/sms/read":
+		api.postOnly(response, request, api.f50SMSRead)
+	case "/api/v1/homesim/phone-geo":
+		api.getOnly(response, request, api.homeSIMPhoneGeo)
 	case "/api/v1/messages/threads":
 		api.messageThreadsCollection(response, request)
 	case "/api/v1/messages":
@@ -632,10 +664,12 @@ func (api *API) bootstrap(response http.ResponseWriter, request *http.Request) {
 		api.writeInternalError(response, request, "load system settings", err)
 		return
 	}
+	lineResponses := attachLineQuotas(lineSummaryResponses(lines), api.loadLineQuotaMap())
+	catalogResponses := attachLineQuotas(lineSummaryResponses(lineCatalog), api.loadLineQuotaMap())
 	writeJSON(response, http.StatusOK, bootstrapResponse{
 		Capabilities:   capabilities,
-		Lines:          lineSummaryResponses(lines),
-		LineCatalog:    lineSummaryResponses(lineCatalog),
+		Lines:          lineResponses,
+		LineCatalog:    catalogResponses,
 		LineSettings:   lineSettings,
 		SystemSettings: systemSettings,
 	})

@@ -7,6 +7,10 @@ import {
   installStaleAssetRecovery
 } from './state/staleAssetRecovery'
 import './style.css'
+import './styles/homesim.css'
+import { initializeAppearance } from './state/appearance'
+
+initializeAppearance()
 
 if (!import.meta.env.DEV) installStaleAssetRecovery()
 

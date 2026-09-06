@@ -959,6 +959,10 @@ onBeforeUnmount(() => {
         <article v-else class="detail-pane dashboard-detail-pane">
           <template v-if="overviewSelected">
             <div class="dashboard-detail-scroll">
+          <header class="dashboard-overview-heading">
+            <RadioTower :size="24" aria-hidden="true" />
+            <h1>{{ t('dashboard.communicationSummary') }}</h1>
+          </header>
           <button
             class="icon-button mobile-back dashboard-overview-back"
             :class="{ 'is-shell-managed': route.query.from === 'settings' }"

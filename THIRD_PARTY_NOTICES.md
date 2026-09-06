@@ -70,3 +70,12 @@ projects and by the package metadata installed in each image.
 This file does not replace any third-party license or notice. When redistributing
 a ModemDeck image, retain this file together with the license and notice files
 provided by its packaged dependencies.
+
+## HomeSIM additions
+
+- `phone.dat` region dataset (embedded in `internal/phonegeo`) — from
+  [xluohome/phonedata](https://github.com/xluohome/phonedata), MIT License.
+  Contains Chinese mobile number prefix records (province/city/zip/area code).
+- F50 (ZTE 5G MiFi) goform protocol behaviour — derived from the MIT-licensed
+  [koldllc/f50-monitor](https://github.com/koldllc/f50-monitor) reference
+  implementation (protocol behaviour only; no source code copied).

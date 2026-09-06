@@ -49,6 +49,7 @@ type lineSummaryResponse struct {
 	RadioDesiredEnabledKnown bool                   `json:"radio_desired_enabled_known"`
 	Signal                   *uint32                `json:"signal_quality,omitempty"`
 	SignalSNR                *float64               `json:"signal_snr,omitempty"`
+	Quota                    *lineQuotaPayload      `json:"quota,omitempty"`
 	Capabilities             store.LineCapabilities `json:"capabilities"`
 }
 

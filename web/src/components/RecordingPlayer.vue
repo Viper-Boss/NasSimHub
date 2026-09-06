@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Pause, Play } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
+import { claimRecordingPlayback, releaseRecordingPlayback } from '../utils/recordingPlayback'
 import {
   applySelectedAudioOutput,
   audioState,
@@ -26,6 +27,7 @@ const currentTime = ref(0)
 const duration = ref(0)
 const playing = ref(false)
 const playbackError = ref('')
+let disposed = false
 
 const accessibleLabel = computed(() => props.label || t('recordings.playback'))
 const volume = computed(() =>
@@ -113,6 +115,8 @@ async function togglePlayback(): Promise<void> {
     return
   }
   try {
+    if (disposed || audio.value !== element) return
+    claimRecordingPlayback(element)
     await element.play()
   } catch (error) {
     playbackError.value =
@@ -135,9 +139,11 @@ watch(
 watch(() => props.src, resetPlayback)
 
 onBeforeUnmount(() => {
+  disposed = true
   const element = audio.value
   if (!element) return
   element.pause()
+  releaseRecordingPlayback(element)
   cancelSelectedAudioOutputApplication(element)
 })
 </script>
@@ -307,7 +313,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
@@ -315,7 +321,7 @@ onBeforeUnmount(() => {
 .recording-audio-player__error {
   grid-column: 1 / -1;
   color: var(--danger);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .recording-audio-player--compact {

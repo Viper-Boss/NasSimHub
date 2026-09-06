@@ -1,0 +1,284 @@
+/* HomeSIM: user-provided blue / indigo direction, adapted to ModemDeck. */
+:root {
+  --signal-glow: 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent);
+  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 4%);
+  --rail-width: 100px;
+  --header-height: 80px;
+  font-size: 16px;
+}
+
+::selection { color: var(--on-accent); background: var(--accent); }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.app-shell {
+  background: radial-gradient(ellipse at 85% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 46%), var(--background);
+}
+.app-shell .rail {
+  background: linear-gradient(180deg, var(--surface-subtle), var(--surface-subtle) 65%);
+  border-color: var(--border);
+}
+.brand-mark { border-bottom: 0; gap: 10px; }
+.brand-mark > span {
+  width: 40px; height: 40px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--hs-gradient-start), var(--hs-gradient-end));
+  border-radius: 13px; box-shadow: var(--signal-glow);
+}
+.brand-mark > strong { display: none; font-size: 1.05rem; letter-spacing: -.03em; }
+.rail__primary { padding: 18px 12px; gap: 8px; }
+.rail__secondary { margin-inline: 12px; padding: 16px 0 24px; }
+.rail-link { min-height: 64px; border: 1px solid transparent; border-radius: 14px; font-size: .875rem; gap: 8px; }
+.rail-link.is-current {
+  color: var(--accent); background: linear-gradient(110deg, var(--accent-soft), var(--surface));
+  border-color: var(--accent-border); box-shadow: var(--panel-highlight);
+}
+.rail-link.is-current::before { left: -13px; top: 18px; bottom: 18px; box-shadow: 0 0 12px var(--accent); }
+.rail-link:hover svg { transform: translateY(-1px); }
+.rail-link svg { transition: transform var(--motion-base) var(--ease-standard); }
+.app-shell .shell-header { background: var(--surface-subtle); gap: 16px; justify-content: space-between; }
+.shell-header__loc { display: flex; min-width: 0; flex: 0 1 auto; flex-direction: row; align-items: center; gap: 12px; }
+.shell-location { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; min-width: 0; white-space: nowrap; }
+.shell-location > span { color: var(--faint); font-size: .75rem; letter-spacing: .12em; }
+.shell-location strong { display: inline-block; min-width: 3em; color: var(--text); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; }
+.shell-header .global-search { flex: 1 1 auto; width: auto; margin-right: 0; }
+.shell-header .search-field { border-radius: 12px; background: var(--surface-subtle); }
+.shell-header__right { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 12px; }
+.shell-header__controls { gap: 8px; }
+.fixture-badge { font-size: .875rem; border-radius: 20px; padding-inline: 12px; }
+.app-shell .route-stage { background: transparent; }
+.app-shell .workspace { background: transparent; }
+.app-shell .workspace > .list-pane { background: var(--surface-subtle); }
+.app-shell .workspace > .detail-pane { background: transparent; }
+.app-shell .list-header { background: transparent; }
+.app-shell .icon-button { border-radius: 12px; }
+.app-shell .list-item { transition: background var(--motion-base) var(--ease-standard); }
+.app-shell .list-item.is-selected { background: var(--surface-selected); }
+.app-shell .dashboard-workspace .dashboard-detail-scroll { padding: 26px; }
+.app-shell .dashboard-workspace .dashboard-summary-card {
+  min-height: 148px; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 36px auto auto; gap: 7px 10px; padding: 18px;
+  border-radius: var(--radius-surface);
+  background: linear-gradient(135deg, var(--surface-hover), var(--surface));
+  box-shadow: var(--panel-highlight);
+  transition: border-color var(--motion-base), transform var(--motion-base), box-shadow var(--motion-base);
+}
+.app-shell .dashboard-workspace .dashboard-summary-card:hover {
+  border-color: var(--accent-border-strong); transform: translateY(-3px); box-shadow: var(--signal-glow);
+}
+.app-shell .dashboard-workspace .dashboard-summary-icon { grid-row: 1; grid-column: 1; width: 34px; height: 34px; border-radius: 11px; }
+.app-shell .dashboard-workspace .dashboard-summary-value { grid-row: 2; grid-column: 1 / -1; font-size: clamp(1.7rem, 2.4vw, 2.2rem); font-weight: 600; letter-spacing: -.04em; line-height: 1.15; }
+.app-shell .dashboard-workspace .dashboard-summary-label { grid-row: 3; grid-column: 1 / -1; font-size: .875rem; }
+.app-shell .dashboard-workspace .dashboard-summary-card > svg { grid-row: 1; grid-column: 2; align-self: start; }
+
+/* Shared working surfaces: lists, forms, dialogs and detail views. */
+.search-field, .suggest-input__field { border-color: var(--border); border-radius: var(--radius-control); min-height: 44px; }
+.search-field:focus-within, .suggest-input__field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
+.field { font-size: .875rem; gap: 8px; }
+.field input, .field textarea { min-height: 46px; padding: 11px 13px; font-size: 1rem; background: var(--surface-subtle); border-radius: var(--radius-control); }
+.field input:focus, .field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
+dt, dd { font-size: .875rem; }
+.app-shell .pane-header { min-height: 76px; flex-basis: 76px; gap: 12px; }
+.app-shell .pane-header h1 { font-size: 1.375rem; letter-spacing: -.03em; }
+.app-shell .pane-header span { font-size: .875rem; }
+.app-shell .workspace-detail-header { background: var(--surface); box-shadow: var(--panel-highlight); }
+.app-shell .list-item { min-height: 80px; padding-block: 14px; }
+.app-shell .list-item__content strong { font-size: 1rem; font-weight: 600; }
+.app-shell .list-item__content small { font-size: .875rem; line-height: 1.4; }
+.app-shell .avatar { border-radius: 15px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%); }
+.app-shell .list-item.is-selected { box-shadow: inset 3px 0 var(--accent); }
+.segmented-control { height: auto; min-height: 44px; padding: 4px; gap: 4px; border: 1px solid var(--border); border-radius: 12px; }
+.segmented-control button { min-height: 34px; font-size: .875rem; padding: 6px; border-radius: 8px; }
+.segmented-control button.is-active { color: var(--accent-strong); background: var(--surface-selected); }
+.primary-button, .pane-create-button { border-radius: 12px; box-shadow: var(--signal-glow); }
+.primary-button:not(:disabled):hover, .pane-create-button:not(:disabled):hover { filter: brightness(1.08); }
+.state-panel { color: var(--muted); }
+.state-panel > svg { color: var(--accent); padding: 12px; box-sizing: content-box; border: 1px solid var(--accent-border); border-radius: 22px; background: var(--accent-soft); }
+.state-panel strong { color: var(--text); font-size: 1rem; }
+.state-panel p { font-size: .875rem; line-height: 1.7; }
+.global-search__panel, .suggest-menu, .audio-settings-menu { border-radius: 16px; box-shadow: var(--shadow-lg); }
+.drawer-backdrop { background: rgb(2 8 14 / 68%); }
+
+/* Overview: large numerals, modular hardware cards and a separate activity rail. */
+.dashboard-overview-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.dashboard-overview-heading > svg { color: var(--accent); }
+.dashboard-overview-heading h1 { font-size: 1.5rem; letter-spacing: -.04em; font-weight: 600; }
+.app-shell .dashboard-workspace .dashboard-detail-section h3 { font-size: 1.0625rem; font-weight: 600; }
+.app-shell .dashboard-workspace .dashboard-detail-section > header a { font-size: .875rem; color: var(--accent); }
+.app-shell .dashboard-workspace .dashboard-contact-row { border-radius: 15px; min-height: 82px; box-shadow: var(--panel-highlight); }
+.app-shell .dashboard-workspace .dashboard-section-state { border-radius: 16px; border-style: dashed; font-size: .875rem; }
+.app-shell .module-card { border-radius: 18px; background: linear-gradient(135deg, var(--surface-hover), var(--surface) 65%); box-shadow: var(--panel-highlight); overflow: hidden; }
+.app-shell .module-card .module-card__main { padding: 18px; }
+.app-shell .module-card .module-card__footer { background: var(--surface-subtle); }
+.app-shell .module-card .module-card__facts { padding-top: 12px; }
+.app-shell .module-card .module-card__facts dt { font-size: .75rem; }
+.app-shell .module-card .module-card__facts dd { font-size: .875rem; }
+.app-shell .traffic-summary { background: transparent; gap: 12px; border: 0; }
+.app-shell .traffic-summary > div { min-height: 112px; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(135deg, var(--surface-hover), var(--surface)); box-shadow: var(--panel-highlight); }
+.app-shell .traffic-summary small { font-size: .875rem; }
+.app-shell .traffic-summary strong { margin-top: 8px; font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; }
+.app-shell .traffic-summary .traffic-summary__icon { border-radius: 12px; }
+
+/* Messages: comfortable typography and directional, high-contrast bubbles. */
+.app-shell .messages-scroll { background: radial-gradient(ellipse at 90% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 55%), var(--background); }
+.app-shell .message-stack { gap: 14px; }
+.app-shell .message-bubble { padding: 13px 16px 10px; background: var(--surface-hover); border: 1px solid var(--border); border-radius: 18px 18px 18px 5px; box-shadow: 0 3px 12px rgb(0 0 0 / 10%); }
+.app-shell .message-row--outgoing .message-bubble { color: #ffffff; background: linear-gradient(135deg, var(--hs-gradient-start), var(--hs-gradient-end)); border-color: var(--accent-border); border-radius: 18px 18px 5px 18px; }
+.app-shell .message-bubble p { font-size: 1rem; line-height: 1.7; }
+.app-shell .message-bubble span { color: var(--muted-strong); font-size: .75rem; margin-top: 7px; }
+.app-shell .message-composer { padding: 16px 20px; background: var(--surface-subtle); }
+.app-shell .composer-row { gap: 12px; }
+.app-shell .composer-row textarea { min-height: 48px; font-size: 1rem; border-radius: 15px; padding: 12px 15px; background: var(--surface); }
+.app-shell .send-button { border-radius: 15px; box-shadow: var(--signal-glow); }
+
+/* Dialer is also teleported outside the shell: target its own root explicitly. */
+body .dialer-panel { background: linear-gradient(180deg, var(--surface), var(--surface-subtle) 65%); border-radius: 24px; box-shadow: var(--shadow-lg); }
+body .dialer-panel--permanent { border-radius: 0; box-shadow: none; }
+body .dialer-panel .tool-header { min-height: 80px; background: rgb(255 255 255 / 2%); }
+body .dialer-panel .keypad__key { border: 1px solid var(--border); border-radius: 20px; background: linear-gradient(145deg, var(--surface-hover), var(--surface)); box-shadow: var(--panel-highlight); }
+body .dialer-panel .keypad__key:hover { border-color: var(--accent-border-strong); background: var(--surface-selected); }
+body .dialer-panel .keypad__key:active:not(:disabled) { color: var(--accent); transform: scale(.94); }
+body .dialer-panel .keypad__key strong { font-size: 1.75rem; font-weight: 500; }
+body .dialer-panel .keypad__key small { font-size: .75rem; font-weight: 500; letter-spacing: .09em; }
+body .dialer-panel .call-button { box-shadow: 0 5px 24px color-mix(in srgb, var(--accent) 24%, transparent); background: linear-gradient(135deg, var(--hs-gradient-start), var(--accent)); }
+body .dialer-panel .dialer-number { font-variant-numeric: tabular-nums; letter-spacing: .025em; }
+
+/* Recordings and settings retain their existing actions and information layout. */
+.app-shell .recording-detail .recording-player { padding: 24px; min-height: 140px; border: 1px solid var(--accent-border); border-radius: 22px; background: linear-gradient(120deg, var(--accent-soft), var(--surface)); box-shadow: var(--panel-highlight); }
+.app-shell .recording-audio-player .recording-audio-player__toggle { border-radius: 16px; box-shadow: var(--signal-glow); }
+.app-shell .settings-nav { background: var(--surface-subtle); }
+.app-shell .settings-nav button, .app-shell .settings-nav a { border-radius: 12px; }
+.app-shell .settings-content .settings-card { border-radius: 18px; box-shadow: var(--panel-highlight); }
+.app-shell .nas-preflight { background: linear-gradient(125deg, var(--accent-soft), var(--surface) 60%); border-color: var(--accent-border); border-radius: 20px; }
+.app-shell .nas-preflight .nas-preflight__summary { border-radius: 0 12px 12px 0; }
+
+/* Login shares the same product identity without changing authentication. */
+.login-page { position: relative; overflow-y: auto; background: radial-gradient(ellipse at 20% 15%, var(--accent-soft) 0, transparent 40%), radial-gradient(ellipse at 90% 85%, var(--blue-soft) 0, transparent 45%), var(--background); }
+.login-brand { gap: 15px; }
+.login-brand > span { width: 54px; height: 54px; border-radius: 18px; color: var(--on-accent); background: linear-gradient(135deg, var(--hs-gradient-start), var(--accent)); box-shadow: var(--signal-glow); }
+.login-brand > strong { font-size: 1.75rem; letter-spacing: -.05em; font-weight: 600; }
+.login-panel { padding: clamp(24px, 5vw, 40px); border: 1px solid var(--border-strong); border-radius: 26px; background: linear-gradient(140deg, var(--surface-hover), var(--surface)); box-shadow: var(--shadow-lg), var(--panel-highlight); }
+.login-panel h1 { font-size: 1.65rem; letter-spacing: -.03em; }
+.login-panel > header p { font-size: .875rem; line-height: 1.7; }
+.login-form { gap: 22px; }
+.login-submit { min-height: 50px; font-size: 1rem; background: linear-gradient(120deg, var(--hs-gradient-start), var(--accent)); }
+
+@media (max-width: 1479px) { .shell-location > span { display: none; } }
+@media (max-width: 1100px) { .shell-location { display: none; } .shell-header .global-search { flex: 1; width: auto; } }
+@media (max-width: 860px) {
+  :root { --header-height: 66px; }
+  .app-shell .shell-header { padding-inline: 16px; gap: 8px; }
+  .app-shell .dashboard-workspace .dashboard-detail-scroll { padding: 18px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+.homesim-bubble-code { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-strong); }
+.homesim-bubble-code > code { font-size: 1.25rem; letter-spacing: .08em; user-select: text; }
+.app-shell .message-bubble .sms-code-action { display: inline-flex; margin: 0; }
+.app-shell .message-bubble .sms-code-error { font-size: .875rem; color: var(--danger); }
+.app-shell .homesim-sms-category { align-self: flex-start; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-border); padding: 2px 7px; border-radius: 6px; font-size: .75rem; line-height: 1.4; }
+.homesim-system-header { flex: 0 0 auto; padding: 0 20px; }
+.homesim-system-header .homesim-route-links a.is-current { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border); }
+.homesim-integration-note--header { margin: 0 20px 14px; flex: 0 0 auto; }
+.homesim-appearance-setting { display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: var(--settings-preference-content-max); padding: 12px 16px; margin-bottom: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; font-size: .875rem; }
+
+/* Palette derived from the user's HomeSIM frontend. Keep floating layers opaque. */
+:root {
+  --background: #0b101b; --surface: #151e30; --surface-subtle: #0f1626;
+  --surface-hover: #202c42; --surface-selected: #1a3150;
+  --text: #e7ecf5; --muted: #a0adc2; --muted-strong: #c2cde0; --faint: #8597b2;
+  --border: #29364d; --border-strong: #415470;
+  --accent: #7dd3fc; --accent-strong: #bae6fd; --accent-soft: #172e48;
+  --accent-border: #345d82; --accent-border-strong: #4787b8;
+  --blue: #a5b4fc; --blue-soft: #242b50;
+  --hs-gradient-start: #0369a1; --hs-gradient-end: #4f46e5;
+  --on-accent: #0b1726;
+}
+html[data-theme='light'] {
+  color-scheme: light;
+  --background: #eef2f7; --surface: #ffffff; --surface-subtle: #f7f9fc;
+  --surface-hover: #eaf0f7; --surface-selected: #e2eefb;
+  --text: #15233a; --muted: #53657e; --muted-strong: #3c506c; --faint: #60728d;
+  --border: #d9e2ee; --border-strong: #9baec7;
+  --accent: #0369a1; --accent-strong: #075985; --accent-soft: #e0f2fe;
+  --accent-border: #90bddb; --accent-border-strong: #428bb8;
+  --blue: #4f46e5; --blue-soft: #eae9ff;
+  --success: #157047; --success-soft: #e0f3e9; --success-border: #93c7af; --success-border-strong: #568c75;
+  --warning: #855500; --warning-strong: #734b00; --warning-soft: #fff3d6; --warning-border: #cfaf65;
+  --favorite: #855500; --favorite-border: #b69039;
+  --danger: #b32646; --danger-strong: #921f39; --danger-soft: #ffe8ed; --danger-border: #dca0ae; --danger-border-strong: #bc6077;
+  --control-muted: #d4deea; --skeleton: #dfe7f0; --on-accent: #ffffff;
+  --shadow: 0 16px 40px rgb(24 42 72 / 10%); --shadow-lg: 0 24px 80px rgb(24 42 72 / 18%);
+}
+body .brand-mark > span, .login-brand > span { color: #ffffff; }
+.brand-mark img, .login-brand img { display: block; width: 100%; height: 100%; }
+.app-shell .avatar--palette-0 { background: color-mix(in srgb, var(--blue) 18%, var(--surface)); }
+.app-shell .avatar--palette-1 { background: color-mix(in srgb, var(--success) 18%, var(--surface)); }
+.app-shell .avatar--palette-2 { background: color-mix(in srgb, var(--warning) 18%, var(--surface)); }
+.app-shell .avatar--palette-3 { background: color-mix(in srgb, var(--blue) 24%, var(--surface)); }
+.app-shell .avatar--palette-4 { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+.app-shell .avatar--palette-5 { background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
+.app-shell .avatar--palette-6 { background: color-mix(in srgb, var(--success) 24%, var(--surface)); }
+.app-shell .avatar--palette-7 { background: color-mix(in srgb, var(--warning) 24%, var(--surface)); }
+.brand-mark { flex-direction: column; height: 100px; flex-basis: 100px; gap: 7px; }
+.brand-mark > strong { display: block; font-size: .75rem; font-weight: 600; }
+.shell-location > span:first-child { color: var(--text); font-size: 1.125rem; font-weight: 700; letter-spacing: -.03em; }
+.app-shell .rail-link { min-height: 62px; }
+.app-shell .rail__primary { gap: 4px; padding-block: 8px; }
+.app-shell .primary-button, .app-shell .pane-create-button, .login-submit, .app-shell .send-button {
+  background: linear-gradient(135deg, var(--hs-gradient-start), var(--hs-gradient-end)); color: #ffffff;
+}
+.app-shell .message-row--outgoing .message-bubble span { color: #e0edff; }
+body .dialer-panel .call-button { background: linear-gradient(135deg, var(--hs-gradient-start), var(--hs-gradient-end)); color: #ffffff; }
+body .dialer-panel .keypad__key { border-radius: 50%; }
+.app-shell .module-card.is-selected { box-shadow: inset 4px 0 var(--accent), 0 0 0 1px var(--accent); }
+.app-shell .settings-list .list-item { margin: 4px 8px; width: calc(100% - 16px); border-radius: 14px; min-height: 64px; }
+.app-shell .settings-section { padding: 22px; border: 1px solid var(--border); background: var(--surface); border-radius: 20px; }
+.app-shell .settings-nav-group__title { font-size: .75rem; letter-spacing: .06em; }
+.app-shell .settings-section__header { margin-bottom: 12px; }
+.app-shell .settings-icon { border-radius: 12px; }
+.login-appearance { position: absolute; right: 24px; top: 26px; }
+body .feedback-toast, body .application-update-bar, body .batch-action-bar { background: var(--surface); }
+body .skeleton-block::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 8%, transparent), transparent); }
+body .conversation-skeleton { background: var(--background); }
+body .call-button--dismiss:hover:not(:disabled) { background: var(--surface-selected); }
+.homesim-route-links { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.homesim-route-links a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); font-size: .875rem; }
+.homesim-route-links a:hover { color: var(--accent); border-color: var(--accent-border); }
+.homesim-integration-note { font-size: .875rem; line-height: 1.6; color: var(--muted); padding: 14px 16px; border: 1px solid var(--border); background: var(--surface-subtle); border-radius: 14px; margin-bottom: 18px; }
+@media (max-width: 860px) {
+  .app-shell .mobile-nav { background: var(--surface-subtle); box-shadow: 0 -8px 24px rgb(0 0 0 / 8%); }
+  .app-shell .mobile-nav__label { font-size: .75rem; line-height: 1.2; }
+  .app-shell .mobile-nav__dial-icon { border-radius: 16px; }
+  .app-shell .fixture-badge { display: inline-flex; font-size: .75rem; padding: 4px 7px; min-height: 28px; max-width: 150px; white-space: normal; }
+  .app-shell .shell-header__controls { gap: 1px; }
+  .app-shell .shell-header .homesim-appearance { width: 36px; height: 44px; flex-basis: 36px; }
+  .app-shell .settings-section { padding: 16px; }
+  .app-shell .message-bubble { max-width: 88%; }
+  .app-shell .recording-detail .recording-player { padding: 16px; }
+}
+@media (max-width: 560px) {
+  .app-shell .shell-header { flex-wrap: wrap; }
+  .app-shell .shell-header .fixture-badge { order: 5; flex-basis: 100%; max-width: none; justify-content: center; }
+  .app-shell .dashboard-workspace .dashboard-summary-card { min-height: 130px; padding: 14px; }
+  .app-shell .traffic-summary > div { padding: 12px; gap: 10px; }
+  .app-shell .traffic-summary strong { font-size: 1.125rem; }
+  .login-brand { position: absolute; top: 24px; left: 20px; }
+  .login-brand > strong { font-size: 1.25rem; }
+  .login-brand > span { width: 40px; height: 40px; border-radius: 13px; }
+  .login-page { min-height: 100dvh; height: auto; padding: 104px 20px 32px; }
+}
+
+.homesim-signature-filter { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-subtle); }
+.homesim-signature-filter label { display: flex; gap: 12px; align-items: center; font-size: 14px; }
+.homesim-signature-filter select { flex: 1; min-width: 0; padding: 7px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.homesim-signature-filter small { display: block; color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.5; }
+.homesim-sim-notice { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted); background: var(--surface-subtle); font-size: 14px; line-height: 1.7; }
+.homesim-sim-notice label { display: flex; gap: 8px; align-items: center; }
+.homesim-sim-notice p { margin-top: 8px; }
+.message-bubble > span { font-size: 12px; font-variant-numeric: tabular-nums; }

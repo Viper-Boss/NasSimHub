@@ -25,11 +25,11 @@ test('settings navigation groups personal and managed surfaces behind one visibi
   const view = await source('../src/views/SettingsView.vue')
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: false }),
-    ['preferences', 'security', 'audio', 'contacts', 'devices', 'telegram']
+    ['preferences', 'security', 'audio', 'contacts', 'devices', 'telegram', 'bark', 'f50']
   )
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: true }),
-    ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram']
+    ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram', 'bark', 'f50']
   )
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: true, canPairIOS: true }),
@@ -42,6 +42,8 @@ test('settings navigation groups personal and managed surfaces behind one visibi
       'users',
       'devices',
       'telegram',
+      'bark',
+      'f50',
       'connectivity',
       'diagnostics',
       'about'
@@ -54,6 +56,8 @@ test('settings navigation groups personal and managed surfaces behind one visibi
     'users',
     'devices',
     'telegram',
+    'bark',
+    'f50',
     'connectivity',
     'diagnostics',
     'about'
@@ -78,7 +82,7 @@ test('settings landing remains a directory and mobile preference rows keep balan
   assert.doesNotMatch(shell, /settingsLanding/)
   assert.match(
     shell,
-    /class="rail-link"[\s\S]*:class="\{ 'is-current': route\.name === 'settings' \}"[\s\S]*:to="\{ name: 'settings' \}"/
+    /class="rail-link"[\s\S]*:class="\{ 'is-current': route\.name === 'settings' && !\['devices', 'diagnostics', 'about', 'telegram'\]\.includes\(String\(route\.params\.section\)\) \}"[\s\S]*:to="\{ name: 'settings' \}"/
   )
   assert.match(
     view,

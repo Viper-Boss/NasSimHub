@@ -22,6 +22,9 @@ export function settingsSkeletonShape(section: string): SettingsSkeletonShape {
     case 'users':
     case 'telegram':
       return 'master-detail'
+    case 'bark':
+    case 'f50':
+      return 'form'
     case 'contacts':
       return 'modules-two'
     case 'pairing':

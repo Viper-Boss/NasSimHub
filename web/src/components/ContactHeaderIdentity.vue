@@ -4,6 +4,7 @@ import type { CommunicationChannel } from '../utils/communicationAvatar'
 import type { LineTagLine } from '../utils/lineIdentity'
 import CommunicationAvatar from './CommunicationAvatar.vue'
 import LineTag from './LineTag.vue'
+import { groupedPhone } from '../utils/homesimDisplay'
 
 const props = withDefaults(
   defineProps<{
@@ -45,7 +46,7 @@ const showNumber = computed(
     <h2>{{ name }}</h2>
     <div class="contact-header-identity__meta">
       <LineTag :line="line" :fallback="lineFallback" />
-      <span v-if="showNumber">{{ number }}</span>
+      <span v-if="showNumber">{{ groupedPhone(number) }}</span>
     </div>
   </div>
 </template>
