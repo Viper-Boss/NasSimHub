@@ -1,16 +1,39 @@
-# 声明（中文）
+# NasSimHub（NAS猫窝）声明
 
-ModemDeck 的早期产品构想受到 VoHive 启发，我们在此感谢其作者；
-ModemDeck 是一个独立项目，与 VoHive 没有官方关系，也未获得其背书。
+## 许可（双轨）
 
-`vohive` Git 分支保留历史 VoHive 源码，仅供归档参考。该分支中源码的版权归
-各自原作者或其他权利人所有，并继续受该分支自身的许可证和声明约束。这是一项
-归档说明，不是 ModemDeck `modemdeck` 分支的 `Required Notice`。
+NasSimHub 是家庭 4G/5G SIM 卡网关。本仓库包含两类代码，许可分别如下：
 
-ModemDeck `modemdeck` 分支的分发和使用受 `LICENSE` 中的许可条款约束，包括
-其中仅限非商业用途的要求。
+1. **ModemDeck 衍生部分**（基线 commit `0437f29` 继承的网关与前端骨架代码）：
+   继承上游 [ModemDeck](https://github.com/human-agent65535/ModemDeck) 的
+   **PolyForm Noncommercial 1.0.0** 协议（见 [LICENSE](LICENSE)）——仅限非商业用途。
+2. **NasSimHub 原创新增部分**（2026-09 之后新增的设备适配与家卡功能代码，主要包括
+   `internal/devicef50/`、`internal/phonegeo/`、`internal/barkpush/`、
+   `internal/httpapi/homesim_*.go` 中新增处理器、`web/src/components/LineStatusStrip.vue`、
+   `web/src/components/settings/{BarkSettingsPanel,F50DevicePanel,NetworkSwitchesPanel}.vue`、
+   `web/src/utils/phoneRegion.ts`、`web/src/state/phoneGeo.ts`、`web/src/i18n/homesimData.ts`
+   中的新增键等）：以 **GNU Affero General Public License v3.0**
+   （[LICENSE-AGPL.txt](LICENSE-AGPL.txt)）授权——以网络服务形式使用同样必须开源。
 
-## Android Open Source Project 铃声
+合并分发整个仓库时，两类许可各自约束对应部分。
+
+## 使用的开源模块与致谢
+
+| 模块/数据 | 用途 | 来源与协议 |
+| --- | --- | --- |
+| ModemDeck | 网关与前端基线（上游） | github.com/human-agent65535/ModemDeck — PolyForm Noncommercial 1.0.0 |
+| MacCellular | DJI 模块语音/短信拓扑参考 | github.com/yuexiazhuojiu-byte/MacCellular — PolyForm Noncommercial 1.0.0 |
+| f50-monitor | ZTE F50 goform 协议参考（仅协议行为，未复制代码） | github.com/koldllc/f50-monitor — MIT |
+| phone.dat 归属地数据 | internal/phonegeo 离线号码归属地 | github.com/xluohome/phonedata — MIT |
+| Vue 3 / Vue Router / Vue I18n | 前端框架 | MIT |
+| Vite | 前端构建 | MIT |
+| libphonenumber-js | 号码格式化 | MIT |
+| Lucide 图标 | 图标库 | ISC |
+| things-go/go-socks5 | 线路代理 | MIT |
+| modernc.org/sqlite | 存储（纯 Go SQLite） | MIT |
+| pion WebRTC 栈 | WebRTC 通话媒体 | MIT |
+
+## 铃声与提示音（Android Open Source Project）
 
 `web/src/assets/ringtones/` 中的铃声来自 Android Open Source Project。
 其中 `classic.ogg`、`digital.ogg`、`chime.ogg` 和 `soft.ogg` 分别对应
@@ -30,18 +53,45 @@ Apache License 2.0。
 
 # Notices (English)
 
-Early product ideas for ModemDeck were inspired by VoHive, whose author we
-thank; ModemDeck is independent, has no official relationship with that
-project, and is not endorsed by it.
+## NasSimHub licensing (dual-track)
 
-The `vohive` Git branch preserves the historical VoHive source for archival
-reference. Copyright in that branch remains with its respective original
-authors or other rightsholders, and its own license and notices continue to
-govern it. This is an archival statement, not a `Required Notice` for the
-ModemDeck `modemdeck` branch.
+NasSimHub is a home 4G/5G SIM gateway. This repository contains two classes
+of code, licensed separately:
 
-The license terms in `LICENSE`, including their noncommercial-use requirements,
-govern distribution and use of the ModemDeck `modemdeck` branch.
+1. **ModemDeck-derived portions** (gateway and frontend skeleton code
+   inherited from baseline commit `0437f29`): licensed under the upstream
+   [ModemDeck](https://github.com/human-agent65535/ModemDeck)
+   **PolyForm Noncommercial 1.0.0** license (see [LICENSE](LICENSE)) —
+   noncommercial use only.
+2. **NasSimHub-original additions** (device adapters and HomeSIM feature
+   code added after 2026-09, including `internal/devicef50/`,
+   `internal/phonegeo/`, `internal/barkpush/`, new handlers under
+   `internal/httpapi/homesim_*.go`, `web/src/components/LineStatusStrip.vue`,
+   `web/src/components/settings/{BarkSettingsPanel,F50DevicePanel,NetworkSwitchesPanel}.vue`,
+   `web/src/utils/phoneRegion.ts`, `web/src/state/phoneGeo.ts`, and new keys in
+   `web/src/i18n/homesimData.ts`): licensed under the
+   **GNU Affero General Public License v3.0**
+   ([LICENSE-AGPL.txt](LICENSE-AGPL.txt)) — network-service use must open
+   source accordingly.
+
+When distributing the repository as a whole, each license governs its own
+portions.
+
+## Open-source modules and acknowledgements
+
+| Module / data | Purpose | Source & license |
+| --- | --- | --- |
+| ModemDeck | Gateway & frontend baseline (upstream) | github.com/human-agent65535/ModemDeck — PolyForm Noncommercial 1.0.0 |
+| MacCellular | DJI module voice/SMS topology reference | github.com/yuexiazhuojiu-byte/MacCellular — PolyForm Noncommercial 1.0.0 |
+| f50-monitor | ZTE F50 goform protocol reference (behaviour only, no code copied) | github.com/koldllc/f50-monitor — MIT |
+| phone.dat region dataset | Offline number region lookup in internal/phonegeo | github.com/xluohome/phonedata — MIT |
+| Vue 3 / Vue Router / Vue I18n | Frontend framework | MIT |
+| Vite | Frontend build | MIT |
+| libphonenumber-js | Phone number formatting | MIT |
+| Lucide icons | Icon library | ISC |
+| things-go/go-socks5 | Line proxies | MIT |
+| modernc.org/sqlite | Storage (pure-Go SQLite) | MIT |
+| pion WebRTC stack | WebRTC call media | MIT |
 
 ## Android Open Source Project ringtones
 

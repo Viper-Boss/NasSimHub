@@ -117,7 +117,7 @@ func (api *API) homeSIMQuotas(response http.ResponseWriter, request *http.Reques
 	}
 	path, ok := api.homeSIMQuotaPath()
 	if !ok {
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 		return
 	}
 	api.homeSIMQuotaMu.Lock()
@@ -142,7 +142,7 @@ func (api *API) homeSIMQuotas(response http.ResponseWriter, request *http.Reques
 		}
 		next.Revision++
 		if err := writeHomeSIMJSON(path, next); err != nil {
-			api.writeInternalError(response, request, "save HomeSIM quotas", err)
+			api.writeInternalError(response, request, "save NasSimHub quotas", err)
 			return
 		}
 		current = next

@@ -14,7 +14,7 @@ import (
 
 var (
 	errF50NotConfigured  = errors.New("F50 device key or password is not configured")
-	errF50StorageMissing = errors.New("HomeSIM server storage is unavailable")
+	errF50StorageMissing = errors.New("NasSimHub server storage is unavailable")
 )
 
 // The F50 (ZTE 5G MiFi) is the second supported device type. It connects
@@ -90,7 +90,7 @@ func (api *API) homeSIMF50(response http.ResponseWriter, request *http.Request) 
 	}
 	path, ok := api.homeSIMF50Path()
 	if !ok {
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 		return
 	}
 	api.homeSIMF50Mu.Lock()
@@ -146,7 +146,7 @@ func (api *API) writeF50Error(response http.ResponseWriter, request *http.Reques
 	case err == errF50NotConfigured:
 		writeError(response, 400, "f50_not_configured", "Environment variable "+api.loadHomeSIMF50Settings().CredentialRef+" is not set on the server", "credential_ref")
 	case err == errF50StorageMissing:
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 	default:
 		writeError(response, 502, "f50_unreachable", "F50 device error: "+err.Error(), "")
 	}

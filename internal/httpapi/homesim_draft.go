@@ -106,7 +106,7 @@ func (api *API) homeSIMDraft(response http.ResponseWriter, request *http.Request
 		return
 	}
 	if api.contactBackupDirectory == "" {
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 		return
 	}
 	api.homeSIMDraftMu.Lock()
@@ -119,7 +119,7 @@ func (api *API) homeSIMDraft(response http.ResponseWriter, request *http.Request
 		err = json.Unmarshal(data, &current)
 	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		api.writeInternalError(response, request, "read HomeSIM draft", err)
+		api.writeInternalError(response, request, "read NasSimHub draft", err)
 		return
 	}
 	if request.Method == http.MethodPut {
@@ -143,7 +143,7 @@ func (api *API) homeSIMDraft(response http.ResponseWriter, request *http.Request
 			next.Spam.Whitelist = []string{}
 		}
 		if err := os.MkdirAll(directory, 0700); err != nil {
-			api.writeInternalError(response, request, "prepare HomeSIM draft", err)
+			api.writeInternalError(response, request, "prepare NasSimHub draft", err)
 			return
 		}
 		file, err := os.CreateTemp(directory, ".draft-*")
@@ -163,7 +163,7 @@ func (api *API) homeSIMDraft(response http.ResponseWriter, request *http.Request
 			err = os.Rename(file.Name(), path)
 		}
 		if err != nil {
-			api.writeInternalError(response, request, "save HomeSIM draft", err)
+			api.writeInternalError(response, request, "save NasSimHub draft", err)
 			return
 		}
 		current = next

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Bark is an iOS push channel. Following the HomeSIM integration rules the
+// Bark is an iOS push channel. Following the NasSimHub integration rules the
 // device key itself is never stored on disk: only the name of the server
 // environment variable holding it (credential_ref), resolved at send time.
 
@@ -33,7 +33,7 @@ func defaultHomeSIMBarkSettings() homeSIMBarkSettings {
 		Revision:      1,
 		ServerURL:     defaultBarkServerURL,
 		CredentialRef: "HOMESIM_BARK_KEY",
-		Group:         "HomeSIM",
+		Group:         "NasSimHub",
 		Sound:         "",
 	}
 }
@@ -88,7 +88,7 @@ func (api *API) homeSIMBark(response http.ResponseWriter, request *http.Request)
 	}
 	path, ok := api.homeSIMBarkPath()
 	if !ok {
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 		return
 	}
 	api.homeSIMBarkMu.Lock()
@@ -133,8 +133,8 @@ func (api *API) homeSIMBarkTest(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	payload := map[string]any{
-		"title": "HomeSIM",
-		"body":  "HomeSIM test push: the Bark channel is working.",
+		"title": "NAS猫窝",
+		"body":  "NAS猫窝测试推送：Bark 通道工作正常。",
 	}
 	if settings.Group != "" {
 		payload["group"] = settings.Group

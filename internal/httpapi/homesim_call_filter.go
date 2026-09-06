@@ -71,7 +71,7 @@ func (api *API) homeSIMCallFilter(response http.ResponseWriter, request *http.Re
 	}
 	path, ok := api.homeSIMCallFilterPath()
 	if !ok {
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 		return
 	}
 	api.homeSIMCallFilterMu.Lock()
@@ -82,7 +82,7 @@ func (api *API) homeSIMCallFilter(response http.ResponseWriter, request *http.Re
 		err = json.Unmarshal(data, &current)
 	}
 	if err != nil && !os.IsNotExist(err) {
-		api.writeInternalError(response, request, "read HomeSIM call filter", err)
+		api.writeInternalError(response, request, "read NasSimHub call filter", err)
 		return
 	}
 	if request.Method == http.MethodPut {
@@ -106,7 +106,7 @@ func (api *API) homeSIMCallFilter(response http.ResponseWriter, request *http.Re
 			next.Blacklist = []string{}
 		}
 		if err := writeHomeSIMJSON(path, next); err != nil {
-			api.writeInternalError(response, request, "save HomeSIM call filter", err)
+			api.writeInternalError(response, request, "save NasSimHub call filter", err)
 			return
 		}
 		current = next

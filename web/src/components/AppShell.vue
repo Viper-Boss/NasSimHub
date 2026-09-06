@@ -412,10 +412,10 @@ onBeforeUnmount(() => {
       <RouterLink
         class="brand-mark"
         :to="{ name: 'dashboard' }"
-        :aria-label="`HomeSIM ${t('shell.home')}`"
+        :aria-label="`NasSimHub ${t('shell.home')}`"
       >
         <span><img src="/favicon.svg" width="40" height="40" alt="" /></span>
-        <strong>HomeSIM</strong>
+        <strong>NasSimHub</strong>
       </RouterLink>
 
       <nav class="rail__primary">
@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
         <div class="mobile-brand">{{ mobilePageTitle }}</div>
         <div class="shell-header__loc">
           <div class="shell-location" aria-hidden="true">
-            <span>HomeSIM</span><span>/</span><strong>{{ mobilePageTitle }}</strong>
+            <span>NasSimHub</span><span>/</span><strong>{{ mobilePageTitle }}</strong>
           </div>
           <LineStatusStrip />
         </div>

@@ -71,7 +71,7 @@ func (api *API) homeSIMNetworkSwitches(response http.ResponseWriter, request *ht
 	}
 	path, ok := api.homeSIMNetworkSwitchesPath()
 	if !ok {
-		writeError(response, 503, "integration_unavailable", "HomeSIM server storage is unavailable", "")
+		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 		return
 	}
 	api.homeSIMNetworkSwitchesMu.Lock()
