@@ -1,17 +1,24 @@
 // Package barkpush sends iOS push notifications through a Bark server
 // (https://bark.day.app style API) when new SMS arrive. Following the
-// HomeSIM integration rules, the device key itself is never stored on
+// NasSimHub integration rules, the device key itself is never stored on
 // disk: settings only reference the name of the server environment
 // variable that holds it, resolved at send time.
 package barkpush
 
 import (
+	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +28,7 @@ const (
 	defaultServerURL = "https://api.day.app"
 	requestTimeout   = 10 * time.Second
 	recentCapacity   = 256
+	aesKeyLength     = 16
 )
 
 // Settings mirrors homesim/bark.json on the NAS data directory.
@@ -30,6 +38,11 @@ type Settings struct {
 	CredentialRef string `json:"credential_ref"`
 	Group         string `json:"group"`
 	Sound         string `json:"sound"`
+	// Encrypted push (Bark AES-128-CBC). The AES key is never stored on
+	// disk: EncryptRef names the server environment variable holding the
+	// 16-character key. The IV is random per message.
+	EncryptEnabled bool   `json:"encrypt_enabled"`
+	EncryptRef     string `json:"encrypt_ref,omitempty"`
 }
 
 func defaultSettings() Settings {
@@ -41,7 +54,7 @@ func defaultSettings() Settings {
 	}
 }
 
-// LoadSettings reads bark.json from the HomeSIM data directory. Returns
+// LoadSettings reads bark.json from the NasSimHub data directory. Returns
 // the defaults when the file is missing or invalid.
 func LoadSettings(dataDir string) Settings {
 	current := defaultSettings()
@@ -61,11 +74,12 @@ func LoadSettings(dataDir string) Settings {
 
 // SaveSettings persists settings atomically (temp file + rename, 0600).
 func SaveSettings(dataDir string, settings Settings) error {
-	if err := os.MkdirAll(filepath.Join(dataDir, "homesim"), 0700); err != nil {
+	directory := filepath.Join(dataDir, "homesim")
+	if err := os.MkdirAll(directory, 0700); err != nil {
 		return err
 	}
-	path := filepath.Join(dataDir, "homesim", "bark.json")
-	file, err := os.CreateTemp(filepath.Join(dataDir, "homesim"), ".bark-*")
+	path := filepath.Join(directory, "bark.json")
+	file, err := os.CreateTemp(directory, ".bark-*")
 	if err != nil {
 		return err
 	}
@@ -93,7 +107,7 @@ type Notifier struct {
 	order  []string
 }
 
-// NewNotifier creates a notifier bound to the HomeSIM data directory.
+// NewNotifier creates a notifier bound to the NasSimHub data directory.
 func NewNotifier(dataDir string, logger interface{ Warn(msg string, args ...any) }) *Notifier {
 	return &Notifier{
 		dataDir: dataDir,
@@ -128,7 +142,9 @@ func (n *Notifier) seen(messageID string) bool {
 
 // NotifyIncomingSMS pushes one incoming SMS. It never blocks longer than
 // the request timeout and never panics the caller's snapshot commit path.
-func (n *Notifier) NotifyIncomingSMS(ctx context.Context, message MessageInfo) {
+// urgent=true raises the notification sound; with encryption enabled the
+// whole payload travels as ciphertext.
+func (n *Notifier) NotifyIncomingSMS(ctx context.Context, message MessageInfo, urgent bool) {
 	if n == nil || message.MessageID == "" {
 		return
 	}
@@ -161,6 +177,47 @@ func (n *Notifier) NotifyIncomingSMS(ctx context.Context, message MessageInfo) {
 	if settings.Sound != "" {
 		payload["sound"] = settings.Sound
 	}
+	if urgent {
+		payload["sound"] = "alarm"
+	}
+
+	if settings.EncryptEnabled {
+		aesKey := strings.TrimSpace(os.Getenv(settings.EncryptRef))
+		encrypted, encErr := encryptBarkPayload(aesKey, payload)
+		if encErr != nil {
+			if n.logger != nil {
+				n.logger.Warn("bark push encryption failed; sending skipped",
+					"component", "barkpush",
+					"encrypt_ref", settings.EncryptRef,
+					"error", encErr,
+				)
+			}
+			return
+		}
+		// POST JSON {"ciphertext": ...} to /{key} — the documented Bark
+		// encrypted-push method (avoids URL-encoding the whole body).
+		target := strings.TrimRight(settings.ServerURL, "/") + "/" + url.PathEscape(key)
+		request, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(`{"ciphertext": `+strconv.Quote(encrypted)+`}`))
+		if reqErr != nil {
+			return
+		}
+		request.Header.Set("Content-Type", "application/json; charset=utf-8")
+		response, err := n.client.Do(request)
+		if err != nil {
+			if n.logger != nil {
+				n.logger.Warn("bark push failed", "component", "barkpush", "error", err)
+			}
+			return
+		}
+		defer response.Body.Close()
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			if n.logger != nil {
+				n.logger.Warn("bark push rejected", "component", "barkpush", "status", response.StatusCode)
+			}
+		}
+		return
+	}
+
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return
@@ -184,4 +241,31 @@ func (n *Notifier) NotifyIncomingSMS(ctx context.Context, message MessageInfo) {
 			n.logger.Warn("bark push rejected", "component", "barkpush", "status", response.StatusCode)
 		}
 	}
+}
+
+// encryptBarkPayload implements the Bark encrypted-push format:
+// plaintext JSON -> PKCS#7 pad -> AES-128-CBC with a random 16-byte IV ->
+// base64(iv + ciphertext).
+func encryptBarkPayload(key string, payload map[string]any) (string, error) {
+	key = strings.TrimSpace(key)
+	if len(key) != aesKeyLength {
+		return "", errors.New("bark AES key must be " + strconv.Itoa(aesKeyLength) + " characters")
+	}
+	plaintext, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	pad := aesKeyLength - len(plaintext)%aesKeyLength
+	padded := append(plaintext, bytes.Repeat([]byte{byte(pad)}, pad)...)
+	iv := make([]byte, aesKeyLength)
+	if _, err := rand.Read(iv); err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher([]byte(key))
+	if err != nil {
+		return "", err
+	}
+	encrypted := make([]byte, len(padded))
+	cipher.NewCBCEncrypter(block, iv).CryptBlocks(encrypted, padded)
+	return base64.StdEncoding.EncodeToString(append(iv, encrypted...)), nil
 }

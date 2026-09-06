@@ -55,7 +55,7 @@ const hookNew = `\t\t\tTimestamp:  message.Timestamp,
 \t\t\t\t\tMessageID: strconv.FormatInt(notify.ID, 10),
 \t\t\t\t\tPeer:      notify.Peer,
 \t\t\t\t\tContent:   notify.Content,
-\t\t\t\t})
+\t\t\t\t}, smsclass.Classify(notify.Content).Urgent())
 \t\t\t}()
 \t\t}
 \t}

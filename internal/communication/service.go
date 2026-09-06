@@ -21,11 +21,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
+	"github.com/human-agent65535/modemdeck/internal/barkpush"
 	"github.com/human-agent65535/modemdeck/internal/callevents"
 	"github.com/human-agent65535/modemdeck/internal/messageevents"
 	"github.com/human-agent65535/modemdeck/internal/modemidentity"
 	"github.com/human-agent65535/modemdeck/internal/phone"
 	"github.com/human-agent65535/modemdeck/internal/runtimeevents"
+	"github.com/human-agent65535/modemdeck/internal/smsclass"
 	"github.com/human-agent65535/modemdeck/internal/store"
 )
 
@@ -248,6 +250,7 @@ type Service struct {
 	agent                   Agent
 	repository              Repository
 	events                  messageevents.Publisher
+	bark                    *barkpush.Notifier
 	callEvents              callevents.Publisher
 	runtime                 runtimeevents.Publisher
 	random                  io.Reader
@@ -856,6 +859,12 @@ func runtimeCallEnded(previous, current []string) bool {
 	return false
 }
 
+// SetBarkNotifier attaches the optional Bark push notifier for incoming
+// SMS (nil disables push).
+func (s *Service) SetBarkNotifier(notifier *barkpush.Notifier) {
+	s.bark = notifier
+}
+
 func (s *Service) publishIncomingMessages(messages []store.Message, observedAt time.Time) {
 	if len(messages) == 0 {
 		return
@@ -874,6 +883,20 @@ func (s *Service) publishIncomingMessages(messages []store.Message, observedAt t
 			Timestamp:  message.Timestamp,
 			ObservedAt: observedAt,
 		})
+	}
+	if s.bark != nil {
+		for _, message := range messages {
+			notify := message
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				s.bark.NotifyIncomingSMS(ctx, barkpush.MessageInfo{
+					MessageID: strconv.FormatInt(notify.ID, 10),
+					Peer:      notify.Peer,
+					Content:   notify.Content,
+				}, smsclass.Classify(notify.Content).Urgent())
+			}()
+		}
 	}
 }
 
