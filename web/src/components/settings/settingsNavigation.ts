@@ -9,6 +9,7 @@ export type SettingsSection =
   | 'telegram'
   | 'bark'
   | 'f50'
+  | 'net-switches'
   | 'connectivity'
   | 'diagnostics'
   | 'about'
@@ -31,6 +32,7 @@ export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
   'telegram',
   'bark',
   'f50',
+  'net-switches',
   'connectivity',
   'diagnostics',
   'about'

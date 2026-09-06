@@ -15,6 +15,7 @@ import {
   LogOut,
   RadioTower,
   BellRing,
+  Network,
   Send,
   Wifi,
   ShieldCheck,
@@ -74,6 +75,7 @@ const loadConnectivitySettingsPanel = () =>
   import('../components/ConnectivitySettingsPanel.vue')
 const loadTelegramSettingsForm = () => import('../components/TelegramSettingsForm.vue')
 const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsPanel.vue')
+const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
 
 const AccountPreferencesPanel = defineAsyncComponent(loadAccountPreferencesPanel)
@@ -91,6 +93,7 @@ const ConnectivitySettingsPanel = defineAsyncComponent(
 )
 const TelegramSettingsForm = defineAsyncComponent(loadTelegramSettingsForm)
 const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
+const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
 
 const route = useRoute()
@@ -174,6 +177,12 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     label: t('settings.f50'),
     description: t('settings.f50Description'),
     icon: Wifi
+  },
+  {
+    id: 'net-switches',
+    label: t('settings.netSwitches'),
+    description: t('settings.netSwitchesDescription'),
+    icon: Network
   },
   {
     id: 'connectivity',
@@ -293,6 +302,8 @@ function preloadSection(section: SettingsSection): void {
         return loadBarkSettingsPanel
       case 'f50':
         return loadF50DevicePanel
+      case 'net-switches':
+        return loadNetworkSwitchesPanel
       case 'pairing':
         return loadPairingSettingsPanel
       case 'connectivity':
@@ -534,6 +545,12 @@ onMounted(() => {
             <div v-else-if="selectedSection === 'f50'" class="settings-content">
               <PageContentFrame mode="reading">
                 <F50DevicePanel />
+              </PageContentFrame>
+            </div>
+
+            <div v-else-if="selectedSection === 'net-switches'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <NetworkSwitchesPanel />
               </PageContentFrame>
             </div>
 

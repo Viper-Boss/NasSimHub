@@ -24,6 +24,7 @@ export function settingsSkeletonShape(section: string): SettingsSkeletonShape {
       return 'master-detail'
     case 'bark':
     case 'f50':
+    case 'net-switches':
       return 'form'
     case 'contacts':
       return 'modules-two'

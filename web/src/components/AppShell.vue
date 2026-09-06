@@ -176,6 +176,7 @@ const mobileSettingsSection = computed(() => {
     telegram: t('settings.telegram'),
             bark: t('settings.bark'),
             f50: t('settings.f50'),
+            'net-switches': t('settings.netSwitches'),
     connectivity: t('settings.tls'),
     diagnostics: t('settings.diagnostics'),
     about: t('settings.about')

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Info, LoaderCircle, Network, RefreshCw, Save } from '@lucide/vue'
+import { LoaderCircle, Network, RefreshCw, Save } from '@lucide/vue'
 import {
   getHomeSIMNetworkSwitches,
   saveHomeSIMNetworkSwitches,
@@ -54,7 +54,7 @@ onMounted(load)
     </div>
 
     <template v-else-if="switches">
-      <!-- 开关A：蜂窝流量共享 -->
+      <!-- Switch A: cellular share -->
       <div class="net-switches__card">
         <header>
           <Network :size="17" />
@@ -86,7 +86,7 @@ onMounted(load)
         </div>
       </div>
 
-      <!-- 开关B：仅供家卡系统 -->
+      <!-- Switch B: HomeSIM only -->
       <div class="net-switches__card">
         <header>
           <Network :size="17" />
