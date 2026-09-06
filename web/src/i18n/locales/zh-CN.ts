@@ -281,6 +281,8 @@ export default {
     barkDescription: "通过 Bark 服务器推送到 iPhone",
     f50: "F50 设备",
     f50Description: "中兴 F50 随身WiFi：短信收发、流量监控与实时状态",
+    netSwitches: "供网开关",
+    netSwitchesDescription: "调试蜂窝共享与家卡专用供网的开关",
     iosApp: '配对',
     iosAppDescription: '将当前账户与 iPhone 配对',
     tls: '接入',

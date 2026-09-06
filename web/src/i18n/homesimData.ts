@@ -41,6 +41,19 @@ export const homesimEN = {
       messagePlaceholder: 'Message content', send: 'Send', sendDone: 'Message sent', markRead: 'Click to mark as read',
       noMessages: 'No messages on the device'
   },
+    netSwitches: {
+      shareTitle: 'Cellular share (debug)',
+      shareDesc: 'Share the F50 / EG25-G cellular data path with 飞牛OS or any LAN device through the line proxy (SOCKS5/HTTP).',
+      guideTitle: 'How to use it on 飞牛OS',
+      guideStep1: 'Keep this switch on — the gateway runs a line proxy on the NAS (see 运行代理 on the dashboard).',
+      guideStep2: 'In 飞牛OS network settings (or any app), point the proxy at the NAS IP and the proxy port shown on the dashboard.',
+      guideStep3: 'Traffic now flows through the F50 / EG25-G cellular line. Switch off to fall back to the default network.',
+      guideHint: 'Changing the whole NAS default route is an OS-level action and stays manual by design.',
+      onlyTitle: 'HomeSIM only',
+      onlyDesc: "The gateway's own outbound requests (Bark pushes and future integrations) go through the cellular line proxy instead of the default network.",
+      onlyNote: 'Takes effect immediately for outbound HomeSIM requests. 飞牛OS and everything else stay on the default network.',
+      defaultNote: 'Both switches default to off — 飞牛OS keeps its own network.'
+    },
 }
 
 export const homesimZH = {
@@ -82,4 +95,17 @@ export const homesimZH = {
       messagePlaceholder: '短信内容', send: '发送', sendDone: '短信已发送', markRead: '点击标记已读',
       noMessages: '设备上暂无短信'
   },
+    netSwitches: {
+      shareTitle: '蜂窝流量共享（调试）',
+      shareDesc: '把 F50 / 大疆 EG25-G 的蜂窝流量，通过线路代理（SOCKS5/HTTP）共享给飞牛OS 或局域网内任意设备使用。',
+      guideTitle: '飞牛OS 侧怎么用',
+      guideStep1: '保持本开关开启——网关会在 NAS 上运行一条线路代理（见首页「运行代理」）。',
+      guideStep2: '在飞牛OS 网络设置（或任意应用）里，把代理指向 NAS 的 IP 和首页显示的代理端口。',
+      guideStep3: '流量即走 F50 / 大疆模块的蜂窝线路；关闭开关即恢复默认网络。',
+      guideHint: '整机默认路由的切换属于系统级操作，出于安全考虑保持手动。',
+      onlyTitle: '仅供家卡系统',
+      onlyDesc: '家卡网关自身的出站请求（如 Bark 推送、后续集成）改走蜂窝线路代理，而不是系统默认网络。',
+      onlyNote: '开启后立即对家卡出站请求生效；飞牛OS 其余部分不受影响，仍走默认网络。',
+      defaultNote: '两个开关默认都关——飞牛OS 保持自带网络。'
+    },
 }

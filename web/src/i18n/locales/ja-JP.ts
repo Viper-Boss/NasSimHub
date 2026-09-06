@@ -281,6 +281,8 @@ export default {
     "barkDescription": "Barkサーバー経由でiPhoneに通知",
     "f50": "F50 デバイス",
     "f50Description": "ZTE F50 モバイルルーター：SMS・通信量・ライブステータス",
+    "netSwitches": "供給スイッチ",
+    "netSwitchesDescription": "セルラー共有とHomeSIM専用供給のスイッチ",
     "iosApp": "ペアリング",
     "iosAppDescription": "このアカウントを iPhone とペアリング",
     "tls": "アクセス",

@@ -25,11 +25,11 @@ test('settings navigation groups personal and managed surfaces behind one visibi
   const view = await source('../src/views/SettingsView.vue')
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: false }),
-    ['preferences', 'security', 'audio', 'contacts', 'devices', 'telegram', 'bark', 'f50']
+    ['preferences', 'security', 'audio', 'contacts', 'devices', 'telegram', 'bark', 'f50', 'net-switches']
   )
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: true }),
-    ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram', 'bark', 'f50']
+    ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram', 'bark', 'f50', 'net-switches']
   )
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: true, canPairIOS: true }),
@@ -44,6 +44,7 @@ test('settings navigation groups personal and managed surfaces behind one visibi
       'telegram',
       'bark',
       'f50',
+      'net-switches',
       'connectivity',
       'diagnostics',
       'about'
@@ -58,6 +59,7 @@ test('settings navigation groups personal and managed surfaces behind one visibi
     'telegram',
     'bark',
     'f50',
+    'net-switches',
     'connectivity',
     'diagnostics',
     'about'

@@ -281,6 +281,8 @@ export default {
     "barkDescription": "Push notifications to iPhone through Bark servers",
     "f50": "F50 Device",
     "f50Description": "ZTE F50 MiFi: SMS, traffic and live status over HTTP",
+    "netSwitches": "Supply switches",
+    "netSwitchesDescription": "Debug cellular sharing and HomeSIM-only supply switches",
     "iosApp": "Pareamento",
     "iosAppDescription": "Parear esta conta com um iPhone",
     "tls": "Acesso",
