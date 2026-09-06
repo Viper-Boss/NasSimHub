@@ -306,6 +306,7 @@ type API struct {
 	homeSIMBarkMu              sync.Mutex
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
+	homeSIMNetworkSwitchesMu   sync.Mutex
 	contactBackupDirectory     string
 	repository                 Repository
 	healthProbe                HealthProbe
@@ -480,6 +481,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.homeSIMBark(response, request)
 	case "/api/v1/settings/homesim/bark/test":
 		api.postOnly(response, request, api.homeSIMBarkTest)
+	case "/api/v1/settings/homesim/network-switches":
+		api.homeSIMNetworkSwitches(response, request)
 	case "/api/v1/settings/homesim/call-filter":
 		api.homeSIMCallFilter(response, request)
 	case "/api/v1/homesim/f50/status":

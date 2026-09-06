@@ -2643,6 +2643,26 @@ export async function sendF50SMS(number: string, content: string): Promise<void>
   await writeJSON(`${API_ROOT}/homesim/f50/sms/send`, 'POST', { number, content }, 200)
 }
 
+export type HomeSIMNetworkSwitches = {
+  revision: number
+  cellular_share: boolean
+  home_sim_only: boolean
+}
+
+export async function getHomeSIMNetworkSwitches(): Promise<HomeSIMNetworkSwitches> {
+  if (fixtureMode) return { revision: 1, cellular_share: false, home_sim_only: false }
+  const result = await get(`${API_ROOT}/settings/homesim/network-switches`) as { switches: HomeSIMNetworkSwitches }
+  if (!result?.switches || !Number.isInteger(result.switches.revision)) throw new Error('供网开关响应无效。')
+  return result.switches
+}
+
+export async function saveHomeSIMNetworkSwitches(switches: HomeSIMNetworkSwitches): Promise<HomeSIMNetworkSwitches> {
+  if (fixtureMode) throw new Error('当前为演示模式，供网开关未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/network-switches`, 'PUT', switches, 200) as { switches: HomeSIMNetworkSwitches }
+  if (!result?.switches || !Number.isInteger(result.switches.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
+  return result.switches
+}
+
 export async function markF50SMSRead(ids: string[]): Promise<void> {
   if (fixtureMode) return
   await writeJSON(`${API_ROOT}/homesim/f50/sms/read`, 'POST', { ids }, 200)

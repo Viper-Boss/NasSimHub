@@ -154,7 +154,7 @@ func (api *API) homeSIMBarkTest(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	barkRequest.Header.Set("Content-Type", "application/json; charset=utf-8")
-	client := &http.Client{Timeout: barkRequestTimeout}
+	client := &http.Client{Timeout: barkRequestTimeout, Transport: api.homeSIMOutboundTransport(request)}
 	barkResponse, err := client.Do(barkRequest)
 	if err != nil {
 		writeError(response, 502, "push_failed", "Bark server unreachable: "+err.Error(), "")
