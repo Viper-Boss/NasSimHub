@@ -1,0 +1,7 @@
+#!/bin/bash
+# Detach: launch build in background so SSH session can return immediately.
+set -e
+nohup bash /tmp/compose_build.sh > /tmp/compose_build.log 2>&1 &
+disown
+echo "build started PID=$! at $(date)"
+echo "tail -f /tmp/compose_build.log to follow"

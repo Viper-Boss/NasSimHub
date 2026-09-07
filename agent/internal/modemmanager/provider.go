@@ -65,6 +65,9 @@ type Provider struct {
 	voiceProbeMu sync.Mutex
 	voiceProbes  map[string]voiceProbeResult
 
+	simAutoUnlockMu sync.Mutex
+	simAutoUnlocks  map[string]*simAutoUnlockEntry
+
 	atCallStateMu  sync.Mutex
 	atCalls        map[string]map[int]atCallLifecycle
 	atPendingCalls map[string]atCallLifecycle
@@ -202,6 +205,7 @@ func newProviderWithOptions(
 		signalSetupStates:  make(map[string]signalSetupState),
 		servingRadioStates: make(map[string]servingRadioState),
 		voiceProbes:        make(map[string]voiceProbeResult),
+		simAutoUnlocks:     make(map[string]*simAutoUnlockEntry),
 		atCalls:            make(map[string]map[int]atCallLifecycle),
 		atPendingCalls:     make(map[string]atCallLifecycle),
 		messageProperties:  newMessagePropertyCache(defaultMessagePropertyCacheLimit),
@@ -330,13 +334,14 @@ func (p *Provider) Snapshot(ctx context.Context) (domain.Snapshot, error) {
 		return domain.Snapshot{}, err
 	}
 	parsed := ParseManagedObjects(objects, identity)
+	observedAt := p.now().UTC()
+	p.projectSIMAutoUnlock(ctx, operation, &parsed, objects, observedAt)
 	p.initializeVoiceModel(ctx, operation, &parsed)
 	if err := p.refreshAuthoritativeATCalls(ctx, operation, &parsed); err != nil {
 		return domain.Snapshot{}, err
 	}
 	p.projectServingRadios(ctx, operation, &parsed)
 	p.projectDesiredRadioState(parsed.Lines)
-	observedAt := p.now().UTC()
 	p.projectTerminatedCalls(&parsed, observedAt)
 	revision, err := snapshotRevision(
 		parsed.Lines,

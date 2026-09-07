@@ -9,7 +9,8 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
 
-ENV GOTOOLCHAIN=local
+ENV GOTOOLCHAIN=local \
+    GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 WORKDIR /workspace/agent
 
 COPY agent/go.mod agent/go.sum ./
@@ -35,7 +36,8 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
 
-ENV GOTOOLCHAIN=local
+ENV GOTOOLCHAIN=local \
+    GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 WORKDIR /workspace/hardware/ownership
 
 COPY hardware/ownership/go.mod hardware/ownership/go.sum ./

@@ -4,6 +4,24 @@ services:
   hardware:
     container_name: nas-comm-hardware
     image: nas-comm-hardware:fnos-local-0.1
+    # Reviewed QDC507 module voice runtime. The host directory holding the four
+    # reviewed artifacts (manifest.json, qdc507_aprv3.ko, qdc507_voice.ko,
+    # mavo-pcm-bridge.armv7) is bind-mounted read-only at /tmp/qdc507-voice.
+    # /tmp is a writable tmpfs in this container, so the agent can create its
+    # ADB state directory sibling /tmp/qdc507-adb next to it (the agent derives
+    # the state dir as <runtime dir parent>/qdc507-adb and the rootfs is
+    # read-only). MODEMDECK_QDC507_VOICE_RUNTIME_DIR (host path, set in
+    # .env.fnos) only selects the bind source; the in-container env is pinned
+    # to the /tmp path below.
+    environment:
+      MODEMDECK_QDC507_VOICE_RUNTIME_DIR: /tmp/qdc507-voice
+    volumes:
+      - type: bind
+        source: ${MODEMDECK_QDC507_VOICE_RUNTIME_DIR:?Set MODEMDECK_QDC507_VOICE_RUNTIME_DIR to a host directory holding the reviewed QDC507 voice runtime}
+        target: /tmp/qdc507-voice
+        read_only: true
+        bind:
+          create_host_path: false
   api:
     container_name: nas-comm-api
     image: nas-comm-api:fnos-local-0.1

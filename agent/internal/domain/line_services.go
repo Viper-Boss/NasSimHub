@@ -155,9 +155,30 @@ type USSDResponse struct {
 	Response string `json:"response,omitempty"`
 }
 
+// SIMAutoUnlockRequest configures the stored SIM PIN used to unlock a line
+// automatically whenever the modem reports a SIM-PIN lock (for example after
+// a module reboot re-locks the SIM).
+type SIMAutoUnlockRequest struct {
+	RequestID string `json:"request_id"`
+	LineID    string `json:"-"`
+	Enabled   bool   `json:"enabled"`
+	PIN       string `json:"pin,omitempty"`
+}
+
+// SIMAutoUnlockStatus reports whether a PIN is stored for a line. The PIN
+// itself is never returned.
+type SIMAutoUnlockStatus struct {
+	LineID    string    `json:"line_id"`
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type LineServiceProvider interface {
 	SIMStatus(context.Context, string) (SIMStatus, error)
 	SIMCommand(context.Context, SIMCommandRequest) (CommandReceipt, error)
+	SetSIMAutoUnlock(context.Context, SIMAutoUnlockRequest) (SIMAutoUnlockStatus, error)
+	SIMAutoUnlockStatus(context.Context, string) (SIMAutoUnlockStatus, error)
+	ClearSIMAutoUnlock(context.Context, string) (SIMAutoUnlockStatus, error)
 	ConnectionProfiles(context.Context, string) ([]ConnectionProfile, error)
 	SaveConnectionProfile(context.Context, SaveConnectionProfileRequest) (ConnectionProfile, error)
 	DeleteConnectionProfile(context.Context, DeleteConnectionProfileRequest) (CommandReceipt, error)

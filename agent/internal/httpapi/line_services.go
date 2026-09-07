@@ -15,6 +15,10 @@ type commandReceiptResponse struct {
 	Receipt domain.CommandReceipt `json:"receipt"`
 }
 
+type simAutoUnlockResponse struct {
+	AutoUnlock domain.SIMAutoUnlockStatus `json:"auto_unlock"`
+}
+
 type connectionProfilesResponse struct {
 	Profiles []domain.ConnectionProfile `json:"profiles"`
 }
@@ -61,6 +65,51 @@ func (h *handler) postSIMCommand(response http.ResponseWriter, request *http.Req
 		return
 	}
 	h.writeJSON(response, http.StatusOK, commandReceiptResponse{Receipt: receipt})
+}
+
+func (h *handler) getSIMAutoUnlock(response http.ResponseWriter, request *http.Request) {
+	if h.lineServices == nil {
+		h.writeAPIError(response, http.StatusNotImplemented, domain.ErrorNotSupported, "read_sim_auto_unlock", "", "SIM management is unavailable")
+		return
+	}
+	status, err := h.lineServices.SIMAutoUnlockStatus(request.Context(), strings.TrimSpace(request.PathValue("id")))
+	if err != nil {
+		h.writeError(response, err, "")
+		return
+	}
+	h.writeJSON(response, http.StatusOK, simAutoUnlockResponse{AutoUnlock: status})
+}
+
+func (h *handler) putSIMAutoUnlock(response http.ResponseWriter, request *http.Request) {
+	if h.lineServices == nil {
+		h.writeAPIError(response, http.StatusNotImplemented, domain.ErrorNotSupported, "set_sim_auto_unlock", "", "SIM management is unavailable")
+		return
+	}
+	var input domain.SIMAutoUnlockRequest
+	if err := decodeJSON(response, request, &input); err != nil {
+		h.writeAPIError(response, http.StatusBadRequest, domain.ErrorInvalidArgument, "set_sim_auto_unlock", "", "invalid JSON request")
+		return
+	}
+	input.LineID = strings.TrimSpace(request.PathValue("id"))
+	status, err := h.lineServices.SetSIMAutoUnlock(request.Context(), input)
+	if err != nil {
+		h.writeError(response, err, strings.TrimSpace(input.RequestID))
+		return
+	}
+	h.writeJSON(response, http.StatusOK, simAutoUnlockResponse{AutoUnlock: status})
+}
+
+func (h *handler) deleteSIMAutoUnlock(response http.ResponseWriter, request *http.Request) {
+	if h.lineServices == nil {
+		h.writeAPIError(response, http.StatusNotImplemented, domain.ErrorNotSupported, "clear_sim_auto_unlock", "", "SIM management is unavailable")
+		return
+	}
+	status, err := h.lineServices.ClearSIMAutoUnlock(request.Context(), strings.TrimSpace(request.PathValue("id")))
+	if err != nil {
+		h.writeError(response, err, "")
+		return
+	}
+	h.writeJSON(response, http.StatusOK, simAutoUnlockResponse{AutoUnlock: status})
 }
 
 func (h *handler) getConnectionProfiles(response http.ResponseWriter, request *http.Request) {

@@ -25,7 +25,8 @@ RUN npm run build
 FROM ${GO_IMAGE} AS go-toolchain
 
 ENV GOTOOLCHAIN=local \
-    CGO_ENABLED=1
+    CGO_ENABLED=1 \
+    GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 WORKDIR /workspace
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \

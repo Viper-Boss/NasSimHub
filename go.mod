@@ -8,6 +8,7 @@ require (
 	github.com/pion/rtp v1.10.5
 	github.com/pion/sdp/v3 v3.0.19
 	github.com/pion/webrtc/v4 v4.2.18
+	go.bug.st/serial v1.8.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.55.0

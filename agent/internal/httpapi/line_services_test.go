@@ -10,14 +10,15 @@ import (
 )
 
 type fakeLineServices struct {
-	simStatus      domain.SIMStatus
-	simRequest     domain.SIMCommandRequest
-	profiles       []domain.ConnectionProfile
-	saveRequest    domain.SaveConnectionProfileRequest
-	deleteRequest  domain.DeleteConnectionProfileRequest
-	ussdStatus     domain.USSDStatus
-	ussdRequest    domain.USSDRequest
-	operationError error
+	simStatus         domain.SIMStatus
+	simRequest        domain.SIMCommandRequest
+	autoUnlockRequest domain.SIMAutoUnlockRequest
+	profiles          []domain.ConnectionProfile
+	saveRequest       domain.SaveConnectionProfileRequest
+	deleteRequest     domain.DeleteConnectionProfileRequest
+	ussdStatus        domain.USSDStatus
+	ussdRequest       domain.USSDRequest
+	operationError    error
 }
 
 func (service *fakeLineServices) SIMStatus(context.Context, string) (domain.SIMStatus, error) {
@@ -30,6 +31,28 @@ func (service *fakeLineServices) SIMCommand(
 ) (domain.CommandReceipt, error) {
 	service.simRequest = request
 	return domain.CommandReceipt{RequestID: request.RequestID, ResourceID: request.LineID}, service.operationError
+}
+
+func (service *fakeLineServices) SetSIMAutoUnlock(
+	_ context.Context,
+	request domain.SIMAutoUnlockRequest,
+) (domain.SIMAutoUnlockStatus, error) {
+	service.autoUnlockRequest = request
+	return domain.SIMAutoUnlockStatus{LineID: request.LineID, Enabled: request.Enabled}, service.operationError
+}
+
+func (service *fakeLineServices) SIMAutoUnlockStatus(
+	context.Context,
+	string,
+) (domain.SIMAutoUnlockStatus, error) {
+	return domain.SIMAutoUnlockStatus{}, service.operationError
+}
+
+func (service *fakeLineServices) ClearSIMAutoUnlock(
+	context.Context,
+	string,
+) (domain.SIMAutoUnlockStatus, error) {
+	return domain.SIMAutoUnlockStatus{}, service.operationError
 }
 
 func (service *fakeLineServices) ConnectionProfiles(
