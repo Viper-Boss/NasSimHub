@@ -105,6 +105,7 @@ func (api *API) backupContacts(response http.ResponseWriter, request *http.Reque
 	response.Header().Set("Cache-Control", "no-store")
 	writeJSON(response, http.StatusCreated, map[string]any{
 		"filename": name, "count": count, "created_at": timestamp,
-		"storage": "backups/contacts", "format": "homesim-contacts-v1",
+		"storage": "backups/contacts", "directory": api.contactBackupDirectory,
+		"format": "homesim-contacts-v1",
 	})
 }

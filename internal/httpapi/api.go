@@ -312,6 +312,7 @@ type API struct {
 	homeSIMDraftMu             sync.Mutex
 	homeSIMQuotaMu             sync.Mutex
 	homeSIMBarkMu              sync.Mutex
+	homeSIMForwarderMu         sync.Mutex
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
 	homeSIMNetworkSwitchesMu   sync.Mutex
