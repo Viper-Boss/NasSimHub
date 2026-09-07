@@ -918,6 +918,20 @@ export type SIMCommandInput = {
   enabled?: boolean
 }
 
+export type SIMAutoUnlock = {
+  line_id: string
+  enabled: boolean
+  has_pin: boolean
+  updated_at?: string
+  revision: number
+}
+
+export type SIMAutoUnlockInput = {
+  enabled: boolean
+  pin?: string
+  revision?: number
+}
+
 export type ConnectionProfile = {
   profile_id: number
   profile_name: string

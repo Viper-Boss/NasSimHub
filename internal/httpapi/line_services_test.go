@@ -44,6 +44,28 @@ func (service *fakeLineServices) SIMCommand(
 	return agentclient.CommandReceipt{RequestID: request.RequestID, ResourceID: lineID}, nil
 }
 
+func (service *fakeLineServices) SetSIMAutoUnlock(
+	_ context.Context,
+	lineID string,
+	request agentclient.SIMAutoUnlockRequest,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	return agentclient.SIMAutoUnlockStatus{LineID: lineID, Enabled: request.Enabled}, nil
+}
+
+func (service *fakeLineServices) SIMAutoUnlockStatus(
+	context.Context,
+	string,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	return agentclient.SIMAutoUnlockStatus{}, nil
+}
+
+func (service *fakeLineServices) ClearSIMAutoUnlock(
+	context.Context,
+	string,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	return agentclient.SIMAutoUnlockStatus{}, nil
+}
+
 func (service *fakeLineServices) ConnectionProfiles(
 	context.Context,
 	string,

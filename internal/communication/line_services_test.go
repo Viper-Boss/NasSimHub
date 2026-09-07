@@ -43,6 +43,31 @@ func (agent *lineServiceTestAgent) SIMCommand(
 	}, nil
 }
 
+func (agent *lineServiceTestAgent) SetSIMAutoUnlock(
+	_ context.Context,
+	lineID string,
+	request agentclient.SIMAutoUnlockRequest,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	agent.endpointLineIDs = append(agent.endpointLineIDs, lineID)
+	return agentclient.SIMAutoUnlockStatus{LineID: lineID, Enabled: request.Enabled}, nil
+}
+
+func (agent *lineServiceTestAgent) SIMAutoUnlockStatus(
+	_ context.Context,
+	lineID string,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	agent.endpointLineIDs = append(agent.endpointLineIDs, lineID)
+	return agentclient.SIMAutoUnlockStatus{LineID: lineID}, nil
+}
+
+func (agent *lineServiceTestAgent) ClearSIMAutoUnlock(
+	_ context.Context,
+	lineID string,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	agent.endpointLineIDs = append(agent.endpointLineIDs, lineID)
+	return agentclient.SIMAutoUnlockStatus{LineID: lineID}, nil
+}
+
 func (agent *lineServiceTestAgent) ConnectionProfiles(
 	_ context.Context,
 	lineID string,

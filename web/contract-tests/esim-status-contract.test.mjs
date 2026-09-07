@@ -202,6 +202,6 @@ test('switching modules reloads the active line service and rejects stale respon
   assert.equal(
     [...panel.matchAll(/if \(!isCurrentLineServiceRequest\(lineID, generation\)\) return/g)]
       .length,
-    6
+    8
   )
 })

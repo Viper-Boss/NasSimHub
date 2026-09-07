@@ -154,6 +154,13 @@ type LineService interface {
 		string,
 		agentclient.SIMCommandRequest,
 	) (agentclient.CommandReceipt, error)
+	SetSIMAutoUnlock(
+		context.Context,
+		string,
+		agentclient.SIMAutoUnlockRequest,
+	) (agentclient.SIMAutoUnlockStatus, error)
+	SIMAutoUnlockStatus(context.Context, string) (agentclient.SIMAutoUnlockStatus, error)
+	ClearSIMAutoUnlock(context.Context, string) (agentclient.SIMAutoUnlockStatus, error)
 	ConnectionProfiles(context.Context, string) ([]agentclient.ConnectionProfile, error)
 	SaveConnectionProfile(
 		context.Context,
@@ -296,6 +303,7 @@ type Options struct {
 	UpdateChecker          UpdateChecker
 	UpdateManager          UpdateManager
 	ApplicationVersion     string
+	SettingsSecrets        SecretBox
 	disableAuthentication  bool
 }
 
@@ -307,7 +315,9 @@ type API struct {
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
 	homeSIMNetworkSwitchesMu   sync.Mutex
+	simAutoUnlockMu            sync.Mutex
 	contactBackupDirectory     string
+	settingsSecrets            SecretBox
 	repository                 Repository
 	healthProbe                HealthProbe
 	capabilities               CapabilitySource
@@ -360,6 +370,7 @@ func New(repository Repository, options Options) (*API, error) {
 	}
 	return &API{
 		contactBackupDirectory:     options.ContactBackupDirectory,
+		settingsSecrets:            options.SettingsSecrets,
 		repository:                 repository,
 		healthProbe:                healthProbe,
 		capabilities:               options.Capabilities,

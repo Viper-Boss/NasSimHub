@@ -44,6 +44,7 @@ import type {
   MobileNetwork,
   NetworkSelectionMode,
   SIMOperation,
+  SIMAutoUnlock,
   SIMStatus,
   USSDStatus
 } from '../api/types'
@@ -161,6 +162,11 @@ const simRepeatPIN = ref('')
 const simLastFailure = ref('')
 const simProtectionEnabled = ref(true)
 const simPending = ref(false)
+const simAutoUnlock = ref<SIMAutoUnlock | null>(null)
+const autoUnlockPIN = ref('')
+const autoUnlockPending = ref(false)
+const autoUnlockError = ref('')
+const autoUnlockEnabled = computed(() => simAutoUnlock.value?.enabled === true)
 let lineServiceGeneration = 0
 const profiles = ref<ConnectionProfile[]>([])
 const profileLoadStatus = ref<AsyncStatus>('idle')
@@ -786,6 +792,9 @@ function resetLineServices(): void {
   simStatus.value = null
   simLoadStatus.value = 'idle'
   simError.value = ''
+  simAutoUnlock.value = null
+  autoUnlockPIN.value = ''
+  autoUnlockError.value = ''
   profiles.value = []
   profileLoadStatus.value = 'idle'
   profileError.value = ''
@@ -1204,6 +1213,58 @@ async function applySIMCommand(): Promise<void> {
   } finally {
     simPIN.value = ''; simPUK.value = ''; simNewPIN.value = ''; simRepeatPIN.value = ''
     simPending.value = false
+  }
+}
+
+async function loadSIMAutoUnlock(lineID: string, generation: number): Promise<void> {
+  try {
+    const unlock = await gateway.getSIMAutoUnlock(lineID)
+    if (!isCurrentLineServiceRequest(lineID, generation)) return
+    simAutoUnlock.value = unlock
+  } catch {
+    if (!isCurrentLineServiceRequest(lineID, generation)) return
+    simAutoUnlock.value = null
+  }
+}
+
+async function toggleAutoUnlock(event: Event): Promise<void> {
+  const lineID = selectedLineID.value
+  const checkbox = event.target as HTMLInputElement
+  if (!lineID || autoUnlockPending.value || !simAutoUnlock.value) {
+    checkbox.checked = autoUnlockEnabled.value
+    return
+  }
+  const enable = checkbox.checked
+  if (enable && !/^\d{4,8}$/.test(autoUnlockPIN.value)) {
+    checkbox.checked = false
+    autoUnlockError.value = t('homesim.autoUnlockPinRequired')
+    return
+  }
+  const confirmed = await requestConfirmation({
+    title: enable ? t('homesim.autoUnlockEnableTitle') : t('homesim.autoUnlockDisableTitle'),
+    confirmLabel: t('device.confirm')
+  })
+  if (!confirmed) {
+    checkbox.checked = autoUnlockEnabled.value
+    return
+  }
+  autoUnlockPending.value = true
+  autoUnlockError.value = ''
+  try {
+    simAutoUnlock.value = await gateway.saveSIMAutoUnlock(lineID, {
+      enabled: enable,
+      ...(enable ? { pin: autoUnlockPIN.value } : {}),
+      revision: simAutoUnlock.value.revision
+    })
+    if (enable) {
+      autoUnlockPIN.value = ''
+      showSuccess(t('homesim.autoUnlockSaved'))
+    }
+  } catch (error) {
+    checkbox.checked = autoUnlockEnabled.value
+    autoUnlockError.value = error instanceof Error ? error.message : t('homesim.autoUnlockFailed')
+  } finally {
+    autoUnlockPending.value = false
   }
 }
 
@@ -2294,7 +2355,21 @@ onMounted(() => {
               </button>
             </form>
             <div class="homesim-sim-notice">
-              <label><input class="ui-check" type="checkbox" disabled /> {{ t('homesim.autoUnlockOff') }}</label>
+              <label class="inline-check">
+                <input
+                  class="ui-check"
+                  type="checkbox"
+                  :checked="autoUnlockEnabled"
+                  :disabled="autoUnlockPending || !simAutoUnlock"
+                  @change="toggleAutoUnlock"
+                />
+                <span>{{ t('homesim.autoUnlockTitle') }}</span>
+              </label>
+              <label v-if="simAutoUnlock && !autoUnlockEnabled" class="auto-unlock-pin">
+                <span>SIM PIN</span>
+                <input v-model="autoUnlockPIN" type="password" inputmode="numeric" maxlength="8" autocomplete="off" />
+              </label>
+              <p v-if="autoUnlockError" class="inline-error" role="alert">{{ autoUnlockError }}</p>
               <p>{{ t('homesim.autoUnlockHint') }}</p>
             </div>
           </section>
@@ -2668,6 +2743,7 @@ onMounted(() => {
 
 .data-apn-field > span,
 .profile-form label > span,
+.auto-unlock-pin > span,
 .sim-form label > span,
 .configuration-control-row label > span {
   color: var(--muted);
@@ -2680,6 +2756,7 @@ onMounted(() => {
 .profile-form select,
 .sim-form input,
 .sim-form select,
+.auto-unlock-pin input,
 .configuration-control-row select,
 .ussd-form input {
   width: 100%;

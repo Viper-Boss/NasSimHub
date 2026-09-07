@@ -383,6 +383,7 @@ func run(
 		UpdateChecker:      updateChecker,
 		UpdateManager:      updateManager,
 		ApplicationVersion: version,
+		SettingsSecrets:    settingsSecrets,
 	})
 	if err != nil {
 		_ = recordings.Close(context.Background())
@@ -437,6 +438,11 @@ func run(
 	networkDone := make(chan error, 1)
 	go func() {
 		networkDone <- networkRuntime.Run(signals)
+	}()
+	simAutoUnlockDone := make(chan struct{})
+	go func() {
+		defer close(simAutoUnlockDone)
+		api.RunSIMAutoUnlockSync(signals)
 	}()
 	server := &http.Server{
 		Addr:              listenAddress,

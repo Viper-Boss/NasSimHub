@@ -73,6 +73,7 @@ import type {
   SystemLanguage,
   SystemSettings,
   ESIMStatus,
+  SIMAutoUnlock,
   SIMProfileManagementCapability,
   SIMSlot,
   SIMStatus,
@@ -802,6 +803,20 @@ export function parseSIMStatusResponse(value: unknown): SIMStatus {
     ),
     unlock_retries: unlockRetries,
     observed_at: requiredTimestamp(source, path, 'observed_at')
+  }
+}
+
+export function parseSIMAutoUnlockResponse(value: unknown): SIMAutoUnlock {
+  const response = objectValue(value, 'auto_unlock_response')
+  const source = objectValue(response.auto_unlock, 'auto_unlock_response.auto_unlock')
+  const path = 'auto_unlock_response.auto_unlock'
+  const updatedAt = source.updated_at
+  return {
+    line_id: requiredString(source, path, 'line_id'),
+    enabled: requiredBoolean(source, path, 'enabled'),
+    has_pin: requiredBoolean(source, path, 'has_pin'),
+    ...(typeof updatedAt === 'string' && updatedAt ? { updated_at: updatedAt } : {}),
+    revision: requiredNonNegativeInteger(source, path, 'revision')
   }
 }
 

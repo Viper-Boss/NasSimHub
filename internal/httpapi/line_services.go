@@ -55,6 +55,8 @@ func (api *API) lineServiceResource(
 		api.simStatus(response, request, lineID)
 	case "sim/commands":
 		api.simCommand(response, request, lineID)
+	case "sim/auto-unlock":
+		api.simAutoUnlock(response, request, lineID)
 	case "profiles":
 		api.connectionProfiles(response, request, lineID)
 	case "ussd":
@@ -258,7 +260,7 @@ func lineServiceResource(path string) (lineID string, resource string, ok bool) 
 	lineID = parts[0]
 	resource = strings.Join(parts[1:], "/")
 	switch resource {
-	case "sim", "sim/commands", "profiles", "ussd":
+	case "sim", "sim/commands", "sim/auto-unlock", "profiles", "ussd":
 		return lineID, resource, true
 	default:
 		return "", "", false

@@ -3,7 +3,7 @@ import { servicesEN, servicesZH } from './homesimServices'
 export const homesimEN = {
   scanLimit: 'Reached the 100,000-message limit. Filter by SIM and scan again.', invalidCursor: 'Invalid pagination cursor. Scan is incomplete.', scanFailed: 'Scan failed',
   simWarning: 'Incorrect PIN/PUK entries consume limited attempts. Exhausting the PUK can permanently disable the card. This sends one command with no automatic retry.', simChanged: 'SIM or line changed. Check again before submitting.', simUncertain: 'The operation did not confirm success. Refresh remaining attempts before retrying.',
-  simNotice: 'SIM PIN restricts use after moving the card; it cannot prevent physical removal. The operator-provided PUK unlocks the SIM and sets a new PIN, not a new PUK.', repeatPIN: 'Repeat new PIN', autoUnlockOff: 'Startup auto-unlock · inactive', autoUnlockHint: 'Requires an encrypted NAS credential vault and one-shot unlock worker. PIN is not saved and PIN/PUK is never automatically retried in this version.',
+  simNotice: 'SIM PIN restricts use after moving the card; it cannot prevent physical removal. The operator-provided PUK unlocks the SIM and sets a new PIN, not a new PUK.', repeatPIN: 'Repeat new PIN', autoUnlockTitle: 'Startup auto-unlock', autoUnlockEnableTitle: 'Enable startup auto-unlock?', autoUnlockDisableTitle: 'Disable startup auto-unlock?', autoUnlockPinRequired: 'Enter the 4-8 digit SIM PIN first.', autoUnlockSaved: 'Startup auto-unlock saved.', autoUnlockFailed: 'Startup auto-unlock could not be saved.', autoUnlockHint: 'The SIM PIN is stored encrypted on the NAS and submitted automatically whenever the modem asks for it (for example after a module reboot), so VoLTE registration recovers on its own.',
   services: servicesEN,
   simOverview: 'SIM / network status', simManagement: 'Manage SIM · PIN / PUK', noSIM: 'No SIM data available. Connect your modem to refresh.',
   nasBackup: 'NAS contact backup', backupHint: 'Back up all contacts in this account to the server.', backupNow: 'Back up now', backupBusy: 'Backing up…', backupSaved: '{count} contacts saved on NAS', backupFailed: 'Backup failed',
@@ -59,7 +59,7 @@ export const homesimEN = {
 export const homesimZH = {
   scanLimit: '已达单次 100000 条扫描上限，请按 SIM 线路筛选后扫描。', invalidCursor: '分页游标无效，扫描未完成。', scanFailed: '扫描失败',
   simWarning: '错误 PIN/PUK 会消耗 SIM 的有限尝试次数。PUK 用尽可能导致卡永久失效；本次只提交一次，不会自动重试。', simChanged: 'SIM 或线路已变化，请重新确认后操作。', simUncertain: '操作未确认成功，请刷新剩余次数后再决定是否重试。',
-  simNotice: 'SIM PIN 用于限制移卡后的使用，不能防止卡被物理拔走。PUK 由运营商提供，这里用于解除锁定并设置新 PIN，不是修改运营商 PUK。', repeatPIN: '再次输入新 PIN', autoUnlockOff: '开机自动解锁 · 未启用', autoUnlockHint: '需要 NAS 端加密凭据库和一次性解锁服务。当前不会保存 PIN，也不会自动尝试 PIN/PUK；接通前保持关闭。',
+  simNotice: 'SIM PIN 用于限制移卡后的使用，不能防止卡被物理拔走。PUK 由运营商提供，这里用于解除锁定并设置新 PIN，不是修改运营商 PUK。', repeatPIN: '再次输入新 PIN', autoUnlockTitle: '开机自动解锁', autoUnlockEnableTitle: '启用开机自动解锁？', autoUnlockDisableTitle: '停用开机自动解锁？', autoUnlockPinRequired: '请先输入 4-8 位数字 SIM PIN。', autoUnlockSaved: '开机自动解锁已保存。', autoUnlockFailed: '开机自动解锁保存失败。', autoUnlockHint: 'SIM PIN 加密保存在 NAS 上，模块要求输入 PIN 时（如重启后）自动提交，VoLTE 注册可自行恢复，无需人工干预。',
   services: servicesZH,
   simOverview: 'SIM 卡 / 网络状态', simManagement: '管理 SIM · PIN / PUK', noSIM: '暂无 SIM 状态，请连接模块后刷新。',
   nasBackup: '飞牛联系人备份', backupHint: '备份当前账户全部联系人，不受搜索和分页影响。', backupNow: '立即备份', backupBusy: '正在备份…', backupSaved: '已将 {count} 位联系人备份至 NAS', backupFailed: '备份失败',

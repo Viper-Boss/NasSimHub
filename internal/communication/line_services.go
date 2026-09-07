@@ -20,6 +20,13 @@ type lineServiceAgent interface {
 		string,
 		agentclient.SIMCommandRequest,
 	) (agentclient.CommandReceipt, error)
+	SetSIMAutoUnlock(
+		context.Context,
+		string,
+		agentclient.SIMAutoUnlockRequest,
+	) (agentclient.SIMAutoUnlockStatus, error)
+	SIMAutoUnlockStatus(context.Context, string) (agentclient.SIMAutoUnlockStatus, error)
+	ClearSIMAutoUnlock(context.Context, string) (agentclient.SIMAutoUnlockStatus, error)
 	ConnectionProfiles(context.Context, string) ([]agentclient.ConnectionProfile, error)
 	SaveConnectionProfile(
 		context.Context,
@@ -137,6 +144,101 @@ func (s *Service) SIMCommand(
 	}
 	receipt.ResourceID = line.ID
 	return receipt, nil
+}
+
+// SetSIMAutoUnlock pushes a SIM PIN to the host agent for automatic unlock.
+func (s *Service) SetSIMAutoUnlock(
+	ctx context.Context,
+	lineSelector string,
+	request agentclient.SIMAutoUnlockRequest,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	const operation = "set SIM auto unlock"
+	line, agent, err := s.resolveLineService(ctx, lineSelector, operation)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, err
+	}
+	requestID, err := s.requestID(request.RequestID)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, operationError(
+			CodeInvalidArgument,
+			operation,
+			"request id is invalid",
+			err,
+		)
+	}
+	request.RequestID = requestID
+	commandContext, cancel := context.WithTimeout(normalizeContext(ctx), commandTimeout)
+	defer cancel()
+	status, err := agent.SetSIMAutoUnlock(commandContext, line.EndpointID, request)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, translateAgentError(operation, err)
+	}
+	if status.LineID != line.EndpointID {
+		return agentclient.SIMAutoUnlockStatus{}, operationError(
+			CodeUnavailable,
+			operation,
+			"host agent returned an invalid auto unlock status",
+			nil,
+		)
+	}
+	status.LineID = line.ID
+	return status, nil
+}
+
+// SIMAutoUnlockStatus reads the agent-side auto unlock configuration state.
+func (s *Service) SIMAutoUnlockStatus(
+	ctx context.Context,
+	lineSelector string,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	const operation = "read SIM auto unlock status"
+	line, agent, err := s.resolveLineService(ctx, lineSelector, operation)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, err
+	}
+	readContext, cancel := context.WithTimeout(normalizeContext(ctx), snapshotTimeout)
+	defer cancel()
+	status, err := agent.SIMAutoUnlockStatus(readContext, line.EndpointID)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, translateAgentError(operation, err)
+	}
+	if status.LineID != line.EndpointID {
+		return agentclient.SIMAutoUnlockStatus{}, operationError(
+			CodeUnavailable,
+			operation,
+			"host agent returned an invalid auto unlock status",
+			nil,
+		)
+	}
+	status.LineID = line.ID
+	return status, nil
+}
+
+// ClearSIMAutoUnlock removes the stored SIM PIN from the host agent.
+func (s *Service) ClearSIMAutoUnlock(
+	ctx context.Context,
+	lineSelector string,
+) (agentclient.SIMAutoUnlockStatus, error) {
+	const operation = "clear SIM auto unlock"
+	line, agent, err := s.resolveLineService(ctx, lineSelector, operation)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, err
+	}
+	clearContext, cancel := context.WithTimeout(normalizeContext(ctx), commandTimeout)
+	defer cancel()
+	status, err := agent.ClearSIMAutoUnlock(clearContext, line.EndpointID)
+	if err != nil {
+		return agentclient.SIMAutoUnlockStatus{}, translateAgentError(operation, err)
+	}
+	if status.LineID != line.EndpointID {
+		return agentclient.SIMAutoUnlockStatus{}, operationError(
+			CodeUnavailable,
+			operation,
+			"host agent returned an invalid auto unlock status",
+			nil,
+		)
+	}
+	status.LineID = line.ID
+	return status, nil
 }
 
 func (s *Service) ConnectionProfiles(

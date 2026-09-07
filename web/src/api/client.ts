@@ -156,6 +156,8 @@ import type {
   SetupInput,
   SystemLanguage,
   SIMCommandInput,
+  SIMAutoUnlock,
+  SIMAutoUnlockInput,
   SIMStatus,
   TelegramUnit,
   TelegramUnitInput,
@@ -1816,6 +1818,23 @@ const realGateway: ConfiguredModemDeckGateway = {
       await writeJSON(
         `${API_ROOT}/devices/${encodeURIComponent(lineID.trim())}/sim/commands`,
         'POST',
+        { request_id: requestID(), ...input },
+        200
+      )
+    )
+  },
+
+  async getSIMAutoUnlock(lineID: string): Promise<SIMAutoUnlock> {
+    return parseSIMAutoUnlockResponse(
+      await get(`${API_ROOT}/devices/${encodeURIComponent(lineID.trim())}/sim/auto-unlock`)
+    )
+  },
+
+  async saveSIMAutoUnlock(lineID: string, input: SIMAutoUnlockInput): Promise<SIMAutoUnlock> {
+    return parseSIMAutoUnlockResponse(
+      await writeJSON(
+        `${API_ROOT}/devices/${encodeURIComponent(lineID.trim())}/sim/auto-unlock`,
+        'PUT',
         { request_id: requestID(), ...input },
         200
       )

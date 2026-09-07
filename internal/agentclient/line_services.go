@@ -90,6 +90,22 @@ type SIMCommandRequest struct {
 	Enabled   *bool        `json:"enabled,omitempty"`
 }
 
+// SIMAutoUnlockRequest configures the agent-side stored SIM PIN used to
+// unlock a line automatically whenever the modem reports a SIM-PIN lock.
+type SIMAutoUnlockRequest struct {
+	RequestID string `json:"request_id"`
+	Enabled   bool   `json:"enabled"`
+	PIN       string `json:"pin,omitempty"`
+}
+
+// SIMAutoUnlockStatus reports whether a PIN is stored for a line. The PIN
+// itself is never returned.
+type SIMAutoUnlockStatus struct {
+	LineID    string    `json:"line_id"`
+	Enabled   bool      `json:"enabled"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type ConnectionProfile struct {
 	ProfileID            int32  `json:"profile_id"`
 	ProfileName          string `json:"profile_name"`
@@ -188,6 +204,58 @@ func (client *Client) SIMCommand(
 		return CommandReceipt{}, err
 	}
 	return response.Receipt, nil
+}
+
+func (client *Client) SetSIMAutoUnlock(
+	ctx context.Context,
+	lineID string,
+	request SIMAutoUnlockRequest,
+) (SIMAutoUnlockStatus, error) {
+	path, ok := lineServicePath(lineID, "sim/auto-unlock")
+	if !ok || strings.TrimSpace(request.RequestID) == "" {
+		return SIMAutoUnlockStatus{}, ErrInvalidRequest
+	}
+	var response struct {
+		AutoUnlock SIMAutoUnlockStatus `json:"auto_unlock"`
+	}
+	if err := client.doJSON(ctx, http.MethodPut, path, request, http.StatusOK, &response); err != nil {
+		return SIMAutoUnlockStatus{}, err
+	}
+	return response.AutoUnlock, nil
+}
+
+func (client *Client) SIMAutoUnlockStatus(
+	ctx context.Context,
+	lineID string,
+) (SIMAutoUnlockStatus, error) {
+	path, ok := lineServicePath(lineID, "sim/auto-unlock")
+	if !ok {
+		return SIMAutoUnlockStatus{}, ErrInvalidRequest
+	}
+	var response struct {
+		AutoUnlock SIMAutoUnlockStatus `json:"auto_unlock"`
+	}
+	if err := client.doJSON(ctx, http.MethodGet, path, nil, http.StatusOK, &response); err != nil {
+		return SIMAutoUnlockStatus{}, err
+	}
+	return response.AutoUnlock, nil
+}
+
+func (client *Client) ClearSIMAutoUnlock(
+	ctx context.Context,
+	lineID string,
+) (SIMAutoUnlockStatus, error) {
+	path, ok := lineServicePath(lineID, "sim/auto-unlock")
+	if !ok {
+		return SIMAutoUnlockStatus{}, ErrInvalidRequest
+	}
+	var response struct {
+		AutoUnlock SIMAutoUnlockStatus `json:"auto_unlock"`
+	}
+	if err := client.doJSON(ctx, http.MethodDelete, path, nil, http.StatusOK, &response); err != nil {
+		return SIMAutoUnlockStatus{}, err
+	}
+	return response.AutoUnlock, nil
 }
 
 func (client *Client) ConnectionProfiles(

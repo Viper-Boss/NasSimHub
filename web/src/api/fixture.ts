@@ -53,6 +53,8 @@ import type {
   SaveConnectionProfileInput,
   SendMessageInput,
   SIMCommandInput,
+  SIMAutoUnlock,
+  SIMAutoUnlockInput,
   SIMStatus,
   SystemSettings,
   TelegramUnit,
@@ -1150,6 +1152,7 @@ export function createFixtureGateway(options: FixtureGatewayOptions = {}): Modem
   }
 
   syncFixtureAdminIOSPairing()
+  const fixtureSIMAutoUnlock = new Map<string, { enabled: boolean; updated_at: string }>()
   const connectionProfiles = new Map<string, ConnectionProfile[]>(
     lines.map(line => [
       fixtureLineKey(line),
@@ -2941,6 +2944,41 @@ export function createFixtureGateway(options: FixtureGatewayOptions = {}): Modem
         throw new ApiError('线路不存在', 404, 'not_found')
       }
       return { request_id: `fixture-sim-${Date.now()}`, resource_id: lineID }
+    },
+
+    async getSIMAutoUnlock(lineID: string): Promise<SIMAutoUnlock> {
+      if (!lines.some(item => fixtureLineKey(item) === lineID)) {
+        throw new ApiError('线路不存在', 404, 'not_found')
+      }
+      const entry = fixtureSIMAutoUnlock.get(lineID)
+      return {
+        line_id: lineID,
+        enabled: entry?.enabled === true,
+        has_pin: entry?.enabled === true,
+        ...(entry?.enabled === true ? { updated_at: entry.updated_at } : {}),
+        revision: 1
+      }
+    },
+
+    async saveSIMAutoUnlock(lineID: string, input: SIMAutoUnlockInput): Promise<SIMAutoUnlock> {
+      if (!lines.some(item => fixtureLineKey(item) === lineID)) {
+        throw new ApiError('线路不存在', 404, 'not_found')
+      }
+      if (input.enabled) {
+        fixtureSIMAutoUnlock.set(lineID, {
+          enabled: true,
+          updated_at: new Date().toISOString()
+        })
+      } else {
+        fixtureSIMAutoUnlock.delete(lineID)
+      }
+      return {
+        line_id: lineID,
+        enabled: input.enabled,
+        has_pin: input.enabled,
+        ...(input.enabled ? { updated_at: new Date().toISOString() } : {}),
+        revision: 1
+      }
     },
 
     async listConnectionProfiles(lineID: string): Promise<ConnectionProfile[]> {

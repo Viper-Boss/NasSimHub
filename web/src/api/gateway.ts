@@ -59,6 +59,8 @@ import type {
   SetupInput,
   SystemSettings,
   SIMCommandInput,
+  SIMAutoUnlock,
+  SIMAutoUnlockInput,
   SIMStatus,
   TelegramUnit,
   TelegramUnitInput,
@@ -164,6 +166,8 @@ export interface ModemDeckGateway {
   deleteProxy(id: string, revision: number): Promise<ProxyDeleteResult>
   getSIMStatus(lineID: string): Promise<SIMStatus>
   commandSIM(lineID: string, input: SIMCommandInput): Promise<CommandReceipt>
+  getSIMAutoUnlock(lineID: string): Promise<SIMAutoUnlock>
+  saveSIMAutoUnlock(lineID: string, input: SIMAutoUnlockInput): Promise<SIMAutoUnlock>
   listConnectionProfiles(lineID: string): Promise<ConnectionProfile[]>
   saveConnectionProfile(
     lineID: string,
