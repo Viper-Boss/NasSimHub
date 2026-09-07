@@ -7,12 +7,14 @@ const { t } = useI18n()
 const busy = ref(false)
 const error = ref('')
 const receipt = ref('')
+const storagePath = ref('')
 async function backup(): Promise<void> {
   if (busy.value) return
   busy.value = true; error.value = ''; receipt.value = ''
   try {
     const result = await backupContactsToNAS()
     receipt.value = `${t('homesim.backupSaved', { count: result.count })} · ${result.filename}`
+    storagePath.value = result.directory
   } catch (reason) { error.value = reason instanceof Error ? reason.message : t('homesim.backupFailed') }
   finally { busy.value = false }
 }
@@ -22,6 +24,7 @@ async function backup(): Promise<void> {
     <div><strong>{{ t('homesim.nasBackup') }}</strong><small>{{ t('homesim.backupHint') }}</small></div>
     <button class="secondary-button" type="button" :disabled="busy" @click="backup"><LoaderCircle v-if="busy" class="spin" :size="16" /><CloudUpload v-else :size="16" />{{ t(busy ? 'homesim.backupBusy' : 'homesim.backupNow') }}</button>
     <p v-if="receipt" role="status">{{ receipt }}</p>
+    <p v-if="storagePath" role="status">{{ t('homesim.backupStorage', { directory: storagePath }) }}</p>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
   </section>
 </template>

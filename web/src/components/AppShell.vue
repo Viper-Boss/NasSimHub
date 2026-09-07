@@ -60,10 +60,12 @@ import {
 import { openDialer, showCallSurface, uiState } from '../state/ui'
 import {
   bootstrapResource,
+  contactsResource,
   loadBootstrap,
   loadContacts
 } from '../state/workspace'
 import AudioSettingsMenu from './AudioSettingsMenu.vue'
+import BaseAvatar from './BaseAvatar.vue'
 import AppearanceToggle from './AppearanceToggle.vue'
 import DialerPanel from './DialerPanel.vue'
 import GlobalSearch from './GlobalSearch.vue'
@@ -78,6 +80,9 @@ const permanentDialer = ref(false)
 const nonModalDialer = ref(false)
 const mobileMoreOpen = ref(false)
 const occupiedLineCount = computed(() => occupiedLineIDs().size)
+const profileContact = computed(() =>
+  contactsResource.data.find(contact => contact.id === sessionState.profileContactID)
+)
 const activeCallPresent = computed(() =>
   callState.sessions.some(isLiveCallSession)
 )
@@ -411,11 +416,19 @@ onBeforeUnmount(() => {
     <aside class="rail" :aria-label="t('shell.primaryNavigation')">
       <RouterLink
         class="brand-mark"
-        :to="{ name: 'dashboard' }"
-        :aria-label="`NasSimHub ${t('shell.home')}`"
+        :to="{ name: 'settings', params: { section: 'preferences' } }"
+        :aria-label="t('homesim.profile')"
+        :title="t('homesim.profile')"
       >
-        <span><img src="/favicon.svg" width="40" height="40" alt="" /></span>
-        <strong>NasSimHub</strong>
+        <span class="brand-mark__avatar">
+          <BaseAvatar
+            :name="profileContact?.display_name || sessionState.username"
+            :src="profileContact?.avatar"
+            fallback="person"
+            :palette-key="profileContact?.id || sessionState.userID"
+          />
+        </span>
+        <strong>{{ sessionState.username }}</strong>
       </RouterLink>
 
       <nav class="rail__primary">

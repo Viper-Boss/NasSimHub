@@ -184,7 +184,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
           <span class="line-status-pop__num line-status-pop__num--total">{{ ring.totalText }}</span>
         </span>
       </div>
-      <p v-if="!quotaRings.length" class="line-status-pop__empty">{{ t('homesim.noSIM') }}</p>
+      <p v-if="!quotaRings.length" class="line-status-pop__empty">{{ t('homesim.quotaEmpty') }}</p>
     </div>
   </div>
 </template>

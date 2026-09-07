@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import SelectControl from './SelectControl.vue'
 const { t } = useI18n()
 import { Bot, ShieldCheck, RadioTower, Save, LoaderCircle } from '@lucide/vue'
-import { getHomeSIMIntegrationDraft, saveHomeSIMIntegrationDraft } from '../api/client'
+import { getCallFilter, getHomeSIMIntegrationDraft, saveCallFilter, saveHomeSIMIntegrationDraft, type CallFilterPolicy } from '../api/client'
 import { emptyIntegrationDraft, integrationDraftProblem } from '../api/homesim'
 const draft = ref(emptyIntegrationDraft())
 const busy = ref(false)
@@ -13,8 +13,15 @@ const error = ref('')
 const saved = ref(false)
 const tab = ref('spam')
 const tabs = computed(() => [{ id: 'spam', title: t('homesim.services.spam'), icon: ShieldCheck }, { id: 'ai', title: t('homesim.services.ai'), icon: Bot }, { id: 'identity', title: t('homesim.services.identity'), icon: RadioTower }])
-const blacklist = computed({ get: () => draft.value.spam.blacklist.join('\n'), set: value => { draft.value.spam.blacklist = [...new Set(value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))] } })
-const whitelist = computed({ get: () => draft.value.spam.whitelist.join('\n'), set: value => { draft.value.spam.whitelist = [...new Set(value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))] } })
+const callFilter = ref<CallFilterPolicy | null>(null)
+const cfLoaded = ref(false)
+const cfSaving = ref(false)
+const cfSaved = ref(false)
+const cfError = ref('')
+const cfRuntimeReady = ref(false)
+const cfBlacklist = computed({ get: () => (callFilter.value?.blacklist || []).join('\n'), set: value => { if (callFilter.value) callFilter.value.blacklist = [...new Set(value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))] } })
+const cfWhitelist = computed({ get: () => (callFilter.value?.whitelist || []).join('\n'), set: value => { if (callFilter.value) callFilter.value.whitelist = [...new Set(value.split(/\r?\n/).map(s => s.trim()).filter(Boolean))] } })
+const callFilterMode = computed({ get: () => callFilter.value?.mode || 'off', set: value => { if (callFilter.value) callFilter.value.mode = value as CallFilterPolicy['mode'] } })
 async function load(): Promise<void> {
   busy.value = true; error.value = ''; saved.value = false
   try { draft.value = await getHomeSIMIntegrationDraft(); loaded.value = true }
@@ -30,7 +37,19 @@ async function save(): Promise<void> {
   catch (reason) { error.value = reason instanceof Error ? reason.message : t('homesim.services.saveFailed') }
   finally { busy.value = false }
 }
-onMounted(load)
+async function loadCallFilter(): Promise<void> {
+  cfError.value = ''; cfSaved.value = false
+  try { const result = await getCallFilter(); callFilter.value = result.filter; cfRuntimeReady.value = result.runtime_ready; cfLoaded.value = true }
+  catch (reason) { cfLoaded.value = false; cfError.value = reason instanceof Error ? reason.message : t('homesim.callFilter.saved') }
+}
+async function saveCallFilterPolicy(): Promise<void> {
+  if (cfSaving.value || !callFilter.value) return
+  cfSaving.value = true; cfError.value = ''; cfSaved.value = false
+  try { const result = await saveCallFilter(callFilter.value); callFilter.value = result.filter; cfRuntimeReady.value = result.runtime_ready; cfSaved.value = true }
+  catch (reason) { cfError.value = reason instanceof Error ? reason.message : t('homesim.callFilter.saved') }
+  finally { cfSaving.value = false }
+}
+onMounted(() => { load(); loadCallFilter() })
 </script>
 
 <template>
@@ -41,11 +60,12 @@ onMounted(load)
     <form @submit.prevent="save">
       <fieldset :disabled="busy || !loaded">
         <div v-if="tab === 'spam'" class="homesim-service-fields">
-          <div class="homesim-service-toggle"><div><strong>{{ t('homesim.services.reject') }}</strong><small>{{ t('homesim.services.rejectHint') }}</small></div><input class="ui-check" type="checkbox" disabled :aria-label="t('homesim.services.rejectOff')" /></div>
+          <label>{{ t('homesim.callFilter.mode') }}<SelectControl v-model="callFilterMode" :label="t('homesim.callFilter.mode')" :options="[{ value: 'off', label: t('homesim.callFilter.modeOff') }, { value: 'blacklist', label: t('homesim.callFilter.modeBlacklist') }, { value: 'whitelist', label: t('homesim.callFilter.modeWhitelist') }]" :disabled="cfSaving || !cfLoaded" /></label>
+          <div class="homesim-service-columns"><label>{{ t('homesim.services.blacklist') }}<textarea v-model="cfBlacklist" rows="4" :placeholder="t('homesim.services.blackPlaceholder')" /></label><label>{{ t('homesim.services.whitelist') }}<textarea v-model="cfWhitelist" rows="4" :placeholder="t('homesim.services.whitePlaceholder')" /></label></div>
+          <div class="homesim-cf-actions"><button class="primary-action" type="button" :disabled="cfSaving || !cfLoaded" @click="saveCallFilterPolicy"><LoaderCircle v-if="cfSaving" class="spin" :size="14" /><Save v-else :size="14" />{{ t('homesim.callFilter.title') }} · {{ t('homesim.services.save') }}</button><small v-if="cfSaved && !cfRuntimeReady">{{ t('homesim.callFilter.draftOnly') }}</small></div>
           <label>{{ t('homesim.services.provider') }}<SelectControl v-model="draft.spam.provider" :label="t('homesim.services.provider')" :options="[{ value: 'local', label: t('homesim.services.local') }, { value: 'juhe', label: t('homesim.services.juheSpam') }]" :disabled="busy || !loaded" /></label>
           <label v-if="draft.spam.provider === 'juhe'">{{ t('homesim.services.credential') }}<input v-model="draft.spam.credential_ref" spellcheck="false" autocomplete="off" /><small>{{ t('homesim.services.credentialHint') }}</small></label>
           <label>{{ t('homesim.services.threshold') }}<input v-model.number="draft.spam.min_reports" type="number" min="1" max="10000" /><small>{{ t('homesim.services.thresholdHint') }}</small></label>
-          <div class="homesim-service-columns"><label>{{ t('homesim.services.blacklist') }}<textarea v-model="blacklist" rows="4" :placeholder="t('homesim.services.blackPlaceholder')" /></label><label>{{ t('homesim.services.whitelist') }}<textarea v-model="whitelist" rows="4" :placeholder="t('homesim.services.whitePlaceholder')" /></label></div>
           <a href="https://www.juhe.cn/docs/api/id/511" target="_blank" rel="noopener noreferrer">{{ t('homesim.services.spamDocs') }}</a>
         </div>
         <div v-if="tab === 'ai'" class="homesim-service-fields">
@@ -98,6 +118,8 @@ onMounted(load)
 .homesim-service-fields label.homesim-service-check { display: flex; align-items: center; gap: 9px; }
 .homesim-ai-stages { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 0; list-style: none; }
 .homesim-ai-stages li { display: grid; gap: 5px; padding: 14px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 12px; }
+.homesim-cf-actions { display: flex; align-items: center; gap: 12px; }
+.homesim-cf-actions small { color: var(--muted); }
 .homesim-services footer { margin-top: 24px; }
 .homesim-draft-saved { margin-top: 16px; color: var(--success); font-size: 14px; }
 @media(max-width:560px) { .homesim-services { padding: 16px; } .homesim-service-columns { grid-template-columns: 1fr; } .homesim-services header { flex-wrap: wrap; } .homesim-ai-stages { grid-template-columns: 1fr; } }

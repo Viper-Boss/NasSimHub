@@ -226,7 +226,9 @@ body .brand-mark > span, .login-brand > span { color: #ffffff; }
 .app-shell .avatar--palette-6 { background: color-mix(in srgb, var(--success) 24%, var(--surface)); }
 .app-shell .avatar--palette-7 { background: color-mix(in srgb, var(--warning) 24%, var(--surface)); }
 .brand-mark { flex-direction: column; height: 100px; flex-basis: 100px; gap: 7px; }
-.brand-mark > strong { display: block; font-size: .75rem; font-weight: 600; }
+.brand-mark > strong { display: block; max-width: 100%; overflow: hidden; font-size: .75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.brand-mark__avatar { display: grid; place-items: center; overflow: hidden; }
+.brand-mark__avatar .avatar { width: 34px; height: 34px; border-radius: 50%; }
 .shell-location > span:first-child { color: var(--text); font-size: 1.125rem; font-weight: 700; letter-spacing: -.03em; }
 .app-shell .rail-link { min-height: 62px; }
 .app-shell .rail__primary { gap: 4px; padding-block: 8px; }

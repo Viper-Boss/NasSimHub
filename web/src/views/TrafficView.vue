@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { Plus, Waypoints } from '@lucide/vue'
 import type {
   LineSummary,
@@ -30,6 +31,7 @@ import {
 import { bootstrapResource, lineLabel, loadBootstrap } from '../state/workspace'
 
 const { t } = useI18n()
+const router = useRouter()
 const selectedLineID = ref('all')
 const editorOpen = ref(false)
 const editorProxy = ref<ProxyInstance>()
@@ -116,6 +118,22 @@ function periodTotal(period: 'today' | 'month'): number {
 
 const todayTotal = computed(() => periodTotal('today'))
 const monthTotal = computed(() => periodTotal('month'))
+
+// Modem online (registered) but no connected data bearer: usage stays 0 and the
+// page looks broken. Surface it with a jump to the device data connection control.
+const cellularOffline = computed(() => {
+  const current = snapshot.value
+  if (!current || !current.available) return false
+  const registered = visibleLines.value.filter(line => line.state === 'registered')
+  if (!registered.length) return false
+  return registered.every(
+    line => !current.lines.find(item => item.line_id === stableLineID(line) && item.connected)
+  )
+})
+
+function openDeviceSettings(): void {
+  void router.push({ name: 'settings', params: { section: 'devices' } })
+}
 const synchronizationNotice = computed(() => {
   const current = snapshot.value
   if (!current) return ''
@@ -254,6 +272,16 @@ onMounted(() => {
 
       <div v-else class="traffic-page__scroll">
       <PageContentFrame mode="dashboard" class="traffic-page__content">
+        <div
+          v-if="cellularOffline"
+          class="traffic-banner is-warning traffic-banner--action"
+          role="status"
+        >
+          <span>{{ t('traffic.dataNotConnected') }}</span>
+          <button class="secondary-button" type="button" @click="openDeviceSettings">
+            {{ t('traffic.openDeviceSettings') }}
+          </button>
+        </div>
         <div
           v-if="snapshot && !snapshot.available"
           class="traffic-banner is-warning"

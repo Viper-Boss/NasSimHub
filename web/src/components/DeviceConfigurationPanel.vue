@@ -183,12 +183,29 @@ const profileIPFamilyOptions = [
   { value: 'ipv6', label: 'IPv6' },
   { value: 'ipv4v6', label: 'IPv4 + IPv6' }
 ]
-const simOperationOptions = computed(() => [
-  { value: 'send_pin', label: t('device.unlockPIN') },
-  { value: 'send_puk', label: t('device.unlockPUK') },
-  { value: 'enable_pin', label: t('device.pinProtection') },
-  { value: 'change_pin', label: t('device.changePIN') }
-])
+const simOperationOptions = computed(() => {
+  const lock = simStatus.value?.unlock_required || ''
+  if (lock === 'sim-pin') return [{ value: 'send_pin', label: t('device.unlockPIN') }]
+  if (lock === 'sim-puk') return [{ value: 'send_puk', label: t('device.unlockPUK') }]
+  if (lock === 'none') return [
+    { value: 'enable_pin', label: t('device.pinProtection') },
+    { value: 'change_pin', label: t('device.changePIN') }
+  ]
+  return [
+    { value: 'send_pin', label: t('device.unlockPIN') },
+    { value: 'send_puk', label: t('device.unlockPUK') },
+    { value: 'enable_pin', label: t('device.pinProtection') },
+    { value: 'change_pin', label: t('device.changePIN') }
+  ]
+})
+
+const simLockHint = computed(() => {
+  const lock = simStatus.value?.unlock_required || ''
+  if (lock === 'sim-pin') return t('homesim.pinLockedPin')
+  if (lock === 'sim-puk') return t('homesim.pinLockedPuk')
+  if (lock === 'none') return t('homesim.pinUnlocked')
+  return ''
+})
 
 const ussdStatus = ref<USSDStatus | null>(null)
 const ussdLoadStatus = ref<AsyncStatus>('idle')
@@ -806,7 +823,11 @@ function resetLineServices(): void {
 
 async function loadActiveLineService(tab = activeTab.value): Promise<void> {
   if (tab === 'sim') {
-    await loadSIM()
+    const lineID = selectedLineID.value
+    await Promise.all([
+      loadSIM(),
+      lineID ? loadSIMAutoUnlock(lineID, lineServiceGeneration) : Promise.resolve()
+    ])
     return
   }
   if (tab === 'network') {
@@ -1159,6 +1180,7 @@ async function loadSIM(force = false): Promise<void> {
     simLoadStatus.value = 'ready'
     if (simStatus.value.unlock_required.includes('puk')) simOperation.value = 'send_puk'
     else if (simStatus.value.unlock_required.includes('pin')) simOperation.value = 'send_pin'
+    else if (!simOperationOptions.value.some(option => option.value === simOperation.value)) simOperation.value = 'enable_pin'
   } catch (error) {
     if (!isCurrentLineServiceRequest(lineID, generation)) return
     simLoadStatus.value = 'error'
@@ -2318,6 +2340,7 @@ onMounted(() => {
           <section class="configuration-section">
             <header><ShieldAlert :size="18" /><h4>PIN</h4></header>
             <p class="homesim-sim-notice">{{ t('homesim.simNotice') }}</p>
+            <p v-if="simLockHint" class="homesim-sim-notice">{{ simLockHint }}</p>
             <p v-if="simLastFailure" class="inline-error" role="alert">{{ simLastFailure }}</p>
             <form class="sim-form" @submit.prevent="applySIMCommand">
               <div class="field">

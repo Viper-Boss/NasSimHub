@@ -11,6 +11,7 @@ import {
   House,
   Info,
   KeyRound,
+  MessageSquareText,
   LoaderCircle,
   LogOut,
   RadioTower,
@@ -75,6 +76,7 @@ const loadConnectivitySettingsPanel = () =>
   import('../components/ConnectivitySettingsPanel.vue')
 const loadTelegramSettingsForm = () => import('../components/TelegramSettingsForm.vue')
 const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsPanel.vue')
+const loadSmsForwardPanel = () => import('../components/settings/SmsForwardPanel.vue')
 const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
 
@@ -93,6 +95,7 @@ const ConnectivitySettingsPanel = defineAsyncComponent(
 )
 const TelegramSettingsForm = defineAsyncComponent(loadTelegramSettingsForm)
 const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
+const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
 
@@ -171,6 +174,12 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     label: t('settings.bark'),
     description: t('settings.barkDescription'),
     icon: BellRing
+  },
+  {
+    id: 'sms-forward',
+    label: t('settings.smsForward'),
+    description: t('settings.smsForwardDescription'),
+    icon: MessageSquareText
   },
   {
     id: 'f50',
@@ -300,6 +309,8 @@ function preloadSection(section: SettingsSection): void {
         return loadTelegramSettingsForm
       case 'bark':
         return loadBarkSettingsPanel
+      case 'sms-forward':
+        return loadSmsForwardPanel
       case 'f50':
         return loadF50DevicePanel
       case 'net-switches':
@@ -539,6 +550,12 @@ onMounted(() => {
             <div v-else-if="selectedSection === 'bark'" class="settings-content">
               <PageContentFrame mode="reading">
                 <BarkSettingsPanel />
+              </PageContentFrame>
+            </div>
+
+            <div v-else-if="selectedSection === 'sms-forward'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <SmsForwardPanel />
               </PageContentFrame>
             </div>
 

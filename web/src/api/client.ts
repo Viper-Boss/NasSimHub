@@ -319,6 +319,20 @@ function errorDetails(value: unknown): ApiErrorBody | undefined {
   }
 }
 
+function parseSIMAutoUnlockResponse(value: unknown): SIMAutoUnlock {
+  const envelope = (value ?? {}) as { auto_unlock?: Record<string, unknown> }
+  const view = (envelope.auto_unlock ?? (value ?? {})) as Record<string, unknown>
+  const revision = Number(view.revision)
+  if (!Number.isInteger(revision) || revision < 1) throw new Error('SIM auto-unlock response is invalid.')
+  return {
+    line_id: typeof view.line_id === 'string' ? view.line_id : '',
+    enabled: view.enabled === true,
+    has_pin: view.has_pin === true,
+    updated_at: typeof view.updated_at === 'string' ? view.updated_at : undefined,
+    revision
+  }
+}
+
 function parseSession(value: unknown): SessionResponse {
   const source = recordValue(value)
   if (
@@ -2480,11 +2494,76 @@ export const gateway: ConfiguredModemDeckGateway = fixtureGateway
   ? configureFixture(fixtureGateway)
   : realGateway
 
-export async function backupContactsToNAS(): Promise<{ filename: string; count: number; created_at: string }> {
+export async function backupContactsToNAS(): Promise<{ filename: string; count: number; created_at: string; directory: string }> {
   if (fixtureMode) throw new Error('当前为演示模式，未连接飞牛服务器，没有生成 NAS 备份。')
   const result = await writeJSON(`${API_ROOT}/contacts/backup`, 'POST', {}, 201) as Record<string, unknown>
   if (typeof result?.filename !== 'string' || typeof result.count !== 'number' || typeof result.created_at !== 'string') throw new Error('备份响应无效，请检查服务器备份目录后再决定是否重试。')
-  return { filename: result.filename, count: result.count, created_at: result.created_at }
+  return {
+    filename: result.filename,
+    count: result.count,
+    created_at: result.created_at,
+    directory: typeof result.directory === 'string' ? result.directory : ''
+  }
+}
+
+
+
+export type CallFilterPolicy = {
+  revision: number
+  mode: 'off' | 'blacklist' | 'whitelist'
+  whitelist: string[]
+  blacklist: string[]
+  min_reports: number
+}
+
+export async function getCallFilter(): Promise<{ filter: CallFilterPolicy; state: string; runtime_ready: boolean }> {
+  if (fixtureMode) throw new Error('当前为演示模式，来电过滤未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/homesim/call-filter`) as { filter?: CallFilterPolicy; state?: string; runtime_ready?: boolean }
+  if (!result?.filter || !Number.isInteger(result.filter.revision)) throw new Error('来电过滤响应无效。')
+  return { filter: result.filter, state: result.state || '', runtime_ready: result.runtime_ready === true }
+}
+
+export async function saveCallFilter(filter: CallFilterPolicy): Promise<{ filter: CallFilterPolicy; state: string; runtime_ready: boolean }> {
+  if (fixtureMode) throw new Error('当前为演示模式，来电过滤未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/call-filter`, 'PUT', filter, 200) as { filter?: CallFilterPolicy; state?: string; runtime_ready?: boolean }
+  if (!result?.filter || !Number.isInteger(result.filter.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
+  return { filter: result.filter, state: result.state || '', runtime_ready: result.runtime_ready === true }
+}
+
+export type ForwarderChannelConfig = { webhook_url?: string; secret?: string; credential_ref?: string }
+
+export type ForwarderChannel = {
+  id: string
+  name: string
+  type: 'webhook' | 'dingtalk' | 'feishu' | 'wecom' | 'serverchan' | 'pushplus'
+  enabled: boolean
+  events: string[]
+  config: ForwarderChannelConfig
+}
+
+export type ForwarderSettings = { revision: number; forwarders: ForwarderChannel[] }
+
+export async function getForwarderSettings(): Promise<{ settings: ForwarderSettings; max_channels: number; runtime_ready: boolean }> {
+  if (fixtureMode) throw new Error('当前为演示模式，转发渠道未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/homesim/forwarders`) as { settings?: ForwarderSettings; max_channels?: number; runtime_ready?: boolean }
+  if (!result?.settings || !Array.isArray(result.settings.forwarders) || !Number.isInteger(result.settings.revision)) throw new Error('转发渠道响应无效。')
+  return {
+    settings: result.settings,
+    max_channels: typeof result.max_channels === 'number' ? result.max_channels : 8,
+    runtime_ready: result.runtime_ready === true
+  }
+}
+
+export async function saveForwarderSettings(next: ForwarderSettings): Promise<{ settings: ForwarderSettings; runtime_ready: boolean }> {
+  if (fixtureMode) throw new Error('当前为演示模式，转发渠道未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/forwarders`, 'PUT', next, 200) as { settings?: ForwarderSettings; runtime_ready?: boolean }
+  if (!result?.settings || !Number.isInteger(result.settings.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
+  return { settings: result.settings, runtime_ready: result.runtime_ready === true }
+}
+
+export async function testForwarderChannel(channel: ForwarderChannel): Promise<void> {
+  if (fixtureMode) throw new Error('当前为演示模式，无法发送测试消息。')
+  await writeJSON(`${API_ROOT}/settings/homesim/forwarders/test`, 'POST', channel, 200)
 }
 
 export async function getHomeSIMIntegrationDraft(): Promise<HomeSIMIntegrationDraft> {
