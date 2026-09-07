@@ -1,0 +1,5 @@
+# 部署脚本必须在 Linux 上按原样执行：强制 LF，防止 Windows checkout 变 CRLF
+# 导致容器入口 / NAS host 脚本报错（exit 127 / '\r': command not found）。
+*.sh text eol=lf
+*.rules text eol=lf
+*.py text eol=lf

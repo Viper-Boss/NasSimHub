@@ -1,0 +1,9 @@
+{
+  "bindings": [
+    {
+      "audio_port": "quectel-uac:/sys/devices/platform/fd000000.usb/xhci-hcd.2.auto/usb2/2-1",
+      "backend": "alsa-pcm",
+      "endpoint": "hw:CARD=REPLACE_WITH_ACTUAL_ALSA_CARD,DEV=0"
+    }
+  ]
+}

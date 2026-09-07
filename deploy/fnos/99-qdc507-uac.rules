@@ -1,0 +1,3 @@
+# QDC507 模块上线时守护 USB 音频接口（防止 option 泛匹配抢占 class=01 接口）。
+# 后台执行避免阻塞 udev 事件队列。
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2ca3", ATTR{idProduct}=="4006", RUN+="/bin/sh -c '/usr/local/sbin/qdc507-uac-fix.sh %p >/dev/null 2>&1 &'"
