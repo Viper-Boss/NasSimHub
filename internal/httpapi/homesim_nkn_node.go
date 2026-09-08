@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -113,8 +113,8 @@ type nknNodeSettings struct {
 	BeneficiaryAddr string `json:"beneficiary_addr"`
 	// SeedOverrides optionally lists user-supplied seed RPC addresses
 	// (comma/space separated, http(s)://host[:port]). They are placed ahead
-	// of the official seeds in the generated node config so self-hosted or
-	// regionally closer seeds win the first-connect race.
+	// of the cached and official seeds in the generated node config so
+	// self-hosted or regionally closer seeds win the first-connect race.
 	SeedOverrides string `json:"seed_overrides,omitempty"`
 	Revision      int64  `json:"revision"`
 }
@@ -134,10 +134,14 @@ type nknNodeRuntime struct {
 }
 
 type nknNodeStatusResponse struct {
-	Settings       nknNodeSettings `json:"settings"`
-	Runtime        nknNodeRuntime  `json:"runtime"`
-	WalletPassword string          `json:"wallet_password,omitempty"`
-	BinaryPresent  bool            `json:"binary_present"`
+	Settings nknNodeSettings `json:"settings"`
+	Runtime  nknNodeRuntime  `json:"runtime"`
+	// WalletExists reports whether wallet.json is present. The plaintext
+	// password is deliberately NOT exposed here (removed in the wallet
+	// self-custody rework): it is only known to the administrator who chose
+	// it when creating or importing the wallet.
+	WalletExists  bool `json:"wallet_exists"`
+	BinaryPresent bool `json:"binary_present"`
 }
 
 type nknNodeLogsResponse struct {
@@ -297,25 +301,30 @@ func nknNodeParseSeedOverrides(raw string) ([]string, error) {
 var nknNodeSeedAddrPattern = regexp.MustCompile(`^https?://[A-Za-z0-9._\-]+(:[0-9]{1,5})?$`)
 
 // writeNodeConfig regenerates config.json from the persisted settings. Called
-// on every launch so a BeneficiaryAddr change takes effect on restart.
+// on every launch so a BeneficiaryAddr change takes effect on restart. The
+// seed list is assembled in priority order: user-supplied seed overrides,
+// then locally cached low-latency nodes discovered by the running node (see
+// refreshSeedCache), then the official mainnet seeds as fallback.
 func (m *nknNodeManager) writeNodeConfig(settings nknNodeSettings) error {
-	// User-supplied seeds lead the list so a regionally closer or
-	// self-hosted seed wins the first-connect race; official seeds follow.
 	seedList := append([]string(nil), nknNodeOfficialSeeds...)
 	if custom, err := nknNodeParseSeedOverrides(settings.SeedOverrides); err != nil {
 		return err
 	} else if len(custom) > 0 {
-		seen := make(map[string]struct{}, len(custom)+len(seedList))
-		merged := make([]string, 0, len(custom)+len(seedList))
-		for _, seed := range append(append([]string(nil), custom...), seedList...) {
-			if _, dup := seen[seed]; dup {
-				continue
-			}
-			seen[seed] = struct{}{}
-			merged = append(merged, seed)
-		}
-		seedList = merged
+		seedList = append(custom, seedList...)
 	}
+	if cached := m.loadSeedCache(); cached != nil {
+		seedList = append(cached, seedList...)
+	}
+	seen := make(map[string]struct{}, len(seedList))
+	merged := make([]string, 0, len(seedList))
+	for _, seed := range seedList {
+		if _, dup := seen[seed]; dup {
+			continue
+		}
+		seen[seed] = struct{}{}
+		merged = append(merged, seed)
+	}
+	seedList = merged
 	config := nknNodeConfig{
 		BeneficiaryAddr:     strings.TrimSpace(settings.BeneficiaryAddr),
 		SeedList:            seedList,
@@ -339,78 +348,367 @@ func (m *nknNodeManager) writeNodeConfig(settings nknNodeSettings) error {
 	return os.WriteFile(filepath.Join(m.dir, nknNodeConfigFile), raw, 0o600)
 }
 
-// nknNodeGeneratePassword returns 32 random alphanumeric characters, matching
-// the official container entrypoint's wallet.pswd generator.
-func nknNodeGeneratePassword() (string, error) {
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
+// errNKNWalletMissing is returned when nknd is launched without a wallet.
+// Unlike transient launch failures the supervisor stops retrying: a wallet
+// must be created or imported explicitly by the administrator first
+// (self-custody: the gateway never fabricates keys behind the user's back).
+var errNKNWalletMissing = errors.New("no node wallet: create or import one in the NKN node settings first")
+
+// nknWalletMinPasswordLen mirrors the sanity threshold used by mainstream
+// self-custody wallets. nknd itself enforces no minimum; we do, because the
+// password is the only protection of the keystore on disk.
+const nknWalletMinPasswordLen = 8
+
+// validateNKNKeystore performs a structural sanity check on an uploaded
+// wallet.json (NKN keystore): JSON object, Address starting with NKN, and a
+// non-empty Crypto section. It does NOT verify the password — nknd would
+// refuse to start with a wrong one and the error shows up in the node log.
+func validateNKNKeystore(raw string) (string, error) {
+	var generic map[string]any
+	if err := json.Unmarshal([]byte(raw), &generic); err != nil {
+		return "", fmt.Errorf("keystore is not valid JSON: %w", err)
 	}
-	out := make([]byte, 32)
-	for i, b := range raw {
-		out[i] = alphabet[int(b)%len(alphabet)]
+	var parsed struct {
+		Address string         `json:"Address"`
+		Crypto  map[string]any `json:"Crypto"`
 	}
-	return string(out), nil
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return "", fmt.Errorf("keystore is not a valid wallet file: %w", err)
+	}
+	address := strings.TrimSpace(parsed.Address)
+	if !strings.HasPrefix(address, "NKN") || len(address) < 20 {
+		return "", errors.New("keystore Address field missing or not an NKN address")
+	}
+	if len(parsed.Crypto) == 0 {
+		return "", errors.New("keystore Crypto section missing — refusing to store a keyless file")
+	}
+	return address, nil
 }
 
-// ensureWallet creates wallet.pswd (random password) and wallet.json exactly
-// like the official entrypoint: nknc wallet -c reads the password twice from
-// stdin (password + confirmation).
-func (m *nknNodeManager) ensureWallet() error {
-	passwordPath := filepath.Join(m.dir, nknNodePasswordFile)
+// createWallet creates wallet.json with a user-chosen password (written to
+// wallet.pswd so nknd can unlock itself after an unattended restart) plus the
+// keystore itself, exactly like the official entrypoint does: nknc wallet -c
+// reads the password twice from stdin (password + confirmation).
+func (m *nknNodeManager) createWallet(password string) (string, error) {
+	password = strings.TrimSpace(password)
+	if len(password) < nknWalletMinPasswordLen {
+		return "", fmt.Errorf("password must be at least %d characters", nknWalletMinPasswordLen)
+	}
 	walletPath := filepath.Join(m.dir, nknNodeWalletFile)
 	if walletExists(walletPath) {
-		return nil
+		return "", errors.New("a node wallet already exists; delete it first if you really want a new one")
 	}
-	password, err := os.ReadFile(passwordPath)
-	if err != nil || len(bytes.TrimSpace(password)) == 0 {
-		generated, genErr := nknNodeGeneratePassword()
-		if genErr != nil {
-			return genErr
-		}
-		generated = generated + "\n"
-		if err := os.WriteFile(passwordPath, []byte(generated), 0o600); err != nil {
-			return err
-		}
-		password = []byte(generated)
+	if err := os.MkdirAll(m.dir, 0o700); err != nil {
+		return "", err
 	}
 	nknc, err := exec.LookPath("nknc")
 	if err != nil {
-		return fmt.Errorf("nknc binary not found: %w", err)
+		return "", fmt.Errorf("nknc binary not found: %w", err)
 	}
 	command := exec.Command(nknc, "wallet", "-c")
 	command.Dir = m.dir
 	stdin, err := command.StdinPipe()
 	if err != nil {
-		return err
+		return "", err
 	}
 	output := &bytes.Buffer{}
 	command.Stdout = output
 	command.Stderr = output
 	if err := command.Start(); err != nil {
-		return err
+		return "", err
 	}
-	secret := strings.TrimRight(string(password), "\n") + "\n"
+	secret := password + "\n"
 	if _, err := io.WriteString(stdin, secret+secret); err != nil {
 		_ = command.Process.Kill()
 		_ = command.Wait()
-		return err
+		return "", err
 	}
 	_ = stdin.Close()
 	if err := command.Wait(); err != nil {
-		return fmt.Errorf("nknc wallet -c failed: %w: %s", err, strings.TrimSpace(output.String()))
+		return "", fmt.Errorf("nknc wallet -c failed: %w: %s", err, strings.TrimSpace(output.String()))
 	}
 	if !walletExists(walletPath) {
-		return fmt.Errorf("nknc wallet -c finished but %s was not created", nknNodeWalletFile)
+		return "", fmt.Errorf("nknc wallet -c finished but %s was not created", nknNodeWalletFile)
 	}
-	m.appendLog("wallet created: " + strings.TrimSpace(output.String()))
+	if err := os.WriteFile(filepath.Join(m.dir, nknNodePasswordFile), []byte(password+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	m.appendLog("wallet created by administrator")
+	return m.walletAddress(), nil
+}
+
+// importWallet stores an administrator-provided keystore (wallet.json
+// contents, e.g. exported from another NKN wallet) and its password. The
+// password is required because nknd needs wallet.pswd to unlock the node
+// after an unattended restart; it never leaves the NAS.
+func (m *nknNodeManager) importWallet(keystoreJSON, password string) (string, error) {
+	keystoreJSON = strings.TrimSpace(keystoreJSON)
+	if keystoreJSON == "" {
+		return "", errors.New("keystore contents required")
+	}
+	if len(keystoreJSON) > 64<<10 {
+		return "", errors.New("keystore too large")
+	}
+	password = strings.TrimSpace(password)
+	if len(password) < nknWalletMinPasswordLen {
+		return "", fmt.Errorf("password must be at least %d characters", nknWalletMinPasswordLen)
+	}
+	address, err := validateNKNKeystore(keystoreJSON)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(m.dir, 0o700); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(m.dir, nknNodeWalletFile), []byte(keystoreJSON), 0o600); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(m.dir, nknNodePasswordFile), []byte(password+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	m.appendLog("wallet imported by administrator: " + address)
+	return address, nil
+}
+
+// deleteWallet irreversibly removes wallet.json and wallet.pswd after
+// stopping the node. This is the self-custody "wipe keys" action: once gone,
+// funds can only be recovered from an external backup of the keystore.
+func (m *nknNodeManager) deleteWallet(confirm bool) error {
+	if !confirm {
+		return errors.New("confirm=true is required to delete the node wallet")
+	}
+	m.stop()
+	removed := 0
+	for _, name := range []string{nknNodeWalletFile, nknNodePasswordFile} {
+		if err := os.Remove(filepath.Join(m.dir, name)); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			continue
+		}
+		removed++
+	}
+	if removed == 0 {
+		return errors.New("no node wallet to delete")
+	}
+	m.appendLog("wallet deleted by administrator")
 	return nil
 }
 
 func walletExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Size() > 0
+}
+
+// ---------------------------------------------------------------------------
+// Seed cache: a tiny DHT-flavored persistence layer. While nknd runs we ask
+// its local JSON-RPC for the Chord ring neighbours, probe each candidate's
+// RPC endpoint for latency, and keep the fastest ones in seed-cache.json.
+// The next launch reads the cache and puts those nodes ahead of the official
+// seeds, so a restart no longer starts cold from overseas seeds.
+// ---------------------------------------------------------------------------
+
+const (
+	nknNodeSeedCacheFile    = "seed-cache.json"
+	nknNodeSeedCacheSize    = 16
+	nknNodeSeedCacheMaxAge  = 14 * 24 * time.Hour
+	nknNodeSeedProbeTimeout = 1500 * time.Millisecond
+	nknNodeSeedProbeMax     = 24
+	nknNodeSeedProbeWorkers = 8
+	nknNodeCacheInterval    = 10 * time.Minute
+)
+
+// nknSeedCache is the persisted latency snapshot of recently reachable NKN
+// RPC endpoints. It lives in the node data directory and only influences the
+// generated config — deleting it is always safe.
+type nknSeedCache struct {
+	UpdatedAt time.Time          `json:"updated_at"`
+	Nodes     []nknSeedCacheNode `json:"nodes"`
+}
+
+type nknSeedCacheNode struct {
+	Addr  string `json:"addr"` // http://ip:30003
+	RTTms int    `json:"rtt_ms"`
+}
+
+// runSeedCacheSampler periodically refreshes seed-cache.json while the node
+// supervisor is alive. It exits when the supervisor winds down (done closed)
+// or a stop was requested.
+func (m *nknNodeManager) runSeedCacheSampler(done <-chan struct{}) {
+	// First sample shortly after launch (the ring needs a moment to fill,
+	// so give nknd 90 seconds), then refresh on a fixed interval.
+	select {
+	case <-time.After(90 * time.Second):
+	case <-done:
+		return
+	}
+	m.refreshSeedCache()
+	ticker := time.NewTicker(nknNodeCacheInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if m.stopRequested() {
+				return
+			}
+			m.refreshSeedCache()
+		case <-done:
+			return
+		}
+	}
+}
+
+// nknRPCClient is a variable so tests can stub the probe endpoint.
+var nknRPCClient = &http.Client{Timeout: nknNodeSeedProbeTimeout}
+
+// nknRPCProbe dials a candidate RPC endpoint with getconnectioncount and
+// returns the round-trip milliseconds; failures return -1.
+func nknRPCProbe(addr string) int {
+	body := strings.NewReader(`{"jsonrpc":"2.0","method":"getconnectioncount","params":{},"id":1}`)
+	start := time.Now()
+	response, err := nknRPCClient.Post(addr, "application/json", body)
+	if err != nil {
+		return -1
+	}
+	defer response.Body.Close()
+	var payload struct {
+		Result any `json:"result"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 512)).Decode(&payload); err != nil {
+		return -1
+	}
+	return int(time.Since(start).Milliseconds())
+}
+
+// collectRingCandidates asks the local nknd for its Chord ring info and
+// extracts candidate RPC addresses (IP with the standard seed port 30003).
+// Failures return an empty slice — the cache simply keeps its old contents.
+var nknRingInfoEndpoint = fmt.Sprintf("http://127.0.0.1:%d", nknNodeRPCPort)
+
+func collectRingCandidates() []string {
+	body := strings.NewReader(`{"jsonrpc":"2.0","method":"getchordringinfo","params":{},"id":1}`)
+	response, err := nknRPCClient.Post(nknRingInfoEndpoint, "application/json", body)
+	if err != nil {
+		return nil
+	}
+	defer response.Body.Close()
+	var payload struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&payload); err != nil {
+		return nil
+	}
+	matches := nknNodeAddrPattern.FindAllStringSubmatch(string(payload.Result), -1)
+	seen := make(map[string]struct{}, len(matches))
+	candidates := make([]string, 0, len(matches))
+	for _, match := range matches {
+		addr := "http://" + match[1] + ":" + strconv.Itoa(nknNodeRPCPort)
+		if _, dup := seen[addr]; dup {
+			continue
+		}
+		seen[addr] = struct{}{}
+		candidates = append(candidates, addr)
+		if len(candidates) >= nknNodeSeedProbeMax {
+			break
+		}
+	}
+	return candidates
+}
+
+var nknNodeAddrPattern = regexp.MustCompile(`(\d{1,3}(?:\.\d{1,3}){3}):(\d{2,5})`)
+
+// refreshSeedCache probes ring candidates concurrently, ranks the reachable
+// ones by latency, and persists the best slice to seed-cache.json.
+func (m *nknNodeManager) refreshSeedCache() {
+	candidates := collectRingCandidates()
+	if len(candidates) == 0 {
+		return
+	}
+	type probeResult struct {
+		addr string
+		rtt  int
+	}
+	results := make(chan probeResult, len(candidates))
+	workers := nknNodeSeedProbeWorkers
+	if len(candidates) < workers {
+		workers = len(candidates)
+	}
+	next := make(chan string, len(candidates))
+	for _, addr := range candidates {
+		next <- addr
+	}
+	close(next)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for addr := range next {
+				if m.stopRequested() {
+					return
+				}
+				if rtt := nknRPCProbe(addr); rtt >= 0 {
+					results <- probeResult{addr: addr, rtt: rtt}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(results)
+	alive := make([]nknSeedCacheNode, 0, len(results))
+	for result := range results {
+		alive = append(alive, nknSeedCacheNode{Addr: result.addr, RTTms: result.rtt})
+	}
+	if len(alive) == 0 {
+		return
+	}
+	sort.Slice(alive, func(i, j int) bool { return alive[i].RTTms < alive[j].RTTms })
+	if len(alive) > nknNodeSeedCacheSize {
+		alive = alive[:nknNodeSeedCacheSize]
+	}
+	cache := nknSeedCache{UpdatedAt: time.Now().UTC(), Nodes: alive}
+	raw, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return
+	}
+	target := filepath.Join(m.dir, nknNodeSeedCacheFile)
+	tmp := target + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	m.appendLog(fmt.Sprintf("seed cache refreshed: %d nodes, best %dms", len(alive), alive[0].RTTms))
+}
+
+// loadSeedCache returns the cached seed addresses if the file is readable and
+// fresh enough; nil otherwise. A stale cache is worse than no cache only
+// marginally (nknd probes candidates concurrently), but the age cap keeps
+// long-dead nodes from ever dominating the list.
+func (m *nknNodeManager) loadSeedCache() []string {
+	raw, err := os.ReadFile(filepath.Join(m.dir, nknNodeSeedCacheFile))
+	if err != nil {
+		return nil
+	}
+	var cache nknSeedCache
+	if err := json.Unmarshal(raw, &cache); err != nil {
+		return nil
+	}
+	if cache.UpdatedAt.IsZero() || time.Since(cache.UpdatedAt) > nknNodeSeedCacheMaxAge {
+		return nil
+	}
+	addrs := make([]string, 0, len(cache.Nodes))
+	for _, node := range cache.Nodes {
+		if addr := strings.TrimSpace(node.Addr); addr != "" {
+			addrs = append(addrs, addr)
+		}
+	}
+	if len(addrs) == 0 {
+		return nil
+	}
+	return addrs
 }
 
 // copyWebAssets mirrors the official entrypoint which copies the bundled web
@@ -467,14 +765,6 @@ func (m *nknNodeManager) walletAddress() string {
 		return ""
 	}
 	return wallet.Address
-}
-
-func (m *nknNodeManager) walletPassword() string {
-	raw, err := os.ReadFile(filepath.Join(m.dir, nknNodePasswordFile))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(raw))
 }
 
 // probeNKNNodeInfo queries the local nknd JSON-RPC for its sync state and
@@ -574,8 +864,10 @@ func (m *nknNodeManager) launch(settings nknNodeSettings) (*exec.Cmd, func(), er
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
 		return nil, nil, err
 	}
-	if err := m.ensureWallet(); err != nil {
-		return nil, nil, err
+	// Self-custody: the gateway never auto-generates a wallet. nknd only
+	// launches with an administrator-created or imported keystore on disk.
+	if !walletExists(filepath.Join(m.dir, nknNodeWalletFile)) {
+		return nil, nil, errNKNWalletMissing
 	}
 	if err := m.writeNodeConfig(settings); err != nil {
 		return nil, nil, err
@@ -831,10 +1123,10 @@ func (m *nknNodeManager) status() nknNodeStatusResponse {
 		}
 	}
 	return nknNodeStatusResponse{
-		Settings:       settings,
-		Runtime:        runtime,
-		WalletPassword: m.walletPassword(),
-		BinaryPresent:  nknNodeBinaryAvailable(),
+		Settings:      settings,
+		Runtime:       runtime,
+		WalletExists:  walletExists(filepath.Join(m.dir, nknNodeWalletFile)),
+		BinaryPresent: nknNodeBinaryAvailable(),
 	}
 }
 
@@ -905,4 +1197,75 @@ func (api *API) nknNodeSettings(response http.ResponseWriter, request *http.Requ
 
 func (api *API) nknNodeLogTail(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, nknNodeLogsResponse{Lines: api.nknNode.recentLogs(120)})
+}
+
+// nknNodeWalletResponse reports the wallet address after a create/import and
+// always carries the fresh node status so the UI can re-render in one round
+// trip.
+type nknNodeWalletResponse struct {
+	WalletAddress string             `json:"wallet_address,omitempty"`
+	Status        nknNodeStatusResponse `json:"status"`
+}
+
+// nknNodeWallet handles the self-custody wallet lifecycle:
+//
+//	POST {"action":"create","password":"…"}          — first-time generation
+//	POST {"action":"import","keystore":"…","password":"…"} — bring your own wallet
+//	POST {"action":"delete","confirm":true}          — irreversibly wipe keys
+func (api *API) nknNodeWallet(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.Header().Set("Allow", http.MethodPost)
+		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported", "")
+		return
+	}
+	var input struct {
+		Action   string `json:"action"`
+		Password string `json:"password"`
+		Keystore string `json:"keystore"`
+		Confirm  bool   `json:"confirm"`
+	}
+	if !decodeJSONBody(response, request, &input) {
+		return
+	}
+	var address string
+	var err error
+	switch input.Action {
+	case "create":
+		address, err = api.nknNode.createWallet(input.Password)
+	case "import":
+		address, err = api.nknNode.importWallet(input.Keystore, input.Password)
+	case "delete":
+		err = api.nknNode.deleteWallet(input.Confirm)
+	default:
+		writeError(response, http.StatusBadRequest, "invalid_argument", `action must be "create", "import" or "delete"`, "")
+		return
+	}
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "wallet_error", err.Error(), "")
+		return
+	}
+	status := api.nknNode.status()
+	writeJSON(response, http.StatusOK, nknNodeWalletResponse{WalletAddress: address, Status: status})
+}
+
+// nknNodeWalletBackup streams the keystore file (wallet.json) so the
+// administrator can keep an encrypted offline copy. The keystore is already
+// password-encrypted (standard NKN wallet format importable into other NKN
+// wallet apps), so serving it is safe; the password itself never leaves the
+// NAS.
+func (api *API) nknNodeWalletBackup(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.Header().Set("Allow", http.MethodGet)
+		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET is supported", "")
+		return
+	}
+	raw, err := os.ReadFile(filepath.Join(api.nknNode.dir, nknNodeWalletFile))
+	if err != nil {
+		writeError(response, http.StatusNotFound, "wallet_missing", "no node wallet on this gateway", "")
+		return
+	}
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Content-Disposition", `attachment; filename="nkn-node-wallet.json"`)
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(raw)
 }

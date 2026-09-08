@@ -577,6 +577,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.systemSettings(response, request)
 	case "/api/v1/settings/nkn-node":
 		api.nknNodeSettings(response, request)
+	case "/api/v1/settings/nkn-node/wallet":
+		api.nknNodeWallet(response, request)
+	case "/api/v1/settings/nkn-node/wallet/backup":
+		api.getOnly(response, request, api.nknNodeWalletBackup)
 	case "/api/v1/settings/nkn-node/logs":
 		api.getOnly(response, request, api.nknNodeLogTail)
 	case "/api/v1/settings/nkn-network":

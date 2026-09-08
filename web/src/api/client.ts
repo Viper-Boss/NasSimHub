@@ -2617,15 +2617,18 @@ export interface NKNNodeRuntime {
 export interface NKNNodeStatus {
   settings: NKNNodeSettings
   runtime: NKNNodeRuntime
-  wallet_password?: string
+  wallet_exists: boolean
   binary_present: boolean
+}
+
+function normalizeNKNNodeStatus(result: Partial<NKNNodeStatus> | null): NKNNodeStatus {
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('NKN 节点状态响应无效。')
+  return { settings: result.settings, runtime: result.runtime, wallet_exists: result.wallet_exists === true, binary_present: result.binary_present === true }
 }
 
 export async function getNKNNodeStatus(): Promise<NKNNodeStatus> {
   if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未连接 NAS。')
-  const result = await get(`${API_ROOT}/settings/nkn-node`) as Partial<NKNNodeStatus> | null
-  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('NKN 节点状态响应无效。')
-  return { settings: result.settings, runtime: result.runtime, wallet_password: result.wallet_password, binary_present: result.binary_present === true }
+  return normalizeNKNNodeStatus(await get(`${API_ROOT}/settings/nkn-node`) as Partial<NKNNodeStatus> | null)
 }
 
 export async function getNKNNodeLogs(): Promise<string[]> {
@@ -2636,9 +2639,29 @@ export async function getNKNNodeLogs(): Promise<string[]> {
 
 export async function updateNKNNode(next: { enabled: boolean; beneficiary_addr: string; seed_overrides?: string; expected_revision: number }): Promise<NKNNodeStatus> {
   if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未保存到 NAS。')
-  const result = await writeJSON(`${API_ROOT}/settings/nkn-node`, 'PUT', next, 200) as Partial<NKNNodeStatus> | null
-  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('NKN 节点保存响应无效。')
-  return { settings: result.settings, runtime: result.runtime, wallet_password: result.wallet_password, binary_present: result.binary_present === true }
+  return normalizeNKNNodeStatus(await writeJSON(`${API_ROOT}/settings/nkn-node`, 'PUT', next, 200) as Partial<NKNNodeStatus> | null)
+}
+
+// Self-custody wallet lifecycle for the embedded NKN node: create with an
+// administrator-chosen password, import an existing keystore (wallet.json
+// contents), or irreversibly wipe both key files from the NAS.
+export async function walletNKNNodeAction(input: { action: 'create' | 'import' | 'delete'; password?: string; keystore?: string; confirm?: boolean }): Promise<NKNNodeStatus> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未连接 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/nkn-node/wallet`, 'POST', input, 200) as { wallet_address?: string; status?: Partial<NKNNodeStatus> } | null
+  return normalizeNKNNodeStatus(result?.status ?? null)
+}
+
+// Streams the password-encrypted keystore (wallet.json) for offline backup.
+export async function downloadNKNNodeWalletBackup(): Promise<void> {
+  const response = await fetch(`${API_ROOT}/settings/nkn-node/wallet/backup`)
+  if (!response.ok) throw new Error(response.status === 404 ? 'NAS 上还没有节点钱包。' : `备份下载失败（HTTP ${response.status}）。`)
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = 'nkn-node-wallet.json'
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 export interface NKNNetworkSettings {

@@ -2,10 +2,13 @@ package httpapi
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestNKNNodeManager(t *testing.T) *nknNodeManager {
@@ -33,23 +36,6 @@ func TestNKNNodeSettingsRoundTrip(t *testing.T) {
 	}
 	if loaded != settings {
 		t.Fatalf("round trip mismatch: got %+v want %+v", loaded, settings)
-	}
-}
-
-func TestNKNNodeGeneratePassword(t *testing.T) {
-	first, err := nknNodeGeneratePassword()
-	if err != nil {
-		t.Fatalf("nknNodeGeneratePassword: %v", err)
-	}
-	second, err := nknNodeGeneratePassword()
-	if err != nil {
-		t.Fatalf("nknNodeGeneratePassword: %v", err)
-	}
-	if len(first) != 32 || len(second) != 32 {
-		t.Fatalf("password length mismatch: %d %d", len(first), len(second))
-	}
-	if first == second {
-		t.Fatal("two generated passwords must differ")
 	}
 }
 
@@ -202,5 +188,231 @@ func TestNKNNodeApplyRevisionConflict(t *testing.T) {
 	}
 	if result.Settings.Revision != 6 {
 		t.Fatalf("revision should increment, got %d", result.Settings.Revision)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Wallet self-custody lifecycle
+// ---------------------------------------------------------------------------
+
+const testKeystore = `{"Address":"NKNAbCdEfGh12345678AbCdEfGh12345678","Version":3,"Crypto":{"cipher":"aes-256-ctr","ciphertext":"deadbeef","iv":"cafebabe"}}`
+
+func TestNKNKeystoreValidation(t *testing.T) {
+	address, err := validateNKNKeystore(testKeystore)
+	if err != nil {
+		t.Fatalf("valid keystore rejected: %v", err)
+	}
+	if address != "NKNAbCdEfGh12345678AbCdEfGh12345678" {
+		t.Fatalf("unexpected address %q", address)
+	}
+	for name, bad := range map[string]string{
+		"not json":      "hello",
+		"no address":    `{"Crypto":{"cipher":"x"}}`,
+		"foreign chain": `{"Address":"0xdeadbeefdeadbeefdead","Crypto":{"cipher":"x"}}`,
+		"no crypto":     `{"Address":"NKNAbCdEfGh12345678AbCdEfGh12345678"}`,
+	} {
+		if _, err := validateNKNKeystore(bad); err == nil {
+			t.Fatalf("%s: expected rejection", name)
+		}
+	}
+}
+
+func TestNKNNodeImportWallet(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	if _, err := manager.importWallet(testKeystore, "short"); err == nil {
+		t.Fatal("short password must be rejected")
+	}
+	if _, err := manager.importWallet("not json", "longenough1"); err == nil {
+		t.Fatal("invalid keystore must be rejected")
+	}
+	address, err := manager.importWallet(testKeystore, "longenough1")
+	if err != nil {
+		t.Fatalf("importWallet: %v", err)
+	}
+	if address != "NKNAbCdEfGh12345678AbCdEfGh12345678" {
+		t.Fatalf("unexpected address %q", address)
+	}
+	if got := manager.walletAddress(); got != address {
+		t.Fatalf("walletAddress mismatch: %q", got)
+	}
+	password, err := os.ReadFile(filepath.Join(manager.dir, nknNodePasswordFile))
+	if err != nil || strings.TrimSpace(string(password)) != "longenough1" {
+		t.Fatalf("wallet.pswd not written correctly: %q err %v", password, err)
+	}
+}
+
+func TestNKNNodeCreateWalletValidation(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	if _, err := manager.createWallet("short"); err == nil {
+		t.Fatal("short password must be rejected")
+	}
+	// Without the nknc binaries present (test hosts) creation fails after
+	// validation — the password checks come first and are environment-free.
+	if _, err := manager.createWallet("longenough1"); err == nil && !nknNodeBinaryAvailable() {
+		t.Fatal("expected nknc lookup failure on hosts without binaries")
+	}
+}
+
+func TestNKNNodeDeleteWallet(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	if _, err := manager.importWallet(testKeystore, "longenough1"); err != nil {
+		t.Fatalf("importWallet: %v", err)
+	}
+	if err := manager.deleteWallet(false); err == nil {
+		t.Fatal("delete without confirm must be rejected")
+	}
+	if err := manager.deleteWallet(true); err != nil {
+		t.Fatalf("deleteWallet: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(manager.dir, nknNodeWalletFile)); !os.IsNotExist(err) {
+		t.Fatalf("wallet.json still present after delete: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(manager.dir, nknNodePasswordFile)); !os.IsNotExist(err) {
+		t.Fatalf("wallet.pswd still present after delete: %v", err)
+	}
+	if err := manager.deleteWallet(true); err == nil {
+		t.Fatal("deleting again must report there is nothing to delete")
+	}
+}
+
+func TestNKNNodeStatusReportsWalletExists(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	status := manager.status()
+	if status.WalletExists {
+		t.Fatal("wallet_exists must be false on a fresh data dir")
+	}
+	// The plaintext password must never be part of the status payload again.
+	if _, err := manager.importWallet(testKeystore, "longenough1"); err != nil {
+		t.Fatalf("importWallet: %v", err)
+	}
+	status = manager.status()
+	if !status.WalletExists {
+		t.Fatal("wallet_exists must be true after import")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Seed cache (DHT-flavored persistence)
+// ---------------------------------------------------------------------------
+
+func writeSeedCache(t *testing.T, manager *nknNodeManager, age time.Duration, addrs ...string) {
+	t.Helper()
+	nodes := make([]nknSeedCacheNode, 0, len(addrs))
+	for i, addr := range addrs {
+		nodes = append(nodes, nknSeedCacheNode{Addr: addr, RTTms: 100 + i})
+	}
+	cache := nknSeedCache{UpdatedAt: time.Now().Add(-age).UTC(), Nodes: nodes}
+	raw, err := json.Marshal(cache)
+	if err != nil {
+		t.Fatalf("marshal cache: %v", err)
+	}
+	if err := os.MkdirAll(manager.dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(manager.dir, nknNodeSeedCacheFile), raw, 0o600); err != nil {
+		t.Fatalf("write cache: %v", err)
+	}
+}
+
+func TestNKNNodeWriteNodeConfigSeedCache(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	if err := os.MkdirAll(manager.dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeSeedCache(t, manager, time.Hour,
+		"http://9.9.9.9:30003", "http://8.8.8.8:30003")
+	settings := nknNodeSettings{SeedOverrides: "http://custom.example.com:30003"}
+	if err := manager.writeNodeConfig(settings); err != nil {
+		t.Fatalf("writeNodeConfig: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(manager.dir, nknNodeConfigFile))
+	if err != nil {
+		t.Fatalf("read config.json: %v", err)
+	}
+	var config nknNodeConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if len(config.SeedList) < 3 {
+		t.Fatalf("merged seed list too short: %v", config.SeedList)
+	}
+	want := []string{"http://custom.example.com:30003", "http://9.9.9.9:30003", "http://8.8.8.8:30003"}
+	for i, seed := range want {
+		if config.SeedList[i] != seed {
+			t.Fatalf("seed order wrong at %d: got %v, want %s first", i, config.SeedList[:3], want)
+		}
+	}
+	officialCount := 0
+	for _, seed := range config.SeedList {
+		if strings.Contains(seed, "mainnet-seed-") {
+			officialCount++
+		}
+	}
+	if officialCount != 44 {
+		t.Fatalf("official seeds must all survive the merge, got %d", officialCount)
+	}
+}
+
+func TestNKNNodeSeedCacheExpired(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	if err := os.MkdirAll(manager.dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	writeSeedCache(t, manager, nknNodeSeedCacheMaxAge+time.Hour, "http://9.9.9.9:30003")
+	if got := manager.loadSeedCache(); got != nil {
+		t.Fatalf("expired cache must be ignored, got %v", got)
+	}
+	if err := manager.writeNodeConfig(nknNodeSettings{}); err != nil {
+		t.Fatalf("writeNodeConfig: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(manager.dir, nknNodeConfigFile))
+	if err != nil {
+		t.Fatalf("read config.json: %v", err)
+	}
+	if strings.Contains(string(raw), "9.9.9.9") {
+		t.Fatal("expired cache leaked into config.json")
+	}
+}
+
+func TestNKNNodeCollectRingCandidates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","result":{"Addr":"1.1.1.1:30001","Successors":[{"Addr":"2.2.2.2:30001"},{"Addr":"3.3.3.3:30002"}]}}`))
+	}))
+	defer server.Close()
+	previousURL := nknRingInfoEndpoint
+	previousClient := nknRPCClient
+	nknRingInfoEndpoint = server.URL
+	nknRPCClient = server.Client()
+	defer func() {
+		nknRingInfoEndpoint = previousURL
+		nknRPCClient = previousClient
+	}()
+	candidates := collectRingCandidates()
+	want := []string{"http://1.1.1.1:30003", "http://2.2.2.2:30003", "http://3.3.3.3:30003"}
+	if len(candidates) != len(want) {
+		t.Fatalf("unexpected candidates %v", candidates)
+	}
+	for i, addr := range want {
+		if candidates[i] != addr {
+			t.Fatalf("candidate %d: got %s want %s", i, candidates[i], addr)
+		}
+	}
+}
+
+func TestNKNNodeCollectRingCandidatesUnreachable(t *testing.T) {
+	previousURL := nknRingInfoEndpoint
+	previousClient := nknRPCClient
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	nknRingInfoEndpoint = server.URL
+	nknRPCClient = server.Client()
+	defer func() {
+		nknRingInfoEndpoint = previousURL
+		nknRPCClient = previousClient
+	}()
+	if candidates := collectRingCandidates(); len(candidates) != 0 {
+		t.Fatalf("expected no candidates on failure, got %v", candidates)
 	}
 }
