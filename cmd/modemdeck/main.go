@@ -395,6 +395,8 @@ func run(
 	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	api.StartHomeSIMForwarderWorker(signals)
+	api.StartHomeSIMNKNWorker(signals)
+	api.StartHomeSIMNKNOptionalServices(signals)
 	tlsMaintenanceDone := make(chan struct{})
 	go func() {
 		defer close(tlsMaintenanceDone)

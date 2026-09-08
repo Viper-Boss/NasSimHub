@@ -314,6 +314,12 @@ type API struct {
 	homeSIMBarkMu              sync.Mutex
 	homeSIMForwarderMu         sync.Mutex
 	homeSIMNKNMu               sync.Mutex
+	homeSIMNKNSettingsMu       sync.Mutex
+	homeSIMNKNStatusMu         sync.Mutex
+	homeSIMNKNStatus           homeSIMNKNStatus
+	mobileInviteMu             sync.Mutex
+	wireGuardMu                sync.Mutex
+	mobileInvites              map[[32]byte]mobileInvite
 	homeSIMNKNClients          map[string]*homeSIMNKNClient
 	nknNode                    *nknNodeManager
 	nknNetwork                 *nknNetworkManager
@@ -440,6 +446,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.setup(response, request)
 		return
 	}
+	if request.URL.Path == "/api/v1/mobile/enrollment/exchange" {
+		api.postOnly(response, request, api.exchangeMobileInvite)
+		return
+	}
 	if !api.authorizeAPI(response, request) {
 		return
 	}
@@ -493,6 +503,12 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.postOnly(response, request, api.backupContacts)
 	case "/api/v1/settings/homesim":
 		api.homeSIMDraft(response, request)
+	case "/api/v1/settings/homesim/nkn":
+		api.homeSIMNKNSettingsHandler(response, request)
+	case "/api/v1/settings/homesim/wireguard":
+		api.wireGuardSettingsHandler(response, request)
+	case "/api/v1/mobile/enrollment":
+		api.postOnly(response, request, api.createMobileInvite)
 	case "/api/v1/settings/homesim/quotas":
 		api.homeSIMQuotas(response, request)
 	case "/api/v1/settings/homesim/bark":

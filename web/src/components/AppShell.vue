@@ -446,7 +446,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <nav class="rail__secondary">
-        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'telegram' }" :to="{ name: 'settings', params: { section: 'telegram' } }" :title="t('homesim.forward')">
+        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'sms-forward' }" :to="{ name: 'settings', params: { section: 'sms-forward' } }" :title="t('homesim.forward')">
           <Forward :size="22" /><span>{{ t('homesim.forward') }}</span>
         </RouterLink>
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && ['devices', 'diagnostics', 'about'].includes(String(route.params.section)) }" :to="{ name: 'settings', params: { section: 'devices' } }" :title="t('homesim.system')">

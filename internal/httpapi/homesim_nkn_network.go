@@ -71,14 +71,18 @@ type nknNetworkPeer struct {
 }
 
 type nknNetworkPeersResponse struct {
-	Topic     string           `json:"topic"`
-	Window    string           `json:"window"`
-	Count     int              `json:"count"`
-	Peers     []nknNetworkPeer `json:"peers"`
-	FetchedAt time.Time        `json:"fetched_at"`
+	Active24h       *int             `json:"active_24h"`
+	ActiveMonth     *int             `json:"active_month"`
+	RegisteredTotal *int             `json:"registered_total"`
+	Topic           string           `json:"topic"`
+	Window          string           `json:"window"`
+	Count           int              `json:"count"`
+	Peers           []nknNetworkPeer `json:"peers"`
+	FetchedAt       time.Time        `json:"fetched_at"`
 }
 
 type nknNetworkManager struct {
+	applyMu    sync.Mutex
 	mu         sync.Mutex
 	logger     *slog.Logger
 	dir        string
@@ -183,11 +187,13 @@ func (m *nknNetworkManager) status() nknNetworkStatusResponse {
 
 // apply validates and persists the toggle, then reconciles the renew worker.
 func (m *nknNetworkManager) apply(api *API, request nknNetworkUpdateRequest) (nknNetworkStatusResponse, error) {
+	m.applyMu.Lock()
+	defer m.applyMu.Unlock()
 	current, err := m.loadSettings()
 	if err != nil {
 		return nknNetworkStatusResponse{}, err
 	}
-	if request.ExpectedRevision > 0 && request.ExpectedRevision != current.Revision {
+	if request.ExpectedRevision != current.Revision {
 		return nknNetworkStatusResponse{}, errNKNNetworkRevisionConflict
 	}
 	next := nknNetworkSettings{Enabled: request.Enabled, Revision: current.Revision + 1}
@@ -211,7 +217,7 @@ func (m *nknNetworkManager) startWorker(api *API) {
 	m.stopCh = make(chan struct{})
 	m.done = make(chan struct{})
 	stopCh := m.stopCh
-	go m.supervise(api, stopCh)
+	go m.supervise(api, stopCh, m.done)
 }
 
 func (m *nknNetworkManager) stopWorker() {
@@ -236,8 +242,8 @@ func (m *nknNetworkManager) stopWorker() {
 // it while enabled. A failed attempt retries quickly; a successful one waits
 // for the renew interval. On shutdown it unsubscribes (best effort) so the
 // device leaves the directory immediately instead of lingering up to 24h.
-func (m *nknNetworkManager) supervise(api *API, stopCh chan struct{}) {
-	defer close(m.done)
+func (m *nknNetworkManager) supervise(api *API, stopCh chan struct{}, done chan struct{}) {
+	defer close(done)
 	seed, err := resolveNKNSeed(nknNetworkSeedEnv)
 	if err != nil {
 		m.setError(fmt.Sprintf("identity seed unavailable: %v (set %s to join the network directory)", err, nknNetworkSeedEnv))
@@ -344,7 +350,14 @@ func fetchNKNNetworkPeersFrom(selfAddress string, seeds []string) (nknNetworkPee
 			})
 		}
 		sort.Slice(peers, func(i, j int) bool { return peers[i].Address < peers[j].Address })
+		// A full page may be truncated. Do not publish it as a complete total.
+		var active24h *int
+		if len(peers) < 1000 {
+			count := len(peers)
+			active24h = &count
+		}
 		return nknNetworkPeersResponse{
+			Active24h: active24h,
 			Topic:     nknNetworkTopic,
 			Window:    "24h",
 			Count:     len(peers),

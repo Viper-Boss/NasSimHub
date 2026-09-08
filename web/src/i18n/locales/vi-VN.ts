@@ -1,4 +1,5 @@
 import { nasPreflightEN } from '../nasPreflight'
+import fallback from './en-US'
 
 import { homesimEN } from '../homesimData'
 
@@ -256,6 +257,7 @@ export default {
     "loginFailed": "Đăng nhập không thành công"
   },
   "settings": {
+    ...fallback.settings,
     "title": "Cài đặt",
     "personal": "Cá nhân",
     "management": "Quản lý",
@@ -862,6 +864,7 @@ export default {
     "activityMissingDetail": "Quay lại danh sách và chọn hoạt động khác"
   },
   "traffic": {
+    ...fallback.traffic,
     "lineFallback": "Đường dây {suffix}",
     "unknownLine": "Đường dây không xác định",
     "runtimeStale": "Trạng thái thời gian chạy chưa được cập nhật",

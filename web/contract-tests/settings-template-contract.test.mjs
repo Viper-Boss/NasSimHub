@@ -25,11 +25,11 @@ test('settings navigation groups personal and managed surfaces behind one visibi
   const view = await source('../src/views/SettingsView.vue')
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: false }),
-    ['preferences', 'security', 'audio', 'contacts', 'devices', 'telegram', 'bark', 'f50', 'net-switches']
+    ['preferences', 'security', 'audio', 'contacts', 'devices', 'telegram']
   )
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: true }),
-    ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram', 'bark', 'f50', 'net-switches']
+    ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram']
   )
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: true, canPairIOS: true }),
@@ -43,29 +43,35 @@ test('settings navigation groups personal and managed surfaces behind one visibi
       'devices',
       'telegram',
       'bark',
+      'sms-forward',
       'f50',
       'net-switches',
+      'nkn',
+      'nkn-node',
+      'nkn-network',
       'connectivity',
       'diagnostics',
       'about'
     ]
   )
-  for (const section of ['preferences', 'security', 'audio', 'pairing', 'contacts']) {
+  for (const section of ['preferences', 'security']) {
     assert.equal(settingsSectionGroup(section), 'personal')
   }
   for (const section of [
     'users',
-    'devices',
-    'telegram',
-    'bark',
-    'f50',
-    'net-switches',
-    'connectivity',
     'diagnostics',
     'about'
   ]) {
     assert.equal(settingsSectionGroup(section), 'management')
   }
+  for (const section of ['audio', 'contacts', 'devices', 'telegram', 'bark', 'sms-forward']) {
+    assert.equal(settingsSectionGroup(section), 'communication')
+  }
+  for (const section of ['pairing', 'f50', 'net-switches', 'connectivity', 'nkn', 'nkn-node', 'nkn-network', 'wireguard']) {
+    assert.equal(settingsSectionGroup(section), 'network')
+  }
+  assert.ok(visibleSettingsSectionIDs({isAdmin:true, canPairIOS:true, advancedNetwork:true}).includes('wireguard'))
+  assert.ok(!visibleSettingsSectionIDs({isAdmin:false, canPairIOS:true, advancedNetwork:true}).includes('wireguard'))
 
   assert.match(view, /v-for="group in sectionGroups"/)
   assert.match(view, /class="settings-nav-group"/)

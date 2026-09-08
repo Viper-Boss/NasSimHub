@@ -19,16 +19,14 @@ import (
 //
 // Safety rules:
 //   - At most one attempt runs per line at any time.
-//   - A failed attempt backs off exponentially (15s doubling, 10m cap).
-//   - After 3 consecutive failures the entry stops retrying until it is
-//     re-saved or succeeds, so a wrong PIN can never burn retries down to a
-//     PUK lock.
+//   - A failed attempt stops until the configuration is explicitly changed.
+//   - Replaying the same PIN does not reset the failure latch.
 //   - When ModemManager reports the remaining PIN retry count and that count
 //     is 1, the attempt is skipped for the same reason.
 const (
 	simAutoUnlockBaseDelay     = 15 * time.Second
 	simAutoUnlockMaxDelay      = 10 * time.Minute
-	simAutoUnlockMaxAttempts   = 3
+	simAutoUnlockMaxAttempts   = 1
 	simAutoUnlockMinSafeRetries = 2
 	simAutoUnlockLockCode      = uint32(2) // MM_MODEM_LOCK_SIM_PIN
 )
@@ -64,6 +62,10 @@ func (p *Provider) SetSIMAutoUnlock(
 	now := p.now().UTC()
 	p.simAutoUnlockMu.Lock()
 	if request.Enabled {
+		if existing, found := p.simAutoUnlocks[request.LineID]; found && existing.pin == request.PIN {
+			p.simAutoUnlockMu.Unlock()
+			return p.SIMAutoUnlockStatus(ctx, request.LineID)
+		}
 		p.simAutoUnlocks[request.LineID] = &simAutoUnlockEntry{
 			pin:         request.PIN,
 			updatedAt:   now,
@@ -81,9 +83,7 @@ func (p *Provider) SetSIMAutoUnlock(
 		"line_id", request.LineID,
 		"enabled", request.Enabled,
 	)
-	if request.Enabled {
-		p.startSIMAutoUnlockAttempt(ctx, request.LineID)
-	}
+	// Only a snapshot proving SIM-PIN lock may trigger credential submission.
 	return p.SIMAutoUnlockStatus(ctx, request.LineID)
 }
 
@@ -202,7 +202,7 @@ func (p *Provider) simAutoUnlockReady(
 		return false
 	}
 	retries, known := unlockRetriesProperty(modemProperties)["sim-pin"]
-	if known && retries > 0 && retries < simAutoUnlockMinSafeRetries {
+	if known && retries < simAutoUnlockMinSafeRetries {
 		slog.Warn(
 			"SIM auto unlock skipped to protect PUK retries",
 			"component", "modemmanager",
@@ -217,7 +217,7 @@ func (p *Provider) simAutoUnlockReady(
 func (p *Provider) startSIMAutoUnlockAttempt(ctx context.Context, lineID string) {
 	p.simAutoUnlockMu.Lock()
 	entry, found := p.simAutoUnlocks[lineID]
-	if !found || entry.pin == "" || entry.running {
+	if !found || entry.pin == "" || entry.running || entry.attempts >= simAutoUnlockMaxAttempts {
 		p.simAutoUnlockMu.Unlock()
 		return
 	}
@@ -228,7 +228,7 @@ func (p *Provider) startSIMAutoUnlockAttempt(ctx context.Context, lineID string)
 	go func() {
 		defer func() {
 			p.simAutoUnlockMu.Lock()
-			if current, found := p.simAutoUnlocks[lineID]; found {
+			if current, found := p.simAutoUnlocks[lineID]; found && current == entry {
 				current.running = false
 			}
 			p.simAutoUnlockMu.Unlock()
@@ -272,7 +272,7 @@ func (p *Provider) runSIMAutoUnlockAttempt(ctx context.Context, lineID, pin stri
 			"operation", operation,
 			"line_id", lineID,
 			"attempts", entry.attempts,
-			"retry_in", delay.String(),
+			"retry_stopped", true,
 			"error", err,
 		)
 		return
@@ -295,12 +295,20 @@ func (p *Provider) submitSIMPin(
 	lineID string,
 	pin string,
 ) (dbus.ObjectPath, error) {
-	line, _, _, _, err := p.resolveLineServices(ctx, operation, lineID)
+	line, _, interfaces, _, err := p.resolveLineServices(ctx, operation, lineID)
 	if err != nil {
 		return "", err
 	}
 	if !line.SIMPresent || !dbus.ObjectPath(line.SIMPath).IsValid() {
 		return "", domain.FailedPrecondition(operation, "line has no active SIM", nil)
+	}
+	properties := interfaces[modemInterface]
+	lock, known := uint32Property(properties, "UnlockRequired")
+	if !known || lock != simAutoUnlockLockCode {
+		return "", domain.FailedPrecondition(operation, "SIM is not waiting for PIN; automatic submission stopped", nil)
+	}
+	if retries, known := unlockRetriesProperty(properties)["sim-pin"]; known && retries < simAutoUnlockMinSafeRetries {
+		return "", domain.FailedPrecondition(operation, "insufficient PIN retries; automatic submission stopped", nil)
 	}
 	simPath := dbus.ObjectPath(line.SIMPath)
 	if _, err := p.call(

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useAdvancedI18n as useI18n } from '../i18n/useAdvancedI18n'
 import {
   Circle,
   Delete,
@@ -46,6 +46,9 @@ import BaseAvatar from './BaseAvatar.vue'
 import ContactSuggestInput from './ContactSuggestInput.vue'
 import CallSurface from './CallSurface.vue'
 import LineSelector from './LineSelector.vue'
+import { sessionState } from '../state/session'
+import { revealAdvancedNetwork } from '../state/advancedNetwork'
+import { showFeedback } from '../state/feedback'
 
 const { t } = useI18n()
 const props = withDefaults(
@@ -384,6 +387,12 @@ function removeDigit(): void {
 }
 
 function editNumber(value: string): void {
+  if (value.trim().toLowerCase() === 'wireguard' && sessionState.role === 'admin') {
+    revealAdvancedNetwork()
+    number.value = ''
+    showFeedback(t('homesim.advanced.text53'))
+    return
+  }
   number.value = value
   contactLabel.value = ''
   selectedContactPreferredLineID.value = ''

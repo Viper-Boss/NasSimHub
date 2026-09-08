@@ -156,16 +156,16 @@ onMounted(() => {
           <RefreshCw v-else :size="14" />{{ peersLoading ? t('homesim.nknNetwork.refreshing') : t('homesim.nknNetwork.refresh') }}
         </button>
       </div>
-      <p v-if="peers" class="nkn-network__count">{{ t('homesim.nknNetwork.count', { count: peers.count }) }}</p>
-      <p class="nkn-network__hint">{{ t('homesim.nknNetwork.windowHint') }}</p>
+      <dl class="nkn-network__metrics" :aria-busy="peersLoading">
+        <div><dt>{{ t('homesim.nknNetwork.active24h') }}</dt><dd>{{ peersError ? '—' : (peers?.active_24h ?? '—') }}</dd></div>
+        <div><dt>{{ t('homesim.nknNetwork.activeMonth') }}</dt><dd>{{ peersError ? '—' : (peers?.active_month ?? '—') }}</dd></div>
+        <div><dt>{{ t('homesim.nknNetwork.registeredTotal') }}</dt><dd>{{ peersError ? '—' : (peers?.registered_total ?? '—') }}</dd></div>
+      </dl>
+      <details class="nkn-network__hint">
+        <summary class="ui-disclosure-summary">{{ t('homesim.nknNetwork.statisticsDetails') }}</summary>
+        <p>{{ t('homesim.nknNetwork.statisticsScope') }}</p>
+      </details>
       <p v-if="peersError" class="field-error" role="alert">{{ peersError }}</p>
-      <ul v-if="peers && peers.peers.length" class="nkn-network__peers">
-        <li v-for="peer in peers.peers" :key="peer.address" class="nkn-network__peer">
-          <code>{{ peer.address }}</code>
-          <span v-if="peer.is_self" class="nkn-network__self">{{ t('homesim.nknNetwork.selfBadge') }}</span>
-        </li>
-      </ul>
-      <p v-else-if="peers && !peers.peers.length && !peersError" class="nkn-network__hint">{{ t('homesim.nknNetwork.empty') }}</p>
     </div>
 
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
@@ -207,6 +207,11 @@ onMounted(() => {
 .nkn-network__directory { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; font-size: 13px; }
 .nkn-network__directory-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .nkn-network__directory-head h3 { margin: 0; font-size: 14px; }
+.nkn-network__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 4px 0; }
+.nkn-network__metrics > div { padding: 16px 12px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 12px; }
+.nkn-network__metrics dt { color: var(--muted); font-size: 12px; }
+.nkn-network__metrics dd { margin: 10px 0 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .nkn-network__metrics { gap: 6px; } .nkn-network__metrics > div { padding: 12px 8px; } .nkn-network__metrics dd { font-size: 24px; } }
 .nkn-network__count { margin: 0; color: var(--muted); font-size: 12px; }
 .nkn-network__peers { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .nkn-network__peer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

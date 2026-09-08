@@ -2543,6 +2543,37 @@ export type ForwarderChannel = {
 
 export type ForwarderSettings = { revision: number; forwarders: ForwarderChannel[] }
 
+export type NKNSettingsResponse = {
+  settings: { revision: number; enabled: boolean }
+  status: { state: 'connecting' | 'connected' | 'disabled' | 'error'; address?: string; error?: string; updated_at?: string }
+  capabilities: { sms_forwarding: boolean; http_tunnel: boolean; voice_transport: boolean }
+}
+export type WireGuardSettings = { mtproto?: {enabled:boolean; bind_address:string; port:number; secret:string}; revision: number; enabled: boolean; address: string; listen_port: number; advertised_endpoint: string; peers: { name: string; public_key: string; endpoint: string; allowed_ips: string[]; nkn_address: string }[] }
+export type WireGuardResponse = { settings: WireGuardSettings; status: { state: string; mtproto_state?:string; public_key?: string; error?: string; revision: number }; runtime_ready: boolean }
+export async function getWireGuardSettings(): Promise<WireGuardResponse> {
+  if (fixtureMode) return { settings: { revision: 1, enabled: false, address: '10.77.0.1/24', listen_port: 51820, advertised_endpoint: '', peers: [] }, status: { state: 'not_installed', revision: 0 }, runtime_ready: false }
+  return await get(`${API_ROOT}/settings/homesim/wireguard`) as WireGuardResponse
+}
+export async function saveWireGuardSettings(settings: WireGuardSettings): Promise<WireGuardResponse> {
+  if (fixtureMode) throw new Error('演示模式无法启动 VPN。')
+  return await writeJSON(`${API_ROOT}/settings/homesim/wireguard`, 'PUT', settings, 200) as WireGuardResponse
+}
+
+export async function createMobileEnrollment(serverURL: string): Promise<{ payload: { expires_at: string; [key: string]: unknown } }> {
+  if (fixtureMode) throw new Error('请连接真实服务器后生成配对码。')
+  return await writeJSON(`${API_ROOT}/mobile/enrollment`, 'POST', { server_url: serverURL }, 201) as { payload: { expires_at: string; [key: string]: unknown } }
+}
+
+export async function getNKNSettings(): Promise<NKNSettingsResponse> {
+  if (fixtureMode) return { settings: { revision: 1, enabled: true }, status: { state: 'connecting' }, capabilities: { sms_forwarding: true, http_tunnel: false, voice_transport: false } }
+  return await get(`${API_ROOT}/settings/homesim/nkn`) as NKNSettingsResponse
+}
+
+export async function saveNKNSettings(settings: NKNSettingsResponse['settings']): Promise<NKNSettingsResponse> {
+  if (fixtureMode) throw new Error('演示模式无法修改 NAS 网络配置。')
+  return await writeJSON(`${API_ROOT}/settings/homesim/nkn`, 'PUT', settings, 200) as NKNSettingsResponse
+}
+
 export async function getForwarderSettings(): Promise<{ settings: ForwarderSettings; max_channels: number; runtime_ready: boolean }> {
   if (fixtureMode) throw new Error('当前为演示模式，转发渠道未连接 NAS。')
   const result = await get(`${API_ROOT}/settings/homesim/forwarders`) as { settings?: ForwarderSettings; max_channels?: number; runtime_ready?: boolean }
@@ -2635,6 +2666,9 @@ export interface NKNNetworkPeer {
 }
 
 export interface NKNNetworkPeers {
+  active_24h: number | null
+  active_month: number | null
+  registered_total: number | null
   topic: string
   window: string
   count: number
@@ -2660,7 +2694,11 @@ export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
   if (fixtureMode) throw new Error('当前为演示模式，网络目录未连接 NAS。')
   const result = await get(`${API_ROOT}/settings/nkn-network/peers`) as Partial<NKNNetworkPeers> | null
   if (!result || !Array.isArray(result.peers)) throw new Error('网络目录列表响应无效。')
+  const metric = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
   return {
+    active_24h: metric(result.active_24h),
+    active_month: metric(result.active_month),
+    registered_total: metric(result.registered_total),
     topic: typeof result.topic === 'string' ? result.topic : '',
     window: typeof result.window === 'string' ? result.window : '',
     count: typeof result.count === 'number' ? result.count : result.peers.length,

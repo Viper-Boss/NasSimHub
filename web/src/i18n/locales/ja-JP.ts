@@ -1,4 +1,5 @@
 import { nasPreflightEN } from '../nasPreflight'
+import fallback from './en-US'
 
 import { homesimEN } from '../homesimData'
 
@@ -256,6 +257,7 @@ export default {
     "loginFailed": "ログインに失敗しました"
   },
   "settings": {
+    ...fallback.settings,
     "title": "設定",
     "personal": "個人",
     "management": "管理",
@@ -862,6 +864,7 @@ export default {
     "activityMissingDetail": "リストに戻って別のアクティビティを選択します"
   },
   "traffic": {
+    ...fallback.traffic,
     "lineFallback": "行 {suffix}",
     "unknownLine": "不明な回線",
     "runtimeStale": "ランタイムステータスがまだ更新されていません",

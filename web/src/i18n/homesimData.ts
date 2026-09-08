@@ -1,6 +1,7 @@
 import { servicesEN, servicesZH } from './homesimServices'
 
 export const homesimEN = {
+  backupStorage: 'Stored on the NAS: {directory}',
   scanLimit: 'Reached the 100,000-message limit. Filter by SIM and scan again.', invalidCursor: 'Invalid pagination cursor. Scan is incomplete.', scanFailed: 'Scan failed',
   simWarning: 'Incorrect PIN/PUK entries consume limited attempts. Exhausting the PUK can permanently disable the card. This sends one command with no automatic retry.', simChanged: 'SIM or line changed. Check again before submitting.', simUncertain: 'The operation did not confirm success. Refresh remaining attempts before retrying.',
   simNotice: 'SIM PIN restricts use after moving the card; it cannot prevent physical removal. The operator-provided PUK unlocks the SIM and sets a new PIN, not a new PUK.', repeatPIN: 'Repeat new PIN', autoUnlockTitle: 'Startup auto-unlock', autoUnlockEnableTitle: 'Enable startup auto-unlock?', autoUnlockDisableTitle: 'Disable startup auto-unlock?', autoUnlockPinRequired: 'Enter the 4-8 digit SIM PIN first.', autoUnlockSaved: 'Startup auto-unlock saved.', autoUnlockFailed: 'Startup auto-unlock could not be saved.', autoUnlockHint: 'The SIM PIN is stored encrypted on the NAS and submitted automatically whenever the modem asks for it (for example after a module reboot), so VoLTE registration recovers on its own.',
@@ -86,7 +87,10 @@ export const homesimEN = {
     state: 'State', stateDisabled: 'Off', stateJoining: 'Joining…', stateActive: 'Published on chain', stateError: 'Error',
     myAddress: 'My directory identity', copy: 'Copy', copied: 'Copied',
     lastRenew: 'Last published', lastError: 'Last error',
-    directoryTitle: 'Devices online in the past 24h', refresh: 'Refresh', refreshing: 'Refreshing…',
+    directoryTitle: 'Device statistics', refresh: 'Refresh', refreshing: 'Refreshing…',
+    active24h: '24-hour active devices', activeMonth: 'Monthly active devices', registeredTotal: 'All-time registered devices',
+    statisticsDetails: 'Statistics scope',
+    statisticsScope: 'Counts cover identities in the public ModemDeck topic, not the whole NKN network or verified physical devices. The 24-hour figure approximates activity using unexpired subscriptions; it is not a real-time online count. Monthly (rolling 30 days) and all-time figures require a historical index. A dash means complete data is unavailable, not zero.',
     count: '{count} devices online', selfBadge: 'This device',
     windowHint: 'Rolling window: a device drops off about 24 hours after its last heartbeat — not a midnight reset.',
     topicLabel: 'On-chain topic', windowLabel: 'Window',
@@ -207,7 +211,10 @@ export const homesimZH = {
     state: '状态', stateDisabled: '未开启', stateJoining: '加入中…', stateActive: '已上链发布', stateError: '异常',
     myAddress: '我的目录身份', copy: '复制', copied: '已复制',
     lastRenew: '最近发布', lastError: '最近错误',
-    directoryTitle: '过去 24 小时在线的设备', refresh: '刷新', refreshing: '刷新中…',
+    directoryTitle: '设备统计', refresh: '刷新', refreshing: '刷新中…',
+    active24h: '24小时活跃设备', activeMonth: '月活跃设备', registeredTotal: '历史注册设备',
+    statisticsDetails: '统计口径',
+    statisticsScope: '仅统计 ModemDeck 公共主题中的设备身份，不代表 NKN 全网或经过验证的物理设备。24小时活跃数以尚未过期的订阅近似统计，并非实时在线数。月活跃按最近30天去重，历史注册按累计身份去重；后两项需要历史索引。“—”表示暂无完整数据，不代表0台。',
     count: '{count} 台设备在线', selfBadge: '本机',
     windowHint: '滚动窗口：设备最后一次心跳后约 24 小时自动从列表消失，不是北京时间每天 0 点清零。',
     topicLabel: '链上主题', windowLabel: '统计窗口',

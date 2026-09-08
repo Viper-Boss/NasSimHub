@@ -1,4 +1,5 @@
 import { nasPreflightEN } from '../nasPreflight'
+import fallback from './en-US'
 
 import { homesimEN } from '../homesimData'
 
@@ -256,6 +257,7 @@ export default {
     "loginFailed": "La connexion a échoué"
   },
   "settings": {
+    ...fallback.settings,
     "title": "Paramètres",
     "personal": "Personnel",
     "management": "Gestion",
@@ -862,6 +864,7 @@ export default {
     "activityMissingDetail": "Revenir à la liste et sélectionner une autre activité"
   },
   "traffic": {
+    ...fallback.traffic,
     "lineFallback": "Ligne {suffix}",
     "unknownLine": "Ligne inconnue",
     "runtimeStale": "L'état d'exécution n'a pas encore été mis à jour",

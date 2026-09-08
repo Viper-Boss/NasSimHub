@@ -101,6 +101,7 @@ func (api *API) homeSIMNKNClient(seed []byte) (*homeSIMNKNClient, error) {
 					select {
 					case <-multi.OnConnect.C:
 					case <-time.After(nknConnectTimeout):
+						_ = multi.Close()
 						err = fmt.Errorf("NKN network connect timed out after %s", nknConnectTimeout)
 					}
 				}
@@ -166,7 +167,13 @@ func nknAddressList(raw string) []string {
 // subscribers plus direct Send to every configured address. Either target
 // alone is valid.
 func (api *API) deliverForwarderNKN(forwarder homeSIMForwarder, title, body string) error {
-	seed, err := resolveNKNSeed(forwarder.Config.CredentialRef)
+	var seed []byte
+	var err error
+	if forwarder.Config.CredentialRef == "HOMESIM_MANAGED_NKN" {
+		seed, err = api.managedNKNSeed()
+	} else {
+		seed, err = resolveNKNSeed(forwarder.Config.CredentialRef)
+	}
 	if err != nil {
 		return err
 	}

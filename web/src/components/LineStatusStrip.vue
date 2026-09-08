@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { bootstrapResource } from '../state/workspace'
 import { requestPhoneGeo } from '../state/phoneGeo'
 import { accessTechnologyLabel, ownNumberFacts } from '../utils/phoneRegion'
+import { voiceStatus, chineseLineState } from '../utils/voiceStatus'
+import { isRegisteredNetwork } from '../utils/operatorNetwork'
+import { callState } from '../state/call'
+const LineSelector = defineAsyncComponent(() => import('./LineSelector.vue'))
 
 const { t } = useI18n()
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
+const selectedLineID = ref('')
+const viewedLineID = computed({ get: () => line.value?.id || '', set: value => { selectedLineID.value = value } })
+const lines = computed(() => bootstrapResource.data?.lines || [])
 
 const BUILD_ID = import.meta.env.VITE_MODEMDECK_BUILD_ID
 const version = typeof BUILD_ID === 'string' && BUILD_ID.trim() ? `v${BUILD_ID.trim().replace(/^v/, '')}` : ''
 
 const line = computed(() => {
-  const lines = bootstrapResource.data?.lines || []
-  return lines.find(item => item.state === 'registered') || lines[0]
+  return lines.value.find(item => item.id === selectedLineID.value) || lines.value.find(item => isRegisteredNetwork(item)) || lines.value[0]
 })
 
 const facts = computed(() => ownNumberFacts(line.value?.phone_number || '', line.value?.operator))
@@ -25,7 +31,7 @@ watch(
   () => line.value?.phone_number || '',
   number => {
     remoteGeo.value = undefined
-    if (number) void requestPhoneGeo(number).then(geo => { remoteGeo.value = geo })
+    if (number) void requestPhoneGeo(number).then(geo => { if (number === line.value?.phone_number) remoteGeo.value = geo })
   },
   { immediate: true }
 )
@@ -40,15 +46,12 @@ const geoLine = computed(() => {
 
 const networkLabel = computed(() => accessTechnologyLabel(line.value?.serving_radio?.access_technology))
 
-const registered = computed(() => line.value?.state === 'registered')
+const registered = computed(() => Boolean(line.value && isRegisteredNetwork(line.value)))
 
-const volteState = computed<'on' | 'off' | 'hidden'>(() => {
-  if (!line.value || !registered.value) return 'hidden'
-  if (networkLabel.value !== '4G') return 'hidden'
-  const volteControl = bootstrapResource.data?.capabilities?.volte_control
-  if (volteControl === false) return 'off'
-  return line.value.capabilities?.voice === false ? 'off' : 'on'
-})
+const volte = computed(() => voiceStatus({ registered: registered.value, network: networkLabel.value,
+  activeBearer: callState.sessions.find(session => session.line_id === line.value?.id && session.phase === 'active')?.bearer
+}))
+const volteState = computed(() => volte.value.state)
 
 const signalQuality = computed(() => {
   if (!line.value || !registered.value) return null
@@ -73,7 +76,7 @@ const quotaRings = computed(() => {
       pct,
       dash: QUOTA_RING * pct,
       low: pct <= 0.2,
-      leftText: `${Number(left.toFixed(1))}${unit}`,
+      leftText: `${Number(Math.max(0, left).toFixed(1))}${unit}`,
       totalText: `${total}${unit}`,
       hint: t('homesim.quota.left', { left: Number(left.toFixed(1)), total, unit })
     }
@@ -99,6 +102,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 
 <template>
   <div v-if="line" ref="root" class="line-status-wrap">
+    <LineSelector v-if="lines.length > 1" v-model="viewedLineID" :lines="lines" compact />
     <div
       class="line-status"
       :class="{ 'is-open': open }"
@@ -124,9 +128,10 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
           <span
             v-if="volteState !== 'hidden'"
             class="line-status__tag"
-            :class="{ 'is-off': volteState === 'off' }"
+            :class="{ 'is-unknown': volteState === 'unknown' }"
+            :title="volte.hint"
           >VoLTE</span>
-          <span v-if="line.state !== 'registered'" class="line-status__state">{{ line.state }}</span>
+          <span v-if="!registered" class="line-status__state">{{ chineseLineState(line.state) }}</span>
           <span
             v-for="ring in quotaRings"
             :key="ring.label"
@@ -190,6 +195,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
 </template>
 
 <style scoped>
+.line-status-picker { max-width: 140px; min-width: 70px; margin-right: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+.line-status__tag.is-unknown { color: var(--muted); background: var(--surface-subtle); }
 .line-status-wrap {
   position: relative;
   display: inline-flex;

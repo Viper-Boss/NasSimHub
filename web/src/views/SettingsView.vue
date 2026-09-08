@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useAdvancedI18n as useI18n } from '../i18n/useAdvancedI18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Activity,
@@ -17,9 +17,7 @@ import {
   RadioTower,
   BellRing,
   Network,
-  Radar,
   Send,
-  Server,
   Wifi,
   ShieldCheck,
   SlidersHorizontal,
@@ -52,6 +50,7 @@ import {
   presentModuleLines
 } from '../state/workspace'
 import { isRegisteredNetwork } from '../utils/operatorNetwork'
+import { advancedNetworkVisible } from '../state/advancedNetwork'
 
 type SettingsSectionDefinition = {
   id: SettingsSection
@@ -81,8 +80,6 @@ const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsP
 const loadSmsForwardPanel = () => import('../components/settings/SmsForwardPanel.vue')
 const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
-const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
-const loadNknNetworkPanel = () => import('../components/settings/NknNetworkPanel.vue')
 
 const AccountPreferencesPanel = defineAsyncComponent(loadAccountPreferencesPanel)
 const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel)
@@ -102,8 +99,15 @@ const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
 const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
+const loadNKNSettingsPanel = () => import('../components/settings/NKNSettingsPanel.vue')
+const NKNSettingsPanel = defineAsyncComponent(loadNKNSettingsPanel)
+const loadWireGuardPanel = () => import('../components/settings/WireGuardPanel.vue')
+const WireGuardPanel = defineAsyncComponent(loadWireGuardPanel)
+const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
+const loadNknNetworkPanel = () => import('../components/settings/NknNetworkPanel.vue')
 const NknNodePanel = defineAsyncComponent(loadNknNodePanel)
 const NknNetworkPanel = defineAsyncComponent(loadNknNetworkPanel)
+const MobileEnrollmentPanel = defineAsyncComponent(() => import('../components/MobileEnrollmentPanel.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -127,6 +131,10 @@ const overviewSummary = computed(() =>
   })
 )
 const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
+  { id: 'nkn-node', label: t('settings.nknNode'), description: t('settings.nknNodeDescription'), icon: Network },
+  { id: 'nkn-network', label: t('settings.nknNetwork'), description: t('settings.nknNetworkDescription'), icon: Globe2 },
+  { id: 'wireguard', label: 'WireGuard', description: t('homesim.advanced.text0'), icon: ShieldCheck },
+  { id: 'nkn', label: t('homesim.advanced.text1'), description: t('homesim.advanced.text2'), icon: Globe2 },
   {
     id: 'preferences',
     label: t('settings.system'),
@@ -200,18 +208,6 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     icon: Network
   },
   {
-    id: 'nkn-node',
-    label: t('settings.nknNode'),
-    description: t('settings.nknNodeDescription'),
-    icon: Server
-  },
-  {
-    id: 'nkn-network',
-    label: t('settings.nknNetwork'),
-    description: t('settings.nknNetworkDescription'),
-    icon: Radar
-  },
-  {
     id: 'connectivity',
     label: t('settings.tls'),
     description: t('settings.tlsDescription'),
@@ -234,15 +230,16 @@ const sections = computed<SettingsSectionDefinition[]>(() => {
   const catalog = new Map(sectionCatalog.value.map(section => [section.id, section]))
   return visibleSettingsSectionIDs({
     isAdmin: isAdmin.value,
-    canPairIOS: canPairIOS.value
+    canPairIOS: canPairIOS.value,
+    advancedNetwork: advancedNetworkVisible.value
   })
     .map(sectionID => catalog.get(sectionID))
     .filter((section): section is SettingsSectionDefinition => section !== undefined)
 })
 const sectionGroups = computed(() =>
-  (['personal', 'management'] as const).map((group: SettingsSectionGroup) => ({
+  (['personal', 'communication', 'network', 'management'] as const).map((group: SettingsSectionGroup) => ({
     id: group,
-    label: t(`settings.${group}`),
+    label: ({ personal: t('homesim.advanced.text3'), communication: t('homesim.advanced.text4'), network: t('homesim.advanced.text5'), management: t('homesim.advanced.text6') })[group],
     sections: sections.value.filter(section => settingsSectionGroup(section.id) === group)
   }))
 )
@@ -333,6 +330,10 @@ function preloadSection(section: SettingsSection): void {
         return loadF50DevicePanel
       case 'net-switches':
         return loadNetworkSwitchesPanel
+      case 'nkn':
+        return loadNKNSettingsPanel
+      case 'wireguard':
+        return loadWireGuardPanel
       case 'nkn-node':
         return loadNknNodePanel
       case 'nkn-network':
@@ -581,18 +582,6 @@ onMounted(() => {
               </PageContentFrame>
             </div>
 
-            <div v-else-if="selectedSection === 'nkn-node'" class="settings-content">
-              <PageContentFrame mode="reading">
-                <NknNodePanel />
-              </PageContentFrame>
-            </div>
-
-            <div v-else-if="selectedSection === 'nkn-network'" class="settings-content">
-              <PageContentFrame mode="reading">
-                <NknNetworkPanel />
-              </PageContentFrame>
-            </div>
-
             <div v-else-if="selectedSection === 'f50'" class="settings-content">
               <PageContentFrame mode="reading">
                 <F50DevicePanel />
@@ -605,9 +594,23 @@ onMounted(() => {
               </PageContentFrame>
             </div>
 
+            <div v-else-if="selectedSection === 'nkn'" class="settings-content">
+              <PageContentFrame mode="reading"><NKNSettingsPanel /></PageContentFrame>
+            </div>
+            <div v-else-if="selectedSection === 'nkn-node'" class="settings-content">
+              <PageContentFrame mode="reading"><NknNodePanel /></PageContentFrame>
+            </div>
+            <div v-else-if="selectedSection === 'nkn-network'" class="settings-content">
+              <PageContentFrame mode="reading"><NknNetworkPanel /></PageContentFrame>
+            </div>
+            <div v-else-if="selectedSection === 'wireguard'" class="settings-content">
+              <PageContentFrame mode="reading"><WireGuardPanel /></PageContentFrame>
+            </div>
+
             <div v-else-if="selectedSection === 'pairing'" class="settings-content">
               <PageContentFrame mode="reading">
-                <PairingSettingsPanel />
+                <MobileEnrollmentPanel />
+                <details class="homesim-sim-notice"><summary class="ui-disclosure-summary">{{ t('homesim.advanced.text7') }}</summary><PairingSettingsPanel /></details>
               </PageContentFrame>
             </div>
 

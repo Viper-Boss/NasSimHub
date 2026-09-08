@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { LoaderCircle, Plus, Save, Send, Trash2 } from '@lucide/vue'
+import SelectControl from '../SelectControl.vue'
 import {
   getForwarderSettings,
   saveForwarderSettings,
@@ -174,9 +175,7 @@ onMounted(load)
           </label>
           <label>
             <span>{{ t('homesim.forwarder.channelType') }}</span>
-            <select v-model="channel.type">
-              <option v-for="kind in channelTypes" :key="kind" :value="kind">{{ typeLabel(kind) }}</option>
-            </select>
+            <SelectControl :model-value="channel.type" :options="channelTypes.map(kind => ({value:kind,label:typeLabel(kind)}))" :label="t('homesim.forwarder.channelType')" @update:model-value="channel.type = $event as ForwarderChannel['type']" />
           </label>
         </div>
         <label v-if="needsURL(channel.type)">

@@ -188,7 +188,7 @@ onMounted(() => { void load() })
       </div>
 
       <details class="nkn-node__logs" @toggle="toggleLogs(($event.target as HTMLDetailsElement).open)">
-        <summary>{{ t('homesim.nknNode.logs') }}</summary>
+        <summary class="ui-disclosure-summary">{{ t('homesim.nknNode.logs') }}</summary>
         <div v-if="logsLoading" class="nkn-node__loading"><LoaderCircle class="spin" :size="16" /></div>
         <pre v-else-if="logs.length" class="nkn-node__logtail">{{ logs.join('\n') }}</pre>
         <p v-else class="nkn-node__hint">{{ t('homesim.nknNode.noLogs') }}</p>

@@ -1,4 +1,5 @@
 import { nasPreflightEN } from '../nasPreflight'
+import fallback from './en-US'
 
 import { homesimEN } from '../homesimData'
 
@@ -256,6 +257,7 @@ export default {
     loginFailed: '登入失敗'
   },
   settings: {
+    ...fallback.settings,
     title: '設定',
     personal: '個人',
     management: '管理',
@@ -882,6 +884,7 @@ export default {
     activityMissingDetail: '返回列表選擇其他通訊活動'
   },
   traffic: {
+    ...fallback.traffic,
     lineFallback: '線路 {suffix}',
     unknownLine: '未知線路',
     runtimeStale: '執行狀態暫未更新',

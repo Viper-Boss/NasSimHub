@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useAdvancedI18n as useI18n } from '../../i18n/useAdvancedI18n'
 import { LoaderCircle, Network, RefreshCw, Save } from '@lucide/vue'
 import {
   getHomeSIMNetworkSwitches,
@@ -48,6 +48,7 @@ onMounted(load)
 
 <template>
   <section class="net-switches">
+    <div class="homesim-sim-notice"><strong>{{ t('homesim.advanced.text85') }}</strong><p>{{ t('homesim.advanced.text86') }}</p><RouterLink :to="{ name: 'traffic' }">{{ t('homesim.advanced.text87') }}</RouterLink></div>
     <div v-if="loading" class="net-switches__state" role="status">
       <LoaderCircle class="spin" :size="18" />
       {{ t('common.loading') }}
@@ -60,7 +61,7 @@ onMounted(load)
           <Network :size="17" />
           <div>
             <h3>{{ t('homesim.netSwitches.shareTitle') }}</h3>
-            <small>{{ t('homesim.f50.connection') }} · EG25-G</small>
+            <small>{{ t('homesim.advanced.text88') }}</small>
           </div>
         </header>
         <p class="net-switches__desc">{{ t('homesim.netSwitches.shareDesc') }}</p>
@@ -92,7 +93,7 @@ onMounted(load)
           <Network :size="17" />
           <div>
             <h3>{{ t('homesim.netSwitches.onlyTitle') }}</h3>
-            <small>{{ t('homesim.f50.connection') }} · EG25-G · {{ t('homesim.f50.smsTitle') }}</small>
+            <small>{{ t('homesim.advanced.text89') }}</small>
           </div>
         </header>
         <p class="net-switches__desc">{{ t('homesim.netSwitches.onlyDesc') }}</p>
