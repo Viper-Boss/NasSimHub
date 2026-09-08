@@ -120,7 +120,13 @@ type nknNodeRuntime struct {
 	WalletAddress string    `json:"wallet_address,omitempty"`
 	StartedAt     time.Time `json:"started_at,omitempty"`
 	SyncState     string    `json:"sync_state,omitempty"`
-	Error         string    `json:"error,omitempty"`
+	// WalletBalance is the current balance of the address that receives
+	// mining rewards (BeneficiaryAddr, or the node wallet when unset),
+	// formatted like "12.34 NKN". RelayCount is the node's lifetime relayed
+	// message count — the direct driver of mining rewards.
+	WalletBalance string `json:"wallet_balance,omitempty"`
+	RelayCount    uint64 `json:"relay_count,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 type nknNodeStatusResponse struct {
@@ -467,28 +473,81 @@ func (m *nknNodeManager) walletPassword() string {
 	return strings.TrimSpace(string(raw))
 }
 
-// probeNodeState queries the local nknd JSON-RPC for its sync state; failures
-// are non-fatal and simply leave the field empty.
-func probeNKNNodeState() string {
+// probeNKNNodeInfo queries the local nknd JSON-RPC for its sync state and
+// lifetime relay count; failures are non-fatal and simply leave the fields
+// empty/zero.
+func probeNKNNodeInfo() (string, uint64) {
 	client := &http.Client{Timeout: 1500 * time.Millisecond}
 	body := strings.NewReader(`{"jsonrpc":"2.0","method":"getnodestate","params":{},"id":1}`)
 	response, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d", nknNodeRPCPort), "application/json", body)
 	if err != nil {
-		return ""
+		return "", 0
 	}
 	defer response.Body.Close()
 	var payload struct {
 		Result map[string]any `json:"result"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return ""
+		return "", 0
 	}
+	return nknNodeParseNodeInfo(payload.Result)
+}
+
+// nknNodeParseNodeInfo extracts syncState and relayMessageCount from a
+// getnodestate result object, tolerating the key casing variants seen across
+// nknd versions.
+func nknNodeParseNodeInfo(result map[string]any) (string, uint64) {
+	var syncState string
 	for _, key := range []string{"syncState", "SyncState", "sync_state"} {
-		if value, ok := payload.Result[key].(string); ok && value != "" {
-			return value
+		if value, ok := result[key].(string); ok && value != "" {
+			syncState = value
+			break
 		}
 	}
-	return ""
+	var relayCount uint64
+	for _, key := range []string{"relayMessageCount", "RelayMessageCount", "relay_message_count"} {
+		if value, ok := result[key].(float64); ok && value >= 0 {
+			relayCount = uint64(value)
+			break
+		}
+	}
+	return syncState, relayCount
+}
+
+// probeNKNWalletBalance returns the current balance of an address via the
+// local nknd JSON-RPC, formatted like "12.34 NKN". nknd encodes Fixed64
+// amounts as hex with 8 decimals; failures are non-fatal and return "".
+func probeNKNWalletBalance(address string) string {
+	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	params, _ := json.Marshal(map[string]string{"address": address})
+	body := strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","method":"getbalancebyaddr","params":%s,"id":1}`, params))
+	response, err := client.Post(fmt.Sprintf("http://127.0.0.1:%d", nknNodeRPCPort), "application/json", body)
+	if err != nil {
+		return ""
+	}
+	defer response.Body.Close()
+	var payload struct {
+		Result any `json:"result"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return ""
+	}
+	raw, _ := payload.Result.(string)
+	return nknNodeFormatBalance(raw)
+}
+
+// nknNodeFormatBalance converts a hex-encoded Fixed64 NKN amount (8 decimals)
+// into a human string like "12.34 NKN". Empty or unparsable input yields "".
+func nknNodeFormatBalance(raw string) string {
+	raw = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "0x"))
+	if raw == "" {
+		return ""
+	}
+	value, err := strconv.ParseUint(raw, 16, 64)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%.2f NKN", float64(value)/1e8)
 }
 
 type nknNodeLogWriter struct {
@@ -754,10 +813,19 @@ func (m *nknNodeManager) status() nknNodeStatusResponse {
 	}
 	running := m.running
 	m.mu.Unlock()
-	if running {
-		runtime.SyncState = probeNKNNodeState()
-	}
 	runtime.WalletAddress = m.walletAddress()
+	if running {
+		runtime.SyncState, runtime.RelayCount = probeNKNNodeInfo()
+		// The reward receiver's balance: BeneficiaryAddr when set, the node
+		// wallet otherwise.
+		address := strings.TrimSpace(settings.BeneficiaryAddr)
+		if address == "" {
+			address = runtime.WalletAddress
+		}
+		if address != "" {
+			runtime.WalletBalance = probeNKNWalletBalance(address)
+		}
+	}
 	return nknNodeStatusResponse{
 		Settings:       settings,
 		Runtime:        runtime,

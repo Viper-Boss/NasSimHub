@@ -139,6 +139,44 @@ func TestNKNNodeWriteNodeConfigSeedOverrides(t *testing.T) {
 	}
 }
 
+func TestNKNNodeFormatBalance(t *testing.T) {
+	cases := map[string]string{
+		"1bc16d674ec80000": "2.00 NKN", // 2 * 1e8
+		"05f5e100":         "1.00 NKN", // 1e8
+		"3b9aca00":         "1.00 NKN", // 1e8 without padding
+		"00":               "0.00 NKN",
+		"0x2a":             "0.00 NKN", // 42 units
+		"":                 "",
+		"not-hex":          "",
+	}
+	for input, want := range cases {
+		if got := nknNodeFormatBalance(input); got != want {
+			t.Errorf("nknNodeFormatBalance(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestNKNNodeParseNodeInfo(t *testing.T) {
+	state, relay := nknNodeParseNodeInfo(map[string]any{
+		"syncState":         "syncing",
+		"relayMessageCount": float64(4242),
+	})
+	if state != "syncing" || relay != 4242 {
+		t.Fatalf("unexpected parse: state=%q relay=%d", state, relay)
+	}
+	state, relay = nknNodeParseNodeInfo(map[string]any{
+		"SyncState":           "synced",
+		"relay_message_count": float64(7),
+	})
+	if state != "synced" || relay != 7 {
+		t.Fatalf("unexpected alt-casing parse: state=%q relay=%d", state, relay)
+	}
+	state, relay = nknNodeParseNodeInfo(map[string]any{})
+	if state != "" || relay != 0 {
+		t.Fatalf("empty result should yield zero values, got state=%q relay=%d", state, relay)
+	}
+}
+
 func TestNKNNodeApplyValidatesBeneficiary(t *testing.T) {
 	manager := newTestNKNNodeManager(t)
 	if _, err := manager.apply(nknNodeUpdateRequest{Enabled: false, BeneficiaryAddr: "not-an-nkn-address"}); err == nil {
