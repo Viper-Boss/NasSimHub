@@ -164,6 +164,7 @@ onMounted(() => {
       <details class="nkn-network__hint">
         <summary class="ui-disclosure-summary">{{ t('homesim.nknNetwork.statisticsDetails') }}</summary>
         <p>{{ t('homesim.nknNetwork.statisticsScope') }}</p>
+        <p v-if="peers?.coverage_started_at">{{ t('homesim.nknNetwork.coverageSince', {date: new Date(peers.coverage_started_at).toLocaleString()}) }}</p>
       </details>
       <p v-if="peersError" class="field-error" role="alert">{{ peersError }}</p>
     </div>

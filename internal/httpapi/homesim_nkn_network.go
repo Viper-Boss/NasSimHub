@@ -71,14 +71,16 @@ type nknNetworkPeer struct {
 }
 
 type nknNetworkPeersResponse struct {
-	Active24h       *int             `json:"active_24h"`
-	ActiveMonth     *int             `json:"active_month"`
-	RegisteredTotal *int             `json:"registered_total"`
-	Topic           string           `json:"topic"`
-	Window          string           `json:"window"`
-	Count           int              `json:"count"`
-	Peers           []nknNetworkPeer `json:"peers"`
-	FetchedAt       time.Time        `json:"fetched_at"`
+	CoverageStartedAt time.Time        `json:"coverage_started_at,omitempty"`
+	StatisticsScope   string           `json:"statistics_scope"`
+	Active24h         *int             `json:"active_24h"`
+	ActiveMonth       *int             `json:"active_month"`
+	RegisteredTotal   *int             `json:"registered_total"`
+	Topic             string           `json:"topic"`
+	Window            string           `json:"window"`
+	Count             int              `json:"count"`
+	Peers             []nknNetworkPeer `json:"peers"`
+	FetchedAt         time.Time        `json:"fetched_at"`
 }
 
 type nknNetworkManager struct {
@@ -401,6 +403,12 @@ func (api *API) nknNetworkPeers(response http.ResponseWriter, request *http.Requ
 	if err != nil {
 		writeError(response, http.StatusBadGateway, "nkn_network", fmt.Sprintf("could not reach any NKN seed: %v", err), "")
 		return
+	}
+	if err := api.recordNKNObservations(&peers); err != nil {
+		// Statistics persistence must never take down the device directory:
+		// a corrupt or unwritable observations file only means the monthly
+		// and historical counters stay stale, so log and serve the peers.
+		api.logger.Warn("record NKN network observations failed; serving peers without updated statistics", "error", err)
 	}
 	writeJSON(response, http.StatusOK, peers)
 }

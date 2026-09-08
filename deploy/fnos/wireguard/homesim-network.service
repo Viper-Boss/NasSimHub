@@ -1,0 +1,21 @@
+[Unit]
+Description=HomeSIM managed WireGuard and LAN MTProto
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HOMESIM_WG_DIRECTORY=/mnt/docker-data/homesim/data/homesim/wireguard
+ExecStart=/usr/bin/python3 /usr/local/lib/homesim-network/runtime.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/mnt/docker-data/homesim/data/homesim/wireguard /etc/homesim-wireguard /run /proc/sys/net/ipv4/ip_forward
+
+[Install]
+WantedBy=multi-user.target

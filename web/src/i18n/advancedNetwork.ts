@@ -1,4 +1,6 @@
 export const advancedEN = {
+  mtgTitle: 'Telegram MTProto proxy', mtgEnable: 'Enable LAN MTProto', mtgBind: 'NAS LAN IPv4', mtgPort: 'TCP port', mtgSecret: 'Telegram proxy secret', mtgCopy: 'Copy Telegram configuration link',
+  mtgHint: 'Independent of the VPN switch. Requires the host runtime and mtg. It listens only on the chosen private NAS address and restricts sources to its subnet. A secret is generated on first enable. The proxy uses the NAS network exit; it does not select a SIM automatically.',
   "text0": "Advanced VPN and LAN proxies",
   "text1": "NKN network",
   "text2": "Connection, encrypted identity and remote messages",
@@ -93,6 +95,8 @@ export const advancedEN = {
   "revisions": "Saved revision {saved} · Applied revision {applied}. Saving and runtime status are separate."
 }
 export const advancedZH = {
+  mtgTitle: 'Telegram MTProto 代理', mtgEnable: '启用局域网 MTProto', mtgBind: 'NAS 局域网 IPv4', mtgPort: 'TCP 端口', mtgSecret: 'Telegram 代理密钥', mtgCopy: '复制 Telegram 配置链接',
+  mtgHint: '独立于 VPN 开关，需要宿主运行服务和 mtg。仅监听指定的 NAS 私网地址，限制同网段来源；首次启用自动生成密钥。当前使用 NAS 网络出口，不会自动选择手机卡线路。',
   "text0": "高级 VPN 与局域网代理",
   "text1": "NKN 网络",
   "text2": "连接状态、加密身份与远程消息",

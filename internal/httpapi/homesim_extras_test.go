@@ -48,19 +48,19 @@ func TestLineQuotaPersistAndAttach(t *testing.T) {
 	}
 	invalid := `{"revision":1,"quotas":{"line-a":{"data_used":-1,"data_total":0}}}`
 	response := httptest.NewRecorder()
-	api.homeSIMQuotas(response, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim/quotas", bytes.NewReader([]byte(invalid))))
+	api.homeSIMQuotas(response, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/quotas", bytes.NewReader([]byte(invalid))))
 	if response.Code != 400 {
 		t.Fatalf("negative quota accepted: %d", response.Code)
 	}
 
 	valid := `{"revision":1,"quotas":{"line-a":{"data_used":18.6,"data_total":20,"sms_used":118,"sms_total":200,"voice_used":132,"voice_total":500}}}`
 	response = httptest.NewRecorder()
-	api.homeSIMQuotas(response, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim/quotas", bytes.NewReader([]byte(valid))))
+	api.homeSIMQuotas(response, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/quotas", bytes.NewReader([]byte(valid))))
 	if response.Code != 200 {
 		t.Fatalf("quota save: %d %s", response.Code, response.Body.String())
 	}
 	stale := httptest.NewRecorder()
-	api.homeSIMQuotas(stale, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim/quotas", bytes.NewReader([]byte(valid))))
+	api.homeSIMQuotas(stale, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/quotas", bytes.NewReader([]byte(valid))))
 	if stale.Code != 409 {
 		t.Fatal("stale revision accepted")
 	}
@@ -91,9 +91,9 @@ func TestCallFilterValidationAndPersistence(t *testing.T) {
 	}
 	bad := defaultHomeSIMCallFilter()
 	bad.Mode = "whitelist"
-	bad.Whitelist = []string{"10086"}
+	bad.Whitelist = []string{"not-a-number"}
 	if validHomeSIMCallFilter(bad) {
-		t.Fatal("short code accepted in whitelist")
+		t.Fatal("invalid phone number accepted in whitelist")
 	}
 	bad = defaultHomeSIMCallFilter()
 	bad.Mode = "blacklist"
@@ -104,7 +104,7 @@ func TestCallFilterValidationAndPersistence(t *testing.T) {
 
 	body := `{"revision":1,"mode":"blacklist","whitelist":[],"blacklist":["13901898834"],"min_reports":10}`
 	save := httptest.NewRecorder()
-	api.homeSIMCallFilter(save, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim/call-filter", bytes.NewReader([]byte(body))))
+	api.homeSIMCallFilter(save, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/call-filter", bytes.NewReader([]byte(body))))
 	if save.Code != 200 {
 		t.Fatalf("filter save: %d %s", save.Code, save.Body.String())
 	}
@@ -140,13 +140,13 @@ func TestF50SettingsPersistAndValidate(t *testing.T) {
 	}
 	bad := `{"revision":1,"base_url":"http://192.168.0.1/","username":"admin","credential_ref":"HOMESIM_F50_PASSWORD"}`
 	save := httptest.NewRecorder()
-	api.homeSIMF50(save, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim/f50", bytes.NewReader([]byte(bad))))
+	api.homeSIMF50(save, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/f50", bytes.NewReader([]byte(bad))))
 	if save.Code != 400 {
 		t.Fatalf("trailing slash base_url accepted: %d", save.Code)
 	}
 	good := `{"revision":1,"base_url":"http://192.168.0.1","username":"admin","credential_ref":"HOMESIM_F50_PASSWORD"}`
 	save = httptest.NewRecorder()
-	api.homeSIMF50(save, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim/f50", bytes.NewReader([]byte(good))))
+	api.homeSIMF50(save, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/f50", bytes.NewReader([]byte(good))))
 	if save.Code != 200 {
 		t.Fatalf("f50 save: %d %s", save.Code, save.Body.String())
 	}

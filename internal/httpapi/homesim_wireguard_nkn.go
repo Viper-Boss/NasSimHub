@@ -63,6 +63,9 @@ func (api *API) receiveWireGuardAnnouncement(message *nkn.Message) {
 		if peer.NKNAddress == "" || peer.NKNAddress != message.Src || peer.PublicKey != offer.PublicKey || offer.IssuedAt <= peer.LastNKNUpdate {
 			continue
 		}
+		if peer.Endpoint == offer.Endpoint {
+			return
+		}
 		peer.Endpoint = offer.Endpoint
 		peer.LastNKNUpdate = offer.IssuedAt
 		settings.Revision++

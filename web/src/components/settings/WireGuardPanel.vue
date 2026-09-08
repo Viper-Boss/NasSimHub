@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { useAdvancedI18n as useI18n } from '../../i18n/useAdvancedI18n'
 const { t } = useI18n()
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import SensitiveValue from '../SensitiveValue.vue'
 import { ShieldCheck, Plus, Trash2 } from '@lucide/vue'
 import { getWireGuardSettings, saveWireGuardSettings, type WireGuardResponse } from '../../api/client'
 const data = ref<WireGuardResponse | null>(null)
 const busy = ref(false)
 const error = ref('')
-async function load() { try { data.value = await getWireGuardSettings() } catch (e) { error.value = e instanceof Error ? e.message : t('homesim.advanced.text54') } }
+function normalizeWG(value: WireGuardResponse) { value.settings.mtproto ||= {enabled:false,bind_address:'',port:3128,secret:''}; if (!value.settings.mtproto.port) value.settings.mtproto.port = 3128; return value }
+async function load() { error.value = ''; try { data.value = normalizeWG(await getWireGuardSettings()) } catch (e) { error.value = e instanceof Error ? e.message : t('homesim.advanced.text54') } }
 async function save() { if (!data.value || busy.value) return; busy.value = true; error.value = ''; try { data.value = await saveWireGuardSettings(data.value.settings) } catch (e) { error.value = e instanceof Error ? e.message : t('homesim.advanced.text55') } finally { busy.value = false } }
-const labels: Record<string,string> = { not_installed: t('homesim.advanced.text56'), disabled: t('homesim.advanced.text10'), running: t('homesim.advanced.text57'), error: t('homesim.advanced.text58'), offline: t('homesim.advanced.text59') }
+const labels = computed<Record<string,string>>(() => ({ not_installed: t('homesim.advanced.text56'), disabled: t('homesim.advanced.text10'), running: t('homesim.advanced.text57'), error: t('homesim.advanced.text58'), offline: t('homesim.advanced.text59') }))
+const mtgLink = computed(() => { const s=data.value?.settings.mtproto; return s?.secret ? 'tg://proxy?' + new URLSearchParams({server:s.bind_address, port:String(s.port), secret:s.secret}).toString() : '' })
+async function copyMTG() { try { await navigator.clipboard.writeText(mtgLink.value) } catch { error.value=t('homesim.advanced.text14') } }
 onMounted(load)
 </script>
 <template>
@@ -21,6 +25,15 @@ onMounted(load)
     <button type="button" class="secondary-button" :disabled="data.settings.peers.length >= 64" @click="data.settings.peers.push({ name:'',public_key:'',endpoint:'',allowed_ips:[],nkn_address:'' })"><Plus :size="16" />{{ t('homesim.advanced.text81') }}</button>
     <div class="wg-actions"><button class="primary-button" type="button" :disabled="busy" @click="save">{{ busy ? t('homesim.advanced.text64') : t('homesim.advanced.text65') }}</button><button class="secondary-button" type="button" :disabled="busy" @click="load">{{ t('homesim.advanced.text26') }}</button></div></template>
     <article class="homesim-sim-notice"><h3>{{ t('homesim.advanced.text82') }}</h3><p>{{ t('homesim.advanced.text83') }}</p><RouterLink :to="{name:'traffic'}">{{ t('homesim.advanced.text84') }}</RouterLink></article>
+    <article v-if="data?.settings.mtproto" class="wg-peer">
+      <h3>{{ t('homesim.advanced.mtgTitle') }}</h3><p>{{ t('homesim.advanced.mtgHint') }}</p>
+      <div class="wg-grid"><label class="wg-switch"><input v-model="data.settings.mtproto.enabled" class="ui-check" type="checkbox" />{{ t('homesim.advanced.mtgEnable') }}</label>
+      <label>{{ t('homesim.advanced.mtgBind') }}<input v-model="data.settings.mtproto.bind_address" placeholder="192.168.120.190" /></label>
+      <label>{{ t('homesim.advanced.mtgPort') }}<input v-model.number="data.settings.mtproto.port" type="number" min="1024" max="65535" /></label></div>
+      <p>{{ labels[data.status.mtproto_state || 'not_installed'] || t('homesim.advanced.text60') }}</p>
+      <SensitiveValue v-if="data.settings.mtproto.secret" :value="data.settings.mtproto.secret" :label="t('homesim.advanced.mtgSecret')" />
+      <div class="wg-actions"><button type="button" class="primary-button" :disabled="busy" @click="save">{{ t('homesim.advanced.text65') }}</button><button v-if="mtgLink" type="button" class="secondary-button" @click="copyMTG">{{ t('homesim.advanced.mtgCopy') }}</button></div>
+    </article>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
   </section>
 </template>

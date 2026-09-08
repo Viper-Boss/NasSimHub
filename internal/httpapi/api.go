@@ -319,6 +319,7 @@ type API struct {
 	homeSIMNKNStatus           homeSIMNKNStatus
 	mobileInviteMu             sync.Mutex
 	wireGuardMu                sync.Mutex
+	nknMetricsMu               sync.Mutex
 	mobileInvites              map[[32]byte]mobileInvite
 	homeSIMNKNClients          map[string]*homeSIMNKNClient
 	nknNode                    *nknNodeManager

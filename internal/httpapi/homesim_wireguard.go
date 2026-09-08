@@ -178,6 +178,14 @@ func (api *API) wireGuardSettingsHandler(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		next.Revision++
+		for index := range next.Peers {
+			next.Peers[index].LastNKNUpdate = 0
+			for _, prior := range s.Peers {
+				if prior.PublicKey == next.Peers[index].PublicKey && prior.NKNAddress == next.Peers[index].NKNAddress {
+					next.Peers[index].LastNKNUpdate = prior.LastNKNUpdate
+				}
+			}
+		}
 		if err := writeHomeSIMJSON(filepath.Join(dir, "settings.json"), next); err != nil {
 			api.writeInternalError(w, r, "save WireGuard settings", err)
 			return

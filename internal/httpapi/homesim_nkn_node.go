@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -179,17 +180,18 @@ type nknWalletFile struct {
 }
 
 type nknNodeManager struct {
-	mu        sync.Mutex
-	logger    *slog.Logger
-	dir       string
-	cmd       *exec.Cmd
-	done      chan struct{}
-	running   bool
-	stopReq   bool
-	startedAt time.Time
-	lastErr   string
-	state     string
-	logs      []string
+	operationMu sync.Mutex
+	mu          sync.Mutex
+	logger      *slog.Logger
+	dir         string
+	cmd         *exec.Cmd
+	done        chan struct{}
+	running     bool
+	stopReq     bool
+	startedAt   time.Time
+	lastErr     string
+	state       string
+	logs        []string
 }
 
 func nknNodeDataDir() string {
@@ -400,7 +402,11 @@ func validateNKNKeystore(raw string) (string, error) {
 // keystore itself, exactly like the official entrypoint does: nknc wallet -c
 // reads the password twice from stdin (password + confirmation).
 func (m *nknNodeManager) createWallet(password string) (string, error) {
-	password = strings.TrimSpace(password)
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	if strings.ContainsAny(password, "\r\n") {
+		return "", errors.New("password must not contain line breaks")
+	}
 	if len(password) < nknWalletMinPasswordLen {
 		return "", fmt.Errorf("password must be at least %d characters", nknWalletMinPasswordLen)
 	}
@@ -415,7 +421,9 @@ func (m *nknNodeManager) createWallet(password string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("nknc binary not found: %w", err)
 	}
-	command := exec.Command(nknc, "wallet", "-c")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, nknc, "wallet", "-c")
 	command.Dir = m.dir
 	stdin, err := command.StdinPipe()
 	if err != nil {
@@ -435,7 +443,7 @@ func (m *nknNodeManager) createWallet(password string) (string, error) {
 	}
 	_ = stdin.Close()
 	if err := command.Wait(); err != nil {
-		return "", fmt.Errorf("nknc wallet -c failed: %w: %s", err, strings.TrimSpace(output.String()))
+		return "", fmt.Errorf("wallet creation failed: %w", err)
 	}
 	if !walletExists(walletPath) {
 		return "", fmt.Errorf("nknc wallet -c finished but %s was not created", nknNodeWalletFile)
@@ -452,6 +460,17 @@ func (m *nknNodeManager) createWallet(password string) (string, error) {
 // password is required because nknd needs wallet.pswd to unlock the node
 // after an unattended restart; it never leaves the NAS.
 func (m *nknNodeManager) importWallet(keystoreJSON, password string) (string, error) {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	if walletExists(filepath.Join(m.dir, nknNodeWalletFile)) {
+		return "", errors.New("a wallet already exists; back it up before explicitly deleting it")
+	}
+	m.mu.Lock()
+	running := m.running
+	m.mu.Unlock()
+	if running {
+		return "", errors.New("stop the node before importing a wallet")
+	}
 	keystoreJSON = strings.TrimSpace(keystoreJSON)
 	if keystoreJSON == "" {
 		return "", errors.New("keystore contents required")
@@ -459,7 +478,9 @@ func (m *nknNodeManager) importWallet(keystoreJSON, password string) (string, er
 	if len(keystoreJSON) > 64<<10 {
 		return "", errors.New("keystore too large")
 	}
-	password = strings.TrimSpace(password)
+	if strings.ContainsAny(password, "\r\n") {
+		return "", errors.New("password must not contain line breaks")
+	}
 	if len(password) < nknWalletMinPasswordLen {
 		return "", fmt.Errorf("password must be at least %d characters", nknWalletMinPasswordLen)
 	}
@@ -484,6 +505,8 @@ func (m *nknNodeManager) importWallet(keystoreJSON, password string) (string, er
 // stopping the node. This is the self-custody "wipe keys" action: once gone,
 // funds can only be recovered from an external backup of the keystore.
 func (m *nknNodeManager) deleteWallet(confirm bool) error {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !confirm {
 		return errors.New("confirm=true is required to delete the node wallet")
 	}
@@ -1051,6 +1074,8 @@ func (m *nknNodeManager) stop() {
 
 // apply persists new settings and reconciles the runtime to match.
 func (m *nknNodeManager) apply(request nknNodeUpdateRequest) (nknNodeStatusResponse, error) {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !nknNodeBinaryAvailable() && request.Enabled {
 		return nknNodeStatusResponse{}, errors.New("the NKN node binaries are not present in this build; the embedded node is only available in the container image")
 	}
@@ -1070,7 +1095,7 @@ func (m *nknNodeManager) apply(request nknNodeUpdateRequest) (nknNodeStatusRespo
 	if err != nil {
 		return nknNodeStatusResponse{}, err
 	}
-	if request.ExpectedRevision > 0 && request.ExpectedRevision != current.Revision {
+	if request.ExpectedRevision != current.Revision {
 		return nknNodeStatusResponse{}, errNKNNodeRevisionConflict
 	}
 	next := nknNodeSettings{
@@ -1223,6 +1248,7 @@ type nknNodeWalletResponse struct {
 //	POST {"action":"import","keystore":"…","password":"…"} — bring your own wallet
 //	POST {"action":"delete","confirm":true}          — irreversibly wipe keys
 func (api *API) nknNodeWallet(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Cache-Control", "no-store")
 	if request.Method != http.MethodPost {
 		response.Header().Set("Allow", http.MethodPost)
 		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported", "")
@@ -1264,6 +1290,9 @@ func (api *API) nknNodeWallet(response http.ResponseWriter, request *http.Reques
 // wallet apps), so serving it is safe; the password itself never leaves the
 // NAS.
 func (api *API) nknNodeWalletBackup(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Cache-Control", "no-store")
+	api.nknNode.operationMu.Lock()
+	defer api.nknNode.operationMu.Unlock()
 	if request.Method != http.MethodGet {
 		response.Header().Set("Allow", http.MethodGet)
 		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET is supported", "")

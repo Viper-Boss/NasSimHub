@@ -47,7 +47,7 @@ func TestHomeSIMDraftPersistsAndConflicts(t *testing.T) {
 	}
 	put := func() *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
-		api.homeSIMDraft(response, httptest.NewRequest(http.MethodPut, "/api/v1/settings/homesim", bytes.NewReader(body)))
+		api.homeSIMDraft(response, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim", bytes.NewReader(body)))
 		return response
 	}
 	first := put()

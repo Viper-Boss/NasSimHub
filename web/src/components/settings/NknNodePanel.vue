@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useAdvancedI18n as useI18n } from '../../i18n/useAdvancedI18n'
 import { Copy, Download, KeyRound, LoaderCircle, QrCode, Save, Trash2 } from '@lucide/vue'
 import QRCode from 'qrcode'
 import {

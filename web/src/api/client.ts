@@ -2689,6 +2689,8 @@ export interface NKNNetworkPeer {
 }
 
 export interface NKNNetworkPeers {
+  coverage_started_at?: string
+  statistics_scope?: string
   active_24h: number | null
   active_month: number | null
   registered_total: number | null
@@ -2720,6 +2722,8 @@ export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
   const metric = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
   return {
     active_24h: metric(result.active_24h),
+    coverage_started_at: result.coverage_started_at,
+    statistics_scope: result.statistics_scope,
     active_month: metric(result.active_month),
     registered_total: metric(result.registered_total),
     topic: typeof result.topic === 'string' ? result.topic : '',
