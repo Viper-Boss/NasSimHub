@@ -204,6 +204,12 @@ func (session *dhcp4Session) rebind(ctx context.Context) (*nclient4.Lease, error
 	}, nil
 }
 
+// Release is best-effort by design. The DHCPRELEASE message is advisory
+// (RFC 2131 section 4.4.1): the server reclaims the lease on its own timer,
+// and the caller tears the interface state down immediately after. Any
+// failure here — for example another DHCP client on the host transiently
+// owning udp/68 during one of its transactions — must never block the
+// caller's disconnect flow, so it is reported as success.
 func (session *dhcp4Session) Release(ctx context.Context) error {
 	session.mu.Lock()
 	defer session.mu.Unlock()
@@ -222,7 +228,7 @@ func (session *dhcp4Session) Release(ctx context.Context) error {
 		false,
 	)
 	if err != nil {
-		return err
+		return nil
 	}
 	client, err := nclient4.NewWithConn(
 		connection,
@@ -231,10 +237,11 @@ func (session *dhcp4Session) Release(ctx context.Context) error {
 	)
 	if err != nil {
 		_ = connection.Close()
-		return err
+		return nil
 	}
 	defer client.Close()
-	return client.Release(session.wireLease)
+	_ = client.Release(session.wireLease)
+	return nil
 }
 
 func (session *dhcp4Session) Close() error {
