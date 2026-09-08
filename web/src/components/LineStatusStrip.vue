@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
+import { Phone } from '@lucide/vue'
 import { bootstrapResource } from '../state/workspace'
 import { requestPhoneGeo } from '../state/phoneGeo'
 import { accessTechnologyLabel, cnOperatorNameOf, ownNumberFacts } from '../utils/phoneRegion'
@@ -132,12 +133,6 @@ const carrierName = computed(() => {
   return facts.value.carrier || ''
 })
 
-// 顶栏左侧「运营商 + 归属地」（如：中国联通 上海）——按号码归属展示（166=联通），
-// 归属地查询结果优先，其次号段表，最后回退服务网络 PLMN 名
-const homeCarrier = computed(() => remoteGeo.value?.carrier || facts.value.carrier || carrierName.value)
-const homeRegion = computed(() => remoteGeo.value?.province || facts.value.region || '')
-const carrierGeo = computed(() => [homeCarrier.value, homeRegion.value].filter(Boolean).join(' '))
-
 // 移动数据开关：取设备配置里是否有已连接的数据连接；null = 未知（灰色不闪）
 const dataOn = ref<boolean | null>(null)
 
@@ -239,29 +234,7 @@ onBeforeUnmount(() => {
     >
       <div class="line-status__grid">
         <div class="line-status__row">
-          <span v-if="carrierGeo" class="line-status__carrier" :title="carrierGeo">{{ carrierGeo }}</span>
-          <span
-            class="line-status__vowifi"
-            :title="t('homesim.strip.vowifiHint')"
-            :aria-label="t('homesim.strip.vowifiHint')"
-          >
-            <svg width="13" height="10" viewBox="0 0 14 11" fill="none" aria-hidden="true">
-              <path d="M7 10 4.7 7.5a3.4 3.4 0 0 1 4.6 0Z" fill="currentColor" />
-              <path d="M2.5 5.4a6.6 6.6 0 0 1 9 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-              <path d="M.7 3.1a9.7 9.7 0 0 1 12.6 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-            </svg>
-          </span>
-          <span
-            class="line-status__data"
-            :class="{ 'is-on': dataOn === true }"
-            :title="dataOn === true ? t('homesim.strip.dataOn') : dataOn === false ? t('homesim.strip.dataOff') : t('homesim.strip.dataUnknown')"
-            :aria-label="dataOn === true ? t('homesim.strip.dataOn') : dataOn === false ? t('homesim.strip.dataOff') : t('homesim.strip.dataUnknown')"
-          >
-            <svg width="12" height="9" viewBox="0 0 12 9" aria-hidden="true">
-              <path d="M4.2.4 7.4 4.6H1Z" fill="currentColor" />
-              <path d="M7.8 8.6 4.6 4.4h6.4Z" fill="currentColor" />
-            </svg>
-          </span>
+          <span v-if="carrierName" class="line-status__carrier">{{ carrierName }}</span>
           <span class="line-status__divider" aria-hidden="true" />
           <span class="line-status__bars" role="img" :aria-label="`${signalQuality ?? 0}%`">
             <span
@@ -278,6 +251,28 @@ onBeforeUnmount(() => {
             :class="{ 'is-unknown': volteState === 'unknown' }"
             :title="volte.hint"
           >VoLTE</span>
+          <span
+            class="line-status__vowifi"
+            :title="t('homesim.strip.vowifiHint')"
+            :aria-label="t('homesim.strip.vowifiHint')"
+          >
+            <Phone :size="11" :stroke-width="2.6" aria-hidden="true" />
+            <svg width="9" height="5" viewBox="0 0 10 6" fill="none" aria-hidden="true">
+              <path d="M1 4.8a6.4 6.4 0 0 1 8 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span class="line-status__divider" aria-hidden="true" />
+          <span
+            class="line-status__data"
+            :class="{ 'is-on': dataOn === true }"
+            :title="dataOn === true ? t('homesim.strip.dataOn') : dataOn === false ? t('homesim.strip.dataOff') : t('homesim.strip.dataUnknown')"
+            :aria-label="dataOn === true ? t('homesim.strip.dataOn') : dataOn === false ? t('homesim.strip.dataOff') : t('homesim.strip.dataUnknown')"
+          >
+            <svg width="12" height="9" viewBox="0 0 12 9" aria-hidden="true">
+              <path d="M4.2.4 7.4 4.6H1Z" fill="currentColor" />
+              <path d="M7.8 8.6 4.6 4.4h6.4Z" fill="currentColor" />
+            </svg>
+          </span>
           <span v-if="!registered" class="line-status__state">{{ chineseLineState(line.state) }}</span>
           <span
             v-for="ring in quotaRings"
@@ -305,7 +300,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="line-status__row line-status__row--split">
           <span class="line-status__number">{{ facts.formatted }}</span>
-          <span v-if="!carrierGeo && geoLine" class="line-status__geo" :title="geoLine">{{ geoLine }}</span>
+          <span v-if="geoLine" class="line-status__geo" :title="geoLine">{{ geoLine }}</span>
           <span v-else-if="line.operator && !/^\d+$/.test(line.operator)" class="line-status__geo">{{ line.operator }}</span>
         </div>
       </div>
@@ -466,19 +461,20 @@ onBeforeUnmount(() => {
   height: 11px;
 }
 
-/* Carrier name at the far left, in front of the signal bars */
+/* Carrier name at the far left, in front of the signal bars; same size as the strip text */
 .line-status__carrier {
   flex: 0 0 auto;
-  font-size: 11px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.02em;
 }
 
-/* VoWiFi icon: no live state reported yet, rendered as a neutral accent icon */
+/* VoWiFi: handset + wave, sits after the VoLTE tag */
 .line-status__vowifi {
   display: inline-flex;
   flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 1px;
   color: var(--accent-strong, var(--accent));
 }
 
@@ -544,7 +540,7 @@ onBeforeUnmount(() => {
 .line-status__tag {
   flex: 0 0 auto;
   padding: 0 5px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent-strong);
   letter-spacing: 0.02em;
@@ -575,7 +571,7 @@ onBeforeUnmount(() => {
 }
 
 .line-status__ring-label {
-  font-size: 9.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
