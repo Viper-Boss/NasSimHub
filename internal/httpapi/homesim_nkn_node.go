@@ -306,25 +306,35 @@ var nknNodeSeedAddrPattern = regexp.MustCompile(`^https?://[A-Za-z0-9._\-]+(:[0-
 // then locally cached low-latency nodes discovered by the running node (see
 // refreshSeedCache), then the official mainnet seeds as fallback.
 func (m *nknNodeManager) writeNodeConfig(settings nknNodeSettings) error {
-	seedList := append([]string(nil), nknNodeOfficialSeeds...)
-	if custom, err := nknNodeParseSeedOverrides(settings.SeedOverrides); err != nil {
+	// Priority order: user seed overrides (explicit intent) > locally cached
+	// low-latency nodes > official mainnet seeds as fallback. Built
+	// explicitly into a fresh slice to keep the ordering unambiguous.
+	var custom []string
+	if overrides, err := nknNodeParseSeedOverrides(settings.SeedOverrides); err != nil {
 		return err
-	} else if len(custom) > 0 {
-		seedList = append(custom, seedList...)
+	} else {
+		custom = overrides
 	}
-	if cached := m.loadSeedCache(); cached != nil {
-		seedList = append(cached, seedList...)
-	}
-	seen := make(map[string]struct{}, len(seedList))
-	merged := make([]string, 0, len(seedList))
-	for _, seed := range seedList {
+	cached := m.loadSeedCache()
+	seen := make(map[string]struct{}, len(nknNodeOfficialSeeds)+len(custom)+len(cached))
+	merged := make([]string, 0, len(nknNodeOfficialSeeds)+len(custom)+len(cached))
+	add := func(seed string) {
 		if _, dup := seen[seed]; dup {
-			continue
+			return
 		}
 		seen[seed] = struct{}{}
 		merged = append(merged, seed)
 	}
-	seedList = merged
+	for _, seed := range custom {
+		add(seed)
+	}
+	for _, seed := range cached {
+		add(seed)
+	}
+	for _, seed := range nknNodeOfficialSeeds {
+		add(seed)
+	}
+	seedList := merged
 	config := nknNodeConfig{
 		BeneficiaryAddr:     strings.TrimSpace(settings.BeneficiaryAddr),
 		SeedList:            seedList,
@@ -1203,7 +1213,7 @@ func (api *API) nknNodeLogTail(response http.ResponseWriter, request *http.Reque
 // always carries the fresh node status so the UI can re-render in one round
 // trip.
 type nknNodeWalletResponse struct {
-	WalletAddress string             `json:"wallet_address,omitempty"`
+	WalletAddress string                `json:"wallet_address,omitempty"`
 	Status        nknNodeStatusResponse `json:"status"`
 }
 
