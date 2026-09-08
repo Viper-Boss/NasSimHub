@@ -88,6 +88,7 @@ export const homesimEN = {
     vowifiActive: 'This active call reports a VoWiFi bearer.',
     vowifiUnavailable: 'This driver has no VoWiFi control/status integration. This does not prove that the hardware is incapable.',
     dataOn: 'Mobile data on', dataOff: 'Mobile data off', dataUnknown: 'Mobile data state unknown',
+    dataSwitch: 'Mobile data', vowifiSwitch: 'VoWiFi calling',
   },
   callFilter: {
     title: 'Incoming call filter', mode: 'Filter mode',
@@ -204,6 +205,7 @@ export const homesimZH = {
     vowifiActive: '当前通话已上报使用 VoWiFi。',
     vowifiUnavailable: '当前驱动尚未接入 VoWiFi 控制与状态查询，不代表硬件一定不支持。',
     dataOn: '移动数据已开启', dataOff: '移动数据已关闭', dataUnknown: '移动数据状态未知',
+    dataSwitch: '移动数据', vowifiSwitch: 'VoWiFi 通话',
   },
   callFilter: {
     title: '来电过滤', mode: '过滤模式',

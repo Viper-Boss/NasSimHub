@@ -9,6 +9,7 @@ import { accessTechnologyLabel, cnOperatorNameOf, ownNumberFacts } from '../util
 import { voiceStatus, chineseLineState } from '../utils/voiceStatus'
 import { isRegisteredNetwork } from '../utils/operatorNetwork'
 import { callState } from '../state/call'
+import { connectData, disconnectData } from '../state/deviceConfiguration'
 import { gateway } from '../api/client'
 import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus } from '../api/client'
 import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus } from '../api/client'
@@ -130,6 +131,8 @@ const carrierName = computed(() => {
 // A null data state means unknown, not disconnected.
 const dataOn = ref<boolean | null>(null)
 const wifiCapability = ref<boolean | null>(null)
+const vowifiWritable = ref<boolean | null>(null)
+const dataSwitching = ref(false)
 const vowifiOn = computed(() => callState.sessions.some(session => session.line_id === line.value?.id && session.phase === 'active' && session.bearer === 'vowifi'))
 const vowifiHint = computed(() => t(vowifiOn.value ? 'homesim.strip.vowifiActive' : wifiCapability.value === false ? 'homesim.strip.vowifiUnavailable' : 'homesim.strip.vowifiHint'))
 let deviceRequest = 0
@@ -141,6 +144,7 @@ async function refreshDataState(): Promise<void> {
   const value = line.value
   dataOn.value = null
   wifiCapability.value = null
+  vowifiWritable.value = null
   if (!value?.id) {
     dataOn.value = null
     return
@@ -150,9 +154,27 @@ async function refreshDataState(): Promise<void> {
     if (request !== deviceRequest || line.value?.id !== value.id) return
     dataOn.value = (config.hardware?.data_connections || []).some(connection => connection.connected)
     wifiCapability.value = config.hardware?.capabilities.vowifi.implemented ?? null
+    vowifiWritable.value = config.hardware?.capabilities.vowifi.writable ?? null
   } catch {
-    if (request === deviceRequest) { dataOn.value = null; wifiCapability.value = null }
+    if (request === deviceRequest) { dataOn.value = null; wifiCapability.value = null; vowifiWritable.value = null }
   }
+}
+
+// Quota popover switches: quick mobile-data connect/disconnect; the VoWiFi
+// control stays capability-gated until a driver exposes it.
+async function toggleDataSwitch(): Promise<void> {
+  const lineID = line.value?.id
+  if (!lineID || dataSwitching.value) return
+  dataSwitching.value = true
+  try {
+    if (dataOn.value === true) {
+      await disconnectData(lineID)
+    } else {
+      await connectData(lineID, '', 'ipv4v6')
+    }
+  } catch { /* fall through to a state refresh */ }
+  dataSwitching.value = false
+  await refreshDataState()
 }
 
 const registered = computed(() => Boolean(line.value && isRegisteredNetwork(line.value)))
@@ -174,6 +196,7 @@ const activeBars = computed(() => {
 
 // Plan quota rings: data green / SMS blue / voice amber; turns red when left <= 20%
 const QUOTA_RING = 2 * Math.PI * 5.5
+const RING_DISC = 2 * Math.PI * 24
 const quotaRings = computed(() => {
   const quota = line.value?.quota
   if (!quota) return []
@@ -330,9 +353,64 @@ onBeforeUnmount(() => {
       <span class="nkn-badge__state">{{ nknStateLabel }}</span>
     </button>
 
-    <!-- Quota popover: horizontal bars, colors match the header rings -->
+    <!-- Quota popover: remaining-quota rings + data/VoWiFi switches + detail bars -->
     <div v-if="open" class="line-status-pop">
       <header>{{ t('homesim.quota.title') }}</header>
+      <div class="line-status-pop__rings">
+        <div
+          v-for="ring in quotaRings"
+          :key="ring.label"
+          class="line-status-pop__ring-item"
+          :title="ring.hint"
+        >
+          <span class="line-status-pop__ring-disc">
+            <svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true">
+              <circle cx="28" cy="28" r="24" fill="none" stroke="var(--border)" stroke-width="5" />
+              <circle
+                cx="28"
+                cy="28"
+                r="24"
+                fill="none"
+                :stroke="ring.low ? 'var(--danger)' : ring.color"
+                stroke-width="5"
+                stroke-linecap="round"
+                :stroke-dasharray="RING_DISC"
+                :stroke-dashoffset="RING_DISC - RING_DISC * ring.pct"
+                transform="rotate(-90 28 28)"
+              />
+            </svg>
+            <em>{{ Math.round(ring.pct * 100) }}%</em>
+          </span>
+          <span class="line-status-pop__ring-label" :style="{ color: ring.low ? 'var(--danger)' : ring.color }">{{ ring.label }}</span>
+          <span class="line-status-pop__ring-left">{{ ring.leftText }}</span>
+        </div>
+      </div>
+      <div class="line-status-pop__switches">
+        <label class="line-status-pop__switch-row">
+          <span>{{ t('homesim.strip.dataSwitch') }}</span>
+          <input
+            class="ui-switch"
+            type="checkbox"
+            role="switch"
+            :checked="dataOn === true"
+            :indeterminate="dataOn === null"
+            :disabled="dataSwitching"
+            @change="toggleDataSwitch"
+          />
+        </label>
+        <label class="line-status-pop__switch-row">
+          <span :title="vowifiHint">{{ t('homesim.strip.vowifiSwitch') }}</span>
+          <input
+            class="ui-switch"
+            type="checkbox"
+            role="switch"
+            :checked="vowifiOn"
+            :disabled="vowifiWritable !== true"
+            :title="vowifiHint"
+          />
+        </label>
+        <p v-if="vowifiWritable !== true" class="line-status-pop__switch-hint">{{ t('homesim.strip.vowifiUnavailable') }}</p>
+      </div>
       <div
         v-for="ring in quotaRings"
         :key="ring.label"
@@ -699,6 +777,89 @@ onBeforeUnmount(() => {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* Popover remaining-quota rings: one disc per quota, percentage inside */
+.line-status-pop__rings {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.line-status-pop__ring-item {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.line-status-pop__ring-disc {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.line-status-pop__ring-disc svg {
+  display: block;
+}
+
+.line-status-pop__ring-disc em {
+  position: absolute;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.line-status-pop__ring-label {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.line-status-pop__ring-left {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Quota popover quick switches */
+.line-status-pop__switches {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  background: var(--surface-subtle);
+  border-radius: 8px;
+}
+
+.line-status-pop__switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.line-status-pop__switch-row input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.line-status-pop__switch-hint {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 /* NKN badge: standalone box beside the status strip, same surface look */
