@@ -27,6 +27,11 @@ services:
     image: nas-comm-api:fnos-local-0.1
     environment:
       MODEMDECK_RECORDINGS_PATH: /var/lib/modemdeck/recordings
+    # Forwarder credentials (ServerChan/PushPlus/Bark/NKN seeds/...) live on
+    # the NAS host in this file as HOMESIM_* environment variables and are
+    # injected wholesale; only variable NAMES are stored in forwarder configs.
+    env_file:
+      - /mnt/docker-data/homesim/credentials.env
     volumes:
       - type: bind
         source: ${MODEMDECK_DATA_DIR:?Set an absolute dedicated NAS data directory}
