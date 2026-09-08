@@ -99,7 +99,7 @@ func TestUSBDeviceDirResolvesSerialAndNetdevSymlinks(t *testing.T) {
 			t.Fatalf("usbDeviceDir(%s) = %q, want %q", path, actual, expected)
 		}
 	}
-	if _, err := usbDeviceDir("/sys/devices/pci0000:00/0000:00:14.0/net/eth0"); err == nil {
+	if _, err := usbDeviceDir("/sys/devices/platform/fd000000.usb/xhci-hcd.2.auto/usb2/2-1"); err == nil {
 		t.Fatal("expected an error for a sysfs path without a USB interface component")
 	}
 }
