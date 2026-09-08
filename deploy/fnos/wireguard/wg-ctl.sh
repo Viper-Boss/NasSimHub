@@ -25,8 +25,19 @@ case "${1:-up}" in
 
     wg-quick up $IFACE
     echo "[wg] $IFACE up: $(wg show $IFACE listen-port)"
+
+    # Best effort: expose the built-in NKN node RPC (tcp/30003) to tunnel
+    # peers. Failure never blocks the tunnel itself.
+    NKN_FWD="$(cd "$(dirname "$0")" && pwd)/nkn-forward.sh"
+    if [ -f "$NKN_FWD" ]; then
+      sudo bash "$NKN_FWD" up || echo "[wg] nkn-forward failed (built-in node RPC not exposed)" >&2
+    fi
     ;;
   down)
+    NKN_FWD="$(cd "$(dirname "$0")" && pwd)/nkn-forward.sh"
+    if [ -f "$NKN_FWD" ]; then
+      sudo bash "$NKN_FWD" remove || true
+    fi
     wg-quick down $IFACE
     echo "[wg] $IFACE down"
     ;;
