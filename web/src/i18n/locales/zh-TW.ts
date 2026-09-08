@@ -286,7 +286,7 @@ export default {
     nknNode: 'NKN 節點',
     nknNodeDescription: '內建 NKN 中繼節點（預設關閉），開啟後獎勵歸自己',
     nknNetwork: 'ModemDeck 網路',
-    nknNetworkDescription: '24 小時內在線的 ModemDeck 裝置目錄（預設關閉，鏈上公開可查）',
+    nknNetworkDescription: '最近 24 小時在線過的 ModemDeck 裝置目錄（滾動窗口，預設關閉，鏈上公開可查）',
     iosApp: '配對',
     iosAppDescription: '將目前賬戶與 iPhone 配對',
     tls: '接入',

@@ -157,6 +157,7 @@ onMounted(() => {
         </button>
       </div>
       <p v-if="peers" class="nkn-network__count">{{ t('homesim.nknNetwork.count', { count: peers.count }) }}</p>
+      <p class="nkn-network__hint">{{ t('homesim.nknNetwork.windowHint') }}</p>
       <p v-if="peersError" class="field-error" role="alert">{{ peersError }}</p>
       <ul v-if="peers && peers.peers.length" class="nkn-network__peers">
         <li v-for="peer in peers.peers" :key="peer.address" class="nkn-network__peer">

@@ -288,7 +288,7 @@ export default {
     nknNode: 'NKN 节点',
     nknNodeDescription: '内置 NKN 中继节点（默认关闭），开启后奖励归自己',
     nknNetwork: 'ModemDeck 网络',
-    nknNetworkDescription: '24 小时内在线的 ModemDeck 设备目录（默认关闭，链上公开可查）',
+    nknNetworkDescription: '最近 24 小时在线过的 ModemDeck 设备目录（滚动窗口，默认关闭，链上公开可查）',
     iosApp: '配对',
     iosAppDescription: '将当前账户与 iPhone 配对',
     tls: '接入',
