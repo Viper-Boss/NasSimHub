@@ -47,6 +47,27 @@ export function cnCarrierOf(value: string): string {
   return ''
 }
 
+// 运营商 PLMN 代码（MCC+MNC）→ 运营商名称。顶栏把 46011 这类代码翻译成中文名展示。
+const CN_PLMN_NAMES: Record<string, string> = {
+  '46000': '中国移动',
+  '46002': '中国移动',
+  '46004': '中国移动',
+  '46007': '中国移动',
+  '46008': '中国移动',
+  '46001': '中国联通',
+  '46006': '中国联通',
+  '46009': '中国联通',
+  '46003': '中国电信',
+  '46005': '中国电信',
+  '46011': '中国电信',
+  '46020': '中国铁通'
+}
+
+export function cnOperatorNameOf(code: string): string {
+  const key = String(code || '').replace(/\D/g, '')
+  return CN_PLMN_NAMES[key] || ''
+}
+
 export function cnRegionOf(value: string): string {
   const n = digitsOf(value)
   if (!/^1\d{10}$/.test(n)) return ''

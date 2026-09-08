@@ -17,6 +17,7 @@ export const homesimEN = {
   codes: 'Verification codes', codeScope: 'From loaded messages only. Validity is determined by the sender.',
   previewScope: 'Suggested codes from recent conversation previews; open the conversation to verify the message.',
   noCodes: 'No codes found in loaded messages', allCodes: 'View all ({count})', copy: 'Copy', copied: 'Copied', copyFailed: 'Copy failed. Select the code and copy it manually.',
+  clearCodes: 'Clear all', clearCodesTitle: 'Clear verification code threads?', clearCodesMessage: 'Deletes the {count} conversation(s) that contain the detected codes from the NAS message store. This cannot be undone.', clearCodesConfirm: 'Delete threads',
   localAnalysis: 'Local classification; sender identity is not verified.',
   category: { code: 'Verification', bank: 'Banking', courier: 'Delivery', carrier: 'Carrier', promo: 'Promotional', normal: 'Message' },
   fixture: 'Demo · no device connected',
@@ -81,6 +82,10 @@ export const homesimEN = {
     noNodes: 'No seed nodes reachable right now.',
     copy: 'Copy', copied: 'Copied', qrAlt: 'NKN address QR code', qrHint: 'Scan with an NKN wallet to use this address.',
   },
+  strip: {
+    vowifiHint: 'VoWiFi (status not reported)',
+    dataOn: 'Mobile data on', dataOff: 'Mobile data off', dataUnknown: 'Mobile data state unknown',
+  },
   callFilter: {
     title: 'Incoming call filter', mode: 'Filter mode',
     modeOff: 'Off — ring every call', modeBlacklist: 'Hang up blacklisted numbers', modeWhitelist: 'Ring whitelisted numbers only',
@@ -127,6 +132,7 @@ export const homesimZH = {
   codes: '验证码', codeScope: '仅展示已加载的短信，是否有效以发送方为准。',
   previewScope: '从近期会话摘要识别的候选验证码，请打开会话核对原短信。',
   noCodes: '已加载的短信中暂无验证码', allCodes: '查看全部（{count}）', copy: '复制', copied: '已复制', copyFailed: '复制失败，请选中验证码手动复制。',
+  clearCodes: '一键清空', clearCodesTitle: '清空验证码会话？', clearCodesMessage: '将从 NAS 短信库里删除检测到验证码的 {count} 个会话，删除后不可恢复。', clearCodesConfirm: '删除会话',
   localAnalysis: '本地规则分类，不代表已核实发送方身份。',
   category: { code: '验证码', bank: '银行金融', courier: '快递物流', carrier: '运营商', promo: '营销推广', normal: '短信' },
   fixture: '演示模式 · 未连接设备',
@@ -188,6 +194,10 @@ export const homesimZH = {
     daily: '日活跃', monthly: '月活跃', registered: '历史注册', nodes: '在线节点',
     noNodes: '暂无可达节点。',
     copy: '复制', copied: '已复制', qrAlt: 'NKN 地址二维码', qrHint: '用 NKN 钱包扫码即可使用该地址。',
+  },
+  strip: {
+    vowifiHint: 'VoWiFi（状态未上报）',
+    dataOn: '移动数据已开启', dataOff: '移动数据已关闭', dataUnknown: '移动数据状态未知',
   },
   callFilter: {
     title: '来电过滤', mode: '过滤模式',

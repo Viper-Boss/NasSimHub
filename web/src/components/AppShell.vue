@@ -452,12 +452,12 @@ onBeforeUnmount(() => {
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && ['devices', 'diagnostics', 'about'].includes(String(route.params.section)) }" :to="{ name: 'settings', params: { section: 'devices' } }" :title="t('homesim.system')">
           <Server :size="22" /><span>{{ t('homesim.system') }}</span>
         </RouterLink>
-        <RouterLink class="rail-link" :to="{ name: 'settings', params: { section: 'preferences' } }" :title="t('homesim.profile')">
+        <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'preferences' }" :to="{ name: 'settings', params: { section: 'preferences' } }" :title="t('homesim.profile')">
           <UserRound :size="22" /><span>{{ t('homesim.profile') }}</span>
         </RouterLink>
         <RouterLink
           class="rail-link"
-          :class="{ 'is-current': route.name === 'settings' && !['devices', 'diagnostics', 'about', 'telegram'].includes(String(route.params.section)) }"
+          :class="{ 'is-current': route.name === 'settings' && !['devices', 'diagnostics', 'about', 'telegram', 'preferences'].includes(String(route.params.section)) }"
           :to="{ name: 'settings' }"
           :title="t('shell.settings')"
         >

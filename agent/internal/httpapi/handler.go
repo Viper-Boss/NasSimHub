@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -380,7 +381,11 @@ func (h *handler) writeError(w http.ResponseWriter, err error, requestID string)
 	case domain.ErrorInternal:
 		status = http.StatusInternalServerError
 	}
-	h.writeAPIError(w, status, operationError.Code, operationError.Operation, requestID, operationError.Message)
+	message := operationError.Message
+	if operationError.Cause != nil {
+		message = fmt.Sprintf("%s: %v", message, operationError.Cause)
+	}
+	h.writeAPIError(w, status, operationError.Code, operationError.Operation, requestID, message)
 }
 
 func (h *handler) writeAPIError(

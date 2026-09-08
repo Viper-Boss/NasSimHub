@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { KeyRound, X } from '@lucide/vue'
+import { KeyRound, Trash2, X } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import { messageResources } from '../state/workspace'
+import { deleteMessageThreads } from '../state/workspace'
 import type { MessageThread, Message } from '../api/types'
 import { gateway } from '../api/client'
 import { collectCodeSuggestions } from '../utils/smsInsight'
 import { formatRelativeDate } from '../utils/format'
 import { groupedPhone, messageTime } from '../utils/homesimDisplay'
+import { requestConfirmation } from '../state/confirmation'
 import OverlayDialog from './OverlayDialog.vue'
 import SmsCodeButton from './SmsCodeButton.vue'
 const props = defineProps<{ threads: MessageThread[]; lineFilter?: string }>()
@@ -71,19 +73,58 @@ async function scanAll(): Promise<void> {
 }
 function select(key: string): void { expanded.value = false; emit('select', key) }
 function openLibrary(): void { expanded.value = true; void scanAll() }
+
+const clearing = ref(false)
+// 一键清空：删除当前验证码列表里出现的所有会话（危险操作，需确认）
+async function clearCodes(): Promise<void> {
+  if (clearing.value) return
+  const source = scanComplete.value ? library.value : codes.value
+  if (!source.length) return
+  const confirmed = await requestConfirmation({
+    title: t('homesim.clearCodesTitle'),
+    message: t('homesim.clearCodesMessage', { count: new Set(source.map(item => item.threadKey)).size }),
+    confirmLabel: t('homesim.clearCodesConfirm'),
+    tone: 'danger'
+  })
+  if (!confirmed) return
+  clearing.value = true
+  try {
+    const byKey = new Map([...props.threads, ...scannedThreads.value].map(thread => [thread.key, thread]))
+    const threads = [...new Set(source.map(item => item.threadKey))]
+      .map(key => byKey.get(key))
+      .filter((thread): thread is MessageThread => Boolean(thread))
+    cancelScan()
+    await deleteMessageThreads(threads)
+  } finally {
+    clearing.value = false
+  }
+}
 </script>
 
 <template>
   <section class="sms-code-shelf" :aria-label="t('homesim.codes')">
     <header>
       <strong><KeyRound :size="16" aria-hidden="true" />{{ t('homesim.codes') }}</strong>
-      <button type="button" class="text-button" @click="openLibrary">{{ t('homesim.allCodes', { count: library.length }) }}</button>
+      <span class="sms-code-shelf__header-actions">
+        <button
+          v-if="recent.length"
+          type="button"
+          class="text-button sms-code-shelf__clear"
+          :disabled="clearing"
+          @click="clearCodes"
+        ><Trash2 :size="14" aria-hidden="true" />{{ t('homesim.clearCodes') }}</button>
+        <button type="button" class="text-button" @click="openLibrary">{{ t('homesim.allCodes', { count: library.length }) }}</button>
+      </span>
     </header>
     <p class="sms-code-shelf__scope">{{ t('homesim.previewScope') }}</p>
     <div class="sms-code-shelf__list">
       <div v-for="item in recent" :key="item.key" class="sms-code-shelf__item">
         <button type="button" class="sms-code-shelf__identity" @click="select(item.threadKey)">
-          <small>{{ item.source }}</small><code>{{ item.code }}</code><time :datetime="item.timestamp">{{ formatRelativeDate(item.timestamp) }}</time>
+          <span class="sms-code-shelf__meta">
+            <small v-if="item.source">{{ item.source }}</small>
+            <time :datetime="item.timestamp">{{ formatRelativeDate(item.timestamp) }}</time>
+          </span>
+          <code>{{ item.code }}</code>
         </button>
         <SmsCodeButton :code="item.code" />
       </div>
@@ -93,13 +134,30 @@ function openLibrary(): void { expanded.value = true; void scanAll() }
   <OverlayDialog :open="expanded" size="large" labelledby="homesim-codes-title" @close="expanded = false">
     <section class="sms-code-library">
       <header><h2 id="homesim-codes-title">{{ t('homesim.codes') }}</h2><button type="button" class="icon-button" :aria-label="t('common.close')" @click="expanded = false"><X :size="20" /></button></header>
-      <p>{{ t('homesim.codeScope') }}</p>
-      <button type="button" class="secondary-button" :disabled="scanning" @click="scanAll">{{ t(scanning ? 'homesim.scanningCodes' : 'homesim.scanCodes') }}</button>
-      <button v-if="scanning" type="button" class="text-button" @click="cancelScan(); scanError = t('homesim.scanCancelled')">{{ t('common.cancel') }}</button>
+      <div class="sms-code-library__toolbar">
+        <p>{{ t('homesim.codeScope') }}</p>
+        <button
+          v-if="library.length"
+          type="button"
+          class="text-button sms-code-shelf__clear"
+          :disabled="clearing"
+          @click="clearCodes"
+        ><Trash2 :size="14" aria-hidden="true" />{{ t('homesim.clearCodes') }}</button>
+      </div>
+      <div class="sms-code-library__actions">
+        <button type="button" class="secondary-button" :disabled="scanning" @click="scanAll">{{ t(scanning ? 'homesim.scanningCodes' : 'homesim.scanCodes') }}</button>
+        <button v-if="scanning" type="button" class="text-button" @click="cancelScan(); scanError = t('homesim.scanCancelled')">{{ t('common.cancel') }}</button>
+      </div>
       <p role="status">{{ scannedCount }} {{ t('homesim.scannedMessages') }} · {{ scanComplete ? t('homesim.scanDone') : t('homesim.codeScope') }}</p>
       <p v-if="scanError" class="field-error" role="alert">{{ scanError }}</p>
       <div v-for="item in library" :key="item.key" class="sms-code-shelf__item sms-code-shelf__item--full">
-        <button type="button" class="sms-code-shelf__identity" @click="select(item.threadKey)"><small>{{ item.source }} · {{ groupedPhone(item.peer) }}</small><code>{{ item.code }}</code><time :datetime="item.timestamp">{{ messageTime(item.timestamp) }}</time></button>
+        <button type="button" class="sms-code-shelf__identity" @click="select(item.threadKey)">
+          <span class="sms-code-shelf__meta">
+            <small>{{ item.source }} · {{ groupedPhone(item.peer) }}</small>
+            <time :datetime="item.timestamp">{{ messageTime(item.timestamp) }}</time>
+          </span>
+          <code>{{ item.code }}</code>
+        </button>
         <SmsCodeButton :code="item.code" />
         <p class="sms-code-message">{{ item.content }}</p>
       </div>
@@ -115,11 +173,18 @@ function openLibrary(): void { expanded.value = true; void scanAll() }
 .sms-code-shelf__scope, .sms-code-library > p { color: var(--muted); font-size: .75rem; line-height: 1.5; margin: 8px 0; }
 .sms-code-shelf__list { max-height: min(280px, 32dvh); overflow-y: auto; }
 .sms-code-shelf__item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 13px; }
-.sms-code-shelf__identity { display: grid; flex: 1; min-width: 0; gap: 3px; color: var(--text); background: transparent; text-align: left; }
-.sms-code-shelf__identity small { font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sms-code-shelf__identity { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; color: var(--text); background: transparent; text-align: left; }
+.sms-code-shelf__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+.sms-code-shelf__meta small { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sms-code-shelf__meta time { flex: 0 0 auto; }
 .sms-code-shelf__identity code { color: var(--accent); font-size: 1.25rem; letter-spacing: .07em; user-select: text; }
 .sms-code-shelf__identity time { font-size: .75rem; color: var(--muted); }
 .sms-code-shelf__empty { color: var(--muted); font-size: .875rem; padding: 10px 0; }
+.sms-code-shelf__header-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.sms-code-shelf__clear { display: inline-flex; align-items: center; gap: 4px; color: var(--danger); }
+.sms-code-library__toolbar { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sms-code-library__toolbar p { margin: 0; }
+.sms-code-library__actions { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
 .sms-code-shelf__item--full { flex-wrap: wrap; }
 .sms-code-message { flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 .sms-code-library { padding: 24px; width: min(560px, 100%); max-height: 80dvh; overflow-y: auto; }

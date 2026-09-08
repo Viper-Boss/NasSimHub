@@ -4,10 +4,11 @@ import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
 import { bootstrapResource } from '../state/workspace'
 import { requestPhoneGeo } from '../state/phoneGeo'
-import { accessTechnologyLabel, ownNumberFacts } from '../utils/phoneRegion'
+import { accessTechnologyLabel, cnOperatorNameOf, ownNumberFacts } from '../utils/phoneRegion'
 import { voiceStatus, chineseLineState } from '../utils/voiceStatus'
 import { isRegisteredNetwork } from '../utils/operatorNetwork'
 import { callState } from '../state/call'
+import { gateway } from '../api/client'
 import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus } from '../api/client'
 import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus } from '../api/client'
 const LineSelector = defineAsyncComponent(() => import('./LineSelector.vue'))
@@ -94,6 +95,12 @@ const facts = computed(() => ownNumberFacts(line.value?.phone_number || '', line
 const remoteGeo = ref<{ province: string; carrier: string } | undefined>()
 
 watch(
+  () => line.value?.id,
+  () => { void refreshDataState() },
+  { immediate: true }
+)
+
+watch(
   () => line.value?.phone_number || '',
   number => {
     remoteGeo.value = undefined
@@ -107,10 +114,41 @@ const geoLine = computed(() => {
     const parts = [remoteGeo.value.province, remoteGeo.value.carrier].filter(Boolean)
     if (parts.length) return parts.join(' · ')
   }
-  return facts.value.geoLine
+  // 运营商名称已单独显示在左侧，归属行只保留地区和可读运营商名（过滤 46011 这类裸代码）
+  const parts = [facts.value.region, facts.value.carrier].filter(Boolean)
+  return parts.join(' · ')
 })
 
 const networkLabel = computed(() => accessTechnologyLabel(line.value?.serving_radio?.access_technology))
+
+// 运营商名称：优先把 PLMN 代码（46011）翻译成中文名，其次回退到号码归属或上报的字符串
+const carrierName = computed(() => {
+  const value = line.value
+  if (!value) return ''
+  const code = value.serving_operator_code || value.operator || ''
+  const name = cnOperatorNameOf(code)
+  if (name) return name
+  if (code && !/^\d+$/.test(code)) return code
+  return facts.value.carrier || ''
+})
+
+// 移动数据开关：取设备配置里是否有已连接的数据连接；null = 未知（灰色不闪）
+const dataOn = ref<boolean | null>(null)
+
+async function refreshDataState(): Promise<void> {
+  const value = line.value
+  if (!value?.id) {
+    dataOn.value = null
+    return
+  }
+  try {
+    const config = await gateway.getDeviceConfiguration(value.id)
+    if (line.value?.id !== value.id) return
+    dataOn.value = (config.hardware?.data_connections || []).some(connection => connection.connected)
+  } catch {
+    dataOn.value = null
+  }
+}
 
 const registered = computed(() => Boolean(line.value && isRegisteredNetwork(line.value)))
 
@@ -168,7 +206,10 @@ function onDocumentPointerDown(event: PointerEvent): void {
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown)
   void refreshNknStatus()
-  nknTimer = setInterval(() => { void refreshNknStatus() }, 60_000)
+  nknTimer = setInterval(() => {
+    void refreshNknStatus()
+    void refreshDataState()
+  }, 60_000)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown)
@@ -192,6 +233,30 @@ onBeforeUnmount(() => {
     >
       <div class="line-status__grid">
         <div class="line-status__row">
+          <span v-if="carrierName" class="line-status__carrier">{{ carrierName }}</span>
+          <span
+            class="line-status__vowifi"
+            :title="t('homesim.strip.vowifiHint')"
+            :aria-label="t('homesim.strip.vowifiHint')"
+          >
+            <svg width="13" height="10" viewBox="0 0 14 11" fill="none" aria-hidden="true">
+              <path d="M7 10 4.7 7.5a3.4 3.4 0 0 1 4.6 0Z" fill="currentColor" />
+              <path d="M2.5 5.4a6.6 6.6 0 0 1 9 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              <path d="M.7 3.1a9.7 9.7 0 0 1 12.6 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span
+            class="line-status__data"
+            :class="{ 'is-on': dataOn === true }"
+            :title="dataOn === true ? t('homesim.strip.dataOn') : dataOn === false ? t('homesim.strip.dataOff') : t('homesim.strip.dataUnknown')"
+            :aria-label="dataOn === true ? t('homesim.strip.dataOn') : dataOn === false ? t('homesim.strip.dataOff') : t('homesim.strip.dataUnknown')"
+          >
+            <svg width="12" height="9" viewBox="0 0 12 9" aria-hidden="true">
+              <path d="M4.2.4 7.4 4.6H1Z" fill="currentColor" />
+              <path d="M7.8 8.6 4.6 4.4h6.4Z" fill="currentColor" />
+            </svg>
+          </span>
+          <span class="line-status__divider" aria-hidden="true" />
           <span class="line-status__bars" role="img" :aria-label="`${signalQuality ?? 0}%`">
             <span
               v-for="bar in 4"
@@ -235,7 +300,7 @@ onBeforeUnmount(() => {
         <div class="line-status__row line-status__row--split">
           <span class="line-status__number">{{ facts.formatted }}</span>
           <span v-if="geoLine" class="line-status__geo" :title="geoLine">{{ geoLine }}</span>
-          <span v-else-if="line.operator" class="line-status__geo">{{ line.operator }}</span>
+          <span v-else-if="line.operator && !/^\d+$/.test(line.operator)" class="line-status__geo">{{ line.operator }}</span>
         </div>
       </div>
       <span v-if="version" class="line-status__version">{{ version }}</span>
@@ -393,6 +458,55 @@ onBeforeUnmount(() => {
   align-items: flex-end;
   gap: 2px;
   height: 11px;
+}
+
+/* Carrier name at the far left, in front of the signal bars */
+.line-status__carrier {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+/* VoWiFi icon: no live state reported yet, rendered as a neutral accent icon */
+.line-status__vowifi {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--accent-strong, var(--accent));
+}
+
+.line-status__vowifi svg {
+  display: block;
+}
+
+/* Mobile data arrows: gray when off/unknown, green and blinking when on */
+.line-status__data {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.line-status__data svg {
+  display: block;
+}
+
+.line-status__data.is-on {
+  color: var(--success, #34d399);
+  animation: line-status-data-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes line-status-data-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Divider separating carrier group from the radio group */
+.line-status__divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  background: var(--border);
 }
 
 .line-status__bar {

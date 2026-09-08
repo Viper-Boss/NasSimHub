@@ -343,10 +343,16 @@ type OperationError struct {
 }
 
 func (e *OperationError) Error() string {
-	if e.Operation == "" {
+	switch {
+	case e.Cause == nil && e.Operation == "":
 		return e.Message
+	case e.Cause == nil:
+		return fmt.Sprintf("%s: %s", e.Operation, e.Message)
+	case e.Operation == "":
+		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
+	default:
+		return fmt.Sprintf("%s: %s: %v", e.Operation, e.Message, e.Cause)
 	}
-	return fmt.Sprintf("%s: %s", e.Operation, e.Message)
 }
 
 func (e *OperationError) Unwrap() error {
