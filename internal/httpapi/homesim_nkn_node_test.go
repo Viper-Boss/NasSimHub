@@ -141,13 +141,13 @@ func TestNKNNodeWriteNodeConfigSeedOverrides(t *testing.T) {
 
 func TestNKNNodeFormatBalance(t *testing.T) {
 	cases := map[string]string{
-		"1bc16d674ec80000": "2.00 NKN",  // 2 * 1e8
-		"05f5e100":         "1.00 NKN",  // 1e8
-		"3b9aca00":         "10.00 NKN", // 1e9 units = 10 NKN
-		"00":               "0.00 NKN",
-		"0x2a":             "0.00 NKN", // 42 units
-		"":                 "",
-		"not-hex":          "",
+		"bebc200":  "2.00 NKN",  // 2e8 units
+		"05f5e100": "1.00 NKN",  // 1e8
+		"3b9aca00": "10.00 NKN", // 1e9 units = 10 NKN
+		"00":       "0.00 NKN",
+		"0x2a":     "0.00 NKN", // 42 units
+		"":         "",
+		"not-hex":  "",
 	}
 	for input, want := range cases {
 		if got := nknNodeFormatBalance(input); got != want {
