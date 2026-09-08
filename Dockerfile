@@ -5,6 +5,10 @@ ARG GO_IMAGE=golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e5
 ARG RUNTIME_IMAGE=alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 ARG NGINX_IMAGE=nginx:1.30.4-alpine-slim@sha256:ddde39c6e51f02fde7410c2e9c234cf2d0a4c7bdbbe176aeb37d8ad7ab4eb58c
 ARG DOCKER_CLI_IMAGE=docker:28.5.2-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d
+# Optional embedded NKN relay node (nknd/nknc, static binaries). Not digest
+# pinned: deployments reuse whatever nknorg/nkn image is already present locally
+# (air-gapped NAS hosts keep an offline copy), matching the GO_IMAGE override.
+ARG NKN_IMAGE=nknorg/nkn:latest
 
 FROM ${NODE_IMAGE} AS web-builder
 
@@ -126,6 +130,8 @@ ENTRYPOINT ["/usr/local/bin/modemdeck-web-entrypoint"]
 CMD ["-g", "daemon off;"]
 
 
+FROM ${NKN_IMAGE} AS nkn-binaries
+
 FROM ${RUNTIME_IMAGE} AS runtime
 
 ARG VERSION=dev
@@ -158,6 +164,7 @@ ENV MODEMDECK_LISTEN_ADDRESS=0.0.0.0:8080 \
     MODEMDECK_DATABASE_PATH=/var/lib/modemdeck/modemdeck.db \
     MODEMDECK_RECORDINGS_PATH=/data/recordings \
     MODEMDECK_AGENT_SOCKET=/run/modemdeck/agent.sock \
+    MODEMDECK_NKN_NODE_DIR=/data/nkn-node \
     MODEMDECK_SECURE_COOKIES=true \
     MODEMDECK_HEALTHCHECK_URL=http://127.0.0.1:8080/api/v1/health
 

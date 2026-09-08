@@ -18,6 +18,7 @@ import {
   BellRing,
   Network,
   Send,
+  Server,
   Wifi,
   ShieldCheck,
   SlidersHorizontal,
@@ -79,6 +80,7 @@ const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsP
 const loadSmsForwardPanel = () => import('../components/settings/SmsForwardPanel.vue')
 const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
+const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
 
 const AccountPreferencesPanel = defineAsyncComponent(loadAccountPreferencesPanel)
 const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel)
@@ -98,6 +100,7 @@ const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
 const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
+const NknNodePanel = defineAsyncComponent(loadNknNodePanel)
 
 const route = useRoute()
 const router = useRouter()
@@ -192,6 +195,12 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     label: t('settings.netSwitches'),
     description: t('settings.netSwitchesDescription'),
     icon: Network
+  },
+  {
+    id: 'nkn-node',
+    label: t('settings.nknNode'),
+    description: t('settings.nknNodeDescription'),
+    icon: Server
   },
   {
     id: 'connectivity',
@@ -315,6 +324,8 @@ function preloadSection(section: SettingsSection): void {
         return loadF50DevicePanel
       case 'net-switches':
         return loadNetworkSwitchesPanel
+      case 'nkn-node':
+        return loadNknNodePanel
       case 'pairing':
         return loadPairingSettingsPanel
       case 'connectivity':
@@ -556,6 +567,12 @@ onMounted(() => {
             <div v-else-if="selectedSection === 'sms-forward'" class="settings-content">
               <PageContentFrame mode="reading">
                 <SmsForwardPanel />
+              </PageContentFrame>
+            </div>
+
+            <div v-else-if="selectedSection === 'nkn-node'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <NknNodePanel />
               </PageContentFrame>
             </div>
 

@@ -285,6 +285,8 @@ export default {
     f50Description: "中兴 F50 随身WiFi：短信收发、流量监控与实时状态",
     netSwitches: "供网开关",
     netSwitchesDescription: "调试蜂窝共享与家卡专用供网的开关",
+    nknNode: 'NKN 节点',
+    nknNodeDescription: '内置 NKN 中继节点（默认关闭），开启后奖励归自己',
     iosApp: '配对',
     iosAppDescription: '将当前账户与 iPhone 配对',
     tls: '接入',

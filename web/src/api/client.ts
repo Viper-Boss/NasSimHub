@@ -2566,6 +2566,47 @@ export async function testForwarderChannel(channel: ForwarderChannel): Promise<v
   await writeJSON(`${API_ROOT}/settings/homesim/forwarders/test`, 'POST', channel, 200)
 }
 
+export interface NKNNodeSettings {
+  enabled: boolean
+  beneficiary_addr: string
+  revision: number
+}
+
+export interface NKNNodeRuntime {
+  state: string
+  wallet_address?: string
+  started_at?: string
+  sync_state?: string
+  error?: string
+}
+
+export interface NKNNodeStatus {
+  settings: NKNNodeSettings
+  runtime: NKNNodeRuntime
+  wallet_password?: string
+  binary_present: boolean
+}
+
+export async function getNKNNodeStatus(): Promise<NKNNodeStatus> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/nkn-node`) as Partial<NKNNodeStatus> | null
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('NKN 节点状态响应无效。')
+  return { settings: result.settings, runtime: result.runtime, wallet_password: result.wallet_password, binary_present: result.binary_present === true }
+}
+
+export async function getNKNNodeLogs(): Promise<string[]> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/nkn-node/logs`) as { lines?: string[] } | null
+  return Array.isArray(result?.lines) ? result!.lines! : []
+}
+
+export async function updateNKNNode(next: { enabled: boolean; beneficiary_addr: string; expected_revision: number }): Promise<NKNNodeStatus> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/nkn-node`, 'PUT', next, 200) as Partial<NKNNodeStatus> | null
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('NKN 节点保存响应无效。')
+  return { settings: result.settings, runtime: result.runtime, wallet_password: result.wallet_password, binary_present: result.binary_present === true }
+}
+
 export async function getHomeSIMIntegrationDraft(): Promise<HomeSIMIntegrationDraft> {
   if (fixtureMode) return emptyIntegrationDraft()
   const result = await get(`${API_ROOT}/settings/homesim`) as { draft: HomeSIMIntegrationDraft }
