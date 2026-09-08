@@ -151,6 +151,9 @@ RUN apk add --no-cache ca-certificates=20260611-r0 \
     && chmod 0750 /run/modemdeck
 
 COPY --from=app-builder /out/modemdeck /usr/local/bin/modemdeck
+COPY --from=nkn-binaries /nkn/nknd /usr/local/bin/nknd
+COPY --from=nkn-binaries /nkn/nknc /usr/local/bin/nknc
+COPY --from=nkn-binaries /nkn/web /usr/local/lib/nkn/web
 COPY --chmod=0755 scripts/docker-entrypoint.sh /usr/local/bin/modemdeck-entrypoint
 COPY LICENSE NOTICE.md THIRD_PARTY_NOTICES.md /usr/share/licenses/modemdeck/
 
