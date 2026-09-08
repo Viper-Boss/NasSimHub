@@ -316,6 +316,7 @@ type API struct {
 	homeSIMNKNMu               sync.Mutex
 	homeSIMNKNClients          map[string]*homeSIMNKNClient
 	nknNode                    *nknNodeManager
+	nknNetwork                 *nknNetworkManager
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
 	homeSIMNetworkSwitchesMu   sync.Mutex
@@ -377,6 +378,7 @@ func New(repository Repository, options Options) (*API, error) {
 		settingsSecrets:            options.SettingsSecrets,
 		repository:                 repository,
 		nknNode:                    newNKNNodeManager(logger),
+		nknNetwork:                 newNKNNetworkManager(logger),
 		healthProbe:                healthProbe,
 		capabilities:               options.Capabilities,
 		communications:             options.Communications,
@@ -561,6 +563,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.nknNodeSettings(response, request)
 	case "/api/v1/settings/nkn-node/logs":
 		api.getOnly(response, request, api.nknNodeLogTail)
+	case "/api/v1/settings/nkn-network":
+		api.nknNetworkSettings(response, request)
+	case "/api/v1/settings/nkn-network/peers":
+		api.getOnly(response, request, api.nknNetworkPeers)
 	case "/api/v1/settings/recording":
 		api.recordingSettings(response, request)
 	case "/api/v1/settings/tls":
