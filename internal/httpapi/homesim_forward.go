@@ -29,18 +29,21 @@ const forwarderRequestTimeout = 10 * time.Second
 const maxForwarderChannels = 8
 
 var forwarderTypes = map[string]bool{
-	"webhook":   true,
-	"dingtalk":  true,
-	"feishu":    true,
-	"wecom":     true,
+	"webhook":    true,
+	"dingtalk":   true,
+	"feishu":     true,
+	"wecom":      true,
 	"serverchan": true,
-	"pushplus":  true,
+	"pushplus":   true,
+	"nkn":        true,
 }
 
 type homeSIMForwarderConfig struct {
 	WebhookURL    string `json:"webhook_url,omitempty"`
 	Secret        string `json:"secret,omitempty"`
 	CredentialRef string `json:"credential_ref,omitempty"`
+	NKNTopic      string `json:"nkn_topic,omitempty"`
+	NKNAddresses  string `json:"nkn_addresses,omitempty"`
 }
 
 type homeSIMForwarder struct {
@@ -53,8 +56,8 @@ type homeSIMForwarder struct {
 }
 
 type homeSIMForwarderSettings struct {
-	Revision   int64               `json:"revision"`
-	Forwarders []homeSIMForwarder  `json:"forwarders"`
+	Revision   int64              `json:"revision"`
+	Forwarders []homeSIMForwarder `json:"forwarders"`
 }
 
 func defaultHomeSIMForwarderSettings() homeSIMForwarderSettings {
@@ -106,6 +109,30 @@ func validHomeSIMForwarderConfig(kind string, config homeSIMForwarderConfig) boo
 			return false
 		}
 		return !strings.ContainsAny(config.CredentialRef, " \t\r\n=")
+	case "nkn":
+		if config.CredentialRef == "" || len(config.CredentialRef) > 128 {
+			return false
+		}
+		if strings.ContainsAny(config.CredentialRef, " \t\r\n=") {
+			return false
+		}
+		topic := strings.TrimSpace(config.NKNTopic)
+		addresses := nknAddressList(config.NKNAddresses)
+		if topic == "" && len(addresses) == 0 {
+			return false
+		}
+		if len(topic) > 64 || strings.ContainsAny(topic, " \t\r\n#") {
+			return false
+		}
+		for _, address := range addresses {
+			if len(address) > 96 {
+				return false
+			}
+			if strings.ContainsAny(address, " \t\r\n") {
+				return false
+			}
+		}
+		return true
 	}
 	return false
 }
@@ -211,9 +238,13 @@ func (api *API) homeSIMForwarderTest(response http.ResponseWriter, request *http
 		writeError(response, 400, "invalid_argument", "Invalid channel settings for the test send", "channel")
 		return
 	}
-	ctx, cancel := context.WithTimeout(request.Context(), forwarderRequestTimeout)
+	timeout := forwarderRequestTimeout
+	if payload.Type == "nkn" {
+		timeout = nknTestTimeout
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), timeout)
 	defer cancel()
-	if err := deliverForwarderMessage(ctx, api.homeSIMOutboundTransport(request), payload, "NAS猫窝测试推送", "短信转发通道工作正常。"); err != nil {
+	if err := api.deliverForwarderMessage(ctx, api.homeSIMOutboundTransport(request), payload, "NAS猫窝测试推送", "短信转发通道工作正常。"); err != nil {
 		writeError(response, 502, "forward_failed", "Test message failed: "+err.Error(), "")
 		return
 	}
@@ -262,7 +293,7 @@ func (api *API) dispatchForwarderEvent(event messageevents.IncomingSMS) {
 			// Empty request: Context() falls back to context.Background() so the
 			// cellular-line outbound proxy still applies outside HTTP handlers.
 			transport := api.homeSIMOutboundTransport(new(http.Request))
-			if err := deliverForwarderMessage(ctx, transport, forwarder, title, body); err != nil {
+			if err := api.deliverForwarderMessage(ctx, transport, forwarder, title, body); err != nil {
 				api.logger.Warn("SMS forward failed", "channel", forwarder.Type, "id", forwarder.ID, "error", err)
 			}
 		}()
@@ -278,9 +309,11 @@ func forwarderSubscribesSMS(forwarder homeSIMForwarder) bool {
 	return false
 }
 
-func deliverForwarderMessage(ctx context.Context, transport http.RoundTripper, forwarder homeSIMForwarder, title, body string) error {
+func (api *API) deliverForwarderMessage(ctx context.Context, transport http.RoundTripper, forwarder homeSIMForwarder, title, body string) error {
 	content := strings.TrimSpace(title + "\n" + body)
 	switch forwarder.Type {
+	case "nkn":
+		return api.deliverForwarderNKN(forwarder, title, body)
 	case "webhook":
 		return postForwarderJSON(ctx, transport, forwarder.Config.WebhookURL, "", map[string]any{
 			"title": title, "text": body, "body": body,

@@ -313,6 +313,8 @@ type API struct {
 	homeSIMQuotaMu             sync.Mutex
 	homeSIMBarkMu              sync.Mutex
 	homeSIMForwarderMu         sync.Mutex
+	homeSIMNKNMu               sync.Mutex
+	homeSIMNKNClients          map[string]*homeSIMNKNClient
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
 	homeSIMNetworkSwitchesMu   sync.Mutex

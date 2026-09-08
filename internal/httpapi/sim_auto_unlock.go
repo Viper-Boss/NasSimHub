@@ -35,7 +35,7 @@ type simAutoUnlockEntry struct {
 }
 
 type simAutoUnlockStore struct {
-	Revision int64                          `json:"revision"`
+	Revision int64                         `json:"revision"`
 	Entries  map[string]simAutoUnlockEntry `json:"entries"`
 }
 
