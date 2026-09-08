@@ -78,12 +78,24 @@ func accountAddress(seed []byte, identifier string) string {
 	return makeAddressString(account.PubKey(), identifier)
 }
 
-func newClient(seed []byte, identifier string) *nkn.MultiClient {
+func newClient(seed []byte, identifier, rpcAddrs string) *nkn.MultiClient {
 	account, err := nkn.NewAccount(seed)
 	if err != nil {
 		die("create account: %v", err)
 	}
-	client, err := nkn.NewMultiClient(account, identifier, numSubClients, false, nil)
+	var config *nkn.ClientConfig
+	if addrs := strings.Split(rpcAddrs, ","); strings.TrimSpace(rpcAddrs) != "" {
+		clean := make([]string, 0, len(addrs))
+		for _, a := range addrs {
+			if a = strings.TrimSpace(a); a != "" {
+				clean = append(clean, a)
+			}
+		}
+		if len(clean) > 0 {
+			config = &nkn.ClientConfig{SeedRPCServerAddr: nkn.NewStringArray(clean...)}
+		}
+	}
+	client, err := nkn.NewMultiClient(account, identifier, numSubClients, false, config)
 	if err != nil {
 		die("create client: %v", err)
 	}
@@ -108,12 +120,13 @@ func main() {
 	}
 	subcommand := os.Args[1]
 	fs := flag.NewFlagSet(subcommand, flag.ExitOnError)
-	var seedRaw, dest, msg, identifier, timeoutRaw string
+	var seedRaw, dest, msg, identifier, timeoutRaw, rpcAddr string
 	fs.StringVar(&seedRaw, "seed", "", "32-byte secret seed (hex or base64)")
 	fs.StringVar(&dest, "dest", "", "destination NKN client address")
 	fs.StringVar(&msg, "msg", "nknpeer test message", "message text to send")
 	fs.StringVar(&identifier, "identifier", peerIdentifier, "client identifier")
 	fs.StringVar(&timeoutRaw, "timeout", "60s", "receive/send wait budget")
+	fs.StringVar(&rpcAddr, "rpc", "", "comma-separated seed RPC addresses (e.g. http://192.168.120.190:30003) to prefer a self-hosted node")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		die("parse flags: %v", err)
 	}
@@ -144,7 +157,7 @@ func main() {
 			die("receive requires -seed")
 		}
 		seed := parseSeed(seedRaw)
-		client := newClient(seed, identifier)
+		client := newClient(seed, identifier, rpcAddr)
 		defer client.Close()
 		fmt.Printf("NKNPEER_ADDRESS %s\n", client.Address())
 		fmt.Println("listening for messages; Ctrl+C to quit")
@@ -175,11 +188,12 @@ func main() {
 			die("send requires -seed and -dest")
 		}
 		seed := parseSeed(seedRaw)
-		client := newClient(seed, identifier)
+		client := newClient(seed, identifier, rpcAddr)
 		defer client.Close()
 		// NoReply:false — wait for the receiver's ack so a success line here
 		// is real end-to-end proof, not just a handoff to the network.
 		config := &nkn.MessageConfig{NoReply: false, MaxHoldingSeconds: maxHoldingSeconds}
+		started := time.Now()
 		onReply, err := client.Send(nkn.NewStringArray(dest), []byte(msg), config)
 		if err != nil {
 			die("send: %v", err)
@@ -187,11 +201,12 @@ func main() {
 		select {
 		case reply := <-onReply.C:
 			out, _ := json.Marshal(map[string]any{
-				"to":        dest,
-				"from":      reply.Src,
-				"encrypted": reply.Encrypted,
-				"reply":     string(reply.Data),
-				"message":   msg,
+				"to":         dest,
+				"from":       reply.Src,
+				"encrypted":  reply.Encrypted,
+				"reply":      string(reply.Data),
+				"message":    msg,
+				"elapsed_ms": time.Since(started).Milliseconds(),
 			})
 			fmt.Printf("NKNPEER_SENT %s\n", out)
 		case <-time.After(timeout):

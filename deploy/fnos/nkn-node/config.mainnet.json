@@ -1,0 +1,22 @@
+{
+  "BeneficiaryAddr": "",
+  "SeedList": [
+    "http://seed.nkn.org:30003",
+    "http://mainnet-seed-0001.nkn.org:30003",
+    "http://mainnet-seed-0002.nkn.org:30003",
+    "http://mainnet-seed-0003.nkn.org:30003",
+    "http://mainnet-seed-0004.nkn.org:30003"
+  ],
+  "ChordPort": 30000,
+  "NodePort": 30001,
+  "HttpWsPort": 30002,
+  "HttpJsonPort": 30003,
+  "LogLevel": 1,
+  "SyncMode": "light",
+  "WebGuiCreateWallet": false,
+  "PasswordFile": "wallet.pswd",
+  "TxPoolTotalTxCap": 32768,
+  "TxPoolMaxMemorySize": 8,
+  "NumTxnPerBlock": 4096,
+  "MaxBlockSize": 2097152
+}

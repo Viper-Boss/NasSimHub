@@ -26,7 +26,19 @@ const (
 	nknWaitExtra         = 5 * time.Second
 	nknMaxHoldingSeconds = 3600
 	nknTestTimeout       = 45 * time.Second
+	// nknSeedRPCEnv optionally names environment variables holding seed RPC
+	// addresses (comma separated) that the gateway's own NKN client should
+	// contact first, e.g. HOMESIM_NKN_SEED_RPC=http://127.0.0.1:30003 for a
+	// self-hosted node on the same host. Official seeds are appended as
+	// fallback so a dead local node never blocks delivery.
+	nknSeedRPCEnv = "HOMESIM_NKN_SEED_RPC"
 )
+
+var nknOfficialSeedRPC = []string{
+	"http://seed.nkn.org:30003",
+	"http://mainnet-seed-0001.nkn.org:30003",
+	"http://mainnet-seed-0002.nkn.org:30003",
+}
 
 type homeSIMNKNClient struct {
 	client  *nkn.MultiClient
@@ -56,8 +68,15 @@ func (api *API) homeSIMNKNClient(seed []byte) (*homeSIMNKNClient, error) {
 		go func(entry *homeSIMNKNClient, seed []byte) {
 			account, err := nkn.NewAccount(seed)
 			if err == nil {
+				var clientConfig *nkn.ClientConfig
+				if local := nknAddressList(os.Getenv(nknSeedRPCEnv)); len(local) > 0 {
+					addrs := append(append([]string(nil), local...), nknOfficialSeedRPC...)
+					clientConfig = &nkn.ClientConfig{
+						SeedRPCServerAddr: nkngomobile.NewStringArray(addrs...),
+					}
+				}
 				var multi *nkn.MultiClient
-				multi, err = nkn.NewMultiClient(account, nknBaseIdentifier, 2, false, nil)
+				multi, err = nkn.NewMultiClient(account, nknBaseIdentifier, 2, false, clientConfig)
 				if err == nil {
 					entry.client = multi
 					entry.address = multi.Address()
