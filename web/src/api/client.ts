@@ -2569,6 +2569,7 @@ export async function testForwarderChannel(channel: ForwarderChannel): Promise<v
 export interface NKNNodeSettings {
   enabled: boolean
   beneficiary_addr: string
+  seed_overrides?: string
   revision: number
 }
 
@@ -2600,7 +2601,7 @@ export async function getNKNNodeLogs(): Promise<string[]> {
   return Array.isArray(result?.lines) ? result!.lines! : []
 }
 
-export async function updateNKNNode(next: { enabled: boolean; beneficiary_addr: string; expected_revision: number }): Promise<NKNNodeStatus> {
+export async function updateNKNNode(next: { enabled: boolean; beneficiary_addr: string; seed_overrides?: string; expected_revision: number }): Promise<NKNNodeStatus> {
   if (fixtureMode) throw new Error('当前为演示模式，NKN 节点未保存到 NAS。')
   const result = await writeJSON(`${API_ROOT}/settings/nkn-node`, 'PUT', next, 200) as Partial<NKNNodeStatus> | null
   if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('NKN 节点保存响应无效。')

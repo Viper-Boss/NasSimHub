@@ -13,6 +13,7 @@ import {
 const { t } = useI18n()
 const status = ref<NKNNodeStatus | null>(null)
 const beneficiary = ref('')
+const seedOverrides = ref('')
 const enabled = ref(false)
 const loading = ref(false)
 const loaded = ref(false)
@@ -49,6 +50,7 @@ async function load(): Promise<void> {
     status.value = result
     enabled.value = result.settings.enabled
     beneficiary.value = result.settings.beneficiary_addr
+    seedOverrides.value = result.settings.seed_overrides ?? ''
     loaded.value = true
   } catch (reason) {
     loaded.value = false
@@ -67,6 +69,7 @@ async function save(): Promise<void> {
     const result = await updateNKNNode({
       enabled: enabled.value,
       beneficiary_addr: beneficiary.value.trim(),
+      seed_overrides: seedOverrides.value.trim(),
       expected_revision: status.value.settings.revision
     })
     status.value = result
@@ -127,6 +130,11 @@ onMounted(() => { void load() })
           <span>{{ t('homesim.nknNode.beneficiary') }}</span>
           <input v-model="beneficiary" spellcheck="false" autocomplete="off" placeholder="NKN…" :disabled="saving" />
           <small>{{ t('homesim.nknNode.beneficiaryHint') }}</small>
+        </label>
+        <label>
+          <span>{{ t('homesim.nknNode.seedOverrides') }}</span>
+          <input v-model="seedOverrides" spellcheck="false" autocomplete="off" placeholder="http://my-seed.example.com:30003" :disabled="saving" />
+          <small>{{ t('homesim.nknNode.seedOverridesHint') }}</small>
         </label>
         <label>
           <span>{{ t('homesim.nknNode.idRegistration') }}</span>
