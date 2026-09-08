@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -115,18 +116,23 @@ func main() {
   nknpeer address -seed <seed>
   nknpeer receive -seed <seed> [-identifier <id>] [-timeout <dur>]
   nknpeer send -seed <seed> -dest <addr> [-msg <text>] [-identifier <id>]
+  nknpeer subscribe -seed <seed> -topic <topic> [-duration <blocks>] [-meta <text>] [-identifier <id>]
+  nknpeer subscribers -topic <topic> [-rpc <addrs>]
 `)
 		os.Exit(2)
 	}
 	subcommand := os.Args[1]
 	fs := flag.NewFlagSet(subcommand, flag.ExitOnError)
-	var seedRaw, dest, msg, identifier, timeoutRaw, rpcAddr string
+	var seedRaw, dest, msg, identifier, timeoutRaw, rpcAddr, topic, meta, durationRaw string
 	fs.StringVar(&seedRaw, "seed", "", "32-byte secret seed (hex or base64)")
 	fs.StringVar(&dest, "dest", "", "destination NKN client address")
 	fs.StringVar(&msg, "msg", "nknpeer test message", "message text to send")
 	fs.StringVar(&identifier, "identifier", peerIdentifier, "client identifier")
 	fs.StringVar(&timeoutRaw, "timeout", "60s", "receive/send wait budget")
 	fs.StringVar(&rpcAddr, "rpc", "", "comma-separated seed RPC addresses (e.g. http://192.168.120.190:30003) to prefer a self-hosted node")
+	fs.StringVar(&topic, "topic", "", "topic name for subscribe/subscribers")
+	fs.StringVar(&meta, "meta", "", "public meta string attached to the subscription")
+	fs.StringVar(&durationRaw, "duration", "4320", "subscription duration in blocks (~24h at 20s blocks)")
 	if err := fs.Parse(os.Args[2:]); err != nil {
 		die("parse flags: %v", err)
 	}
@@ -212,6 +218,64 @@ func main() {
 		case <-time.After(timeout):
 			die("no reply within %s (receiver offline or network unreachable)", timeout)
 		}
+
+	case "subscribe":
+		if seedRaw == "" || topic == "" {
+			die("subscribe requires -seed and -topic")
+		}
+		duration, err := strconv.Atoi(durationRaw)
+		if err != nil || duration <= 0 {
+			die("bad -duration %q: must be a positive block count", durationRaw)
+		}
+		seed := parseSeed(seedRaw)
+		client := newClient(seed, identifier, rpcAddr)
+		defer client.Close()
+		// Fee defaults to 0 (TransactionConfig nil) — a subscription costs
+		// nothing beyond the on-chain record itself.
+		hash, err := client.Subscribe(identifier, topic, duration, meta, nil)
+		if err != nil {
+			die("subscribe: %v", err)
+		}
+		out, _ := json.MarshalIndent(map[string]any{
+			"tx_hash":  hash,
+			"topic":    topic,
+			"address":  client.Address(),
+			"duration": duration,
+			"meta":     meta,
+			"fee":      "0",
+		}, "", "  ")
+		fmt.Printf("NKNPEER_SUBSCRIBED %s\n", out)
+
+	case "subscribers":
+		if topic == "" {
+			die("subscribers requires -topic")
+		}
+		config := &nkn.RPCConfig{RPCTimeout: 10000, RPCConcurrency: 2}
+		if addrs := strings.Split(rpcAddr, ","); strings.TrimSpace(rpcAddr) != "" {
+			clean := make([]string, 0, len(addrs))
+			for _, a := range addrs {
+				if a = strings.TrimSpace(a); a != "" {
+					clean = append(clean, a)
+				}
+			}
+			if len(clean) > 0 {
+				config.SeedRPCServerAddr = nkn.NewStringArray(clean...)
+			}
+		}
+		result, err := nkn.GetSubscribers(topic, 0, 0, true, false, nil, config)
+		if err != nil {
+			die("getsubscribers: %v", err)
+		}
+		list := map[string]string{}
+		if result != nil && result.Subscribers != nil {
+			list = result.Subscribers.Map()
+		}
+		out, _ := json.MarshalIndent(map[string]any{
+			"topic":       topic,
+			"count":       len(list),
+			"subscribers": list,
+		}, "", "  ")
+		fmt.Println(string(out))
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand %q\n", subcommand)
