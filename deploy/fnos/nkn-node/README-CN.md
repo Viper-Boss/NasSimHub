@@ -17,6 +17,16 @@
 2. 观察入网：`docker logs -f nkn-node`（看到 sync/started、无 CreateID error 即成功）
 3. 验证 RPC：`curl -s -X POST http://127.0.0.1:30003 -d '{"jsonrpc":"2.0","method":"getnodestate","params":{},"id":1}'`
 
+## 奖励（定位：业余互助，顺手领）
+
+- `BeneficiaryAddr` 留空 = 挖到的奖励**自动累积到节点自己的钱包**（就是上面那个地址），不需要任何配置
+- 定位是「不搞职业、业余互助」：家用宽带 NAT + 上行小，被选中做主节点的机会少，收益大概率很碎——攒着玩，不指望回血
+- 流量/电费：闲置 CPU ~0.1%、内存 ~41MiB；中继流量按全网需求分摊，家用上行本身就小，基本无感
+- **领取方式**（想提出来的时候）：
+  1. 把 `/mnt/docker-data/nkn-node/wallet.json` 下载到电脑
+  2. 导入 NKN 钱包应用（nMobile / NKN Desktop / wallet.nkn.org），密码用 `wallet.pswd` 里那份
+  3. 转出到交易所或任意地址即可；wallet.json 不要外传
+
 ## 客户端怎么用（点亮后）
 
 | 客户端 | 接法 |
