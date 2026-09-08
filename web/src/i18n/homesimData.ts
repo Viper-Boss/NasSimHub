@@ -34,7 +34,7 @@ export const homesimEN = {
     stateDraft: 'Settings draft; the SMS push worker is not connected yet.',
   },
   forwarder: {
-    title: 'SMS forwarding', subtitle: 'Forward incoming SMS to your own channels: generic Webhook, DingTalk, Feishu, WeCom, ServerChan, PushPlus and more. Bark and Telegram keep their own panels.',
+    title: 'SMS forwarding', subtitle: 'Forward incoming SMS to your own channels: generic Webhook, DingTalk, Feishu, WeCom, ServerChan, PushPlus, NKN and more. Bark and Telegram keep their own panels.',
     addChannel: 'Add channel', channelName: 'Channel name', channelType: 'Type', enabled: 'Enabled',
     events: 'Trigger on', eventSms: 'Incoming SMS',
     webhookUrl: 'Webhook URL', webhookUrlHint: 'HTTPS POST with JSON {from, to, text, received_at}.',
@@ -48,7 +48,10 @@ export const homesimEN = {
     test: 'Test', testSent: 'Test message delivered', testFailed: 'Test message failed',
     noChannels: 'No channels yet — add one to forward incoming SMS.',
     maxChannels: 'Up to 8 channels.',
-    types: { webhook: 'Webhook', dingtalk: 'DingTalk robot', feishu: 'Feishu robot', wecom: 'WeCom robot', serverchan: 'ServerChan', pushplus: 'PushPlus' },
+    types: { webhook: 'Webhook', dingtalk: 'DingTalk robot', feishu: 'Feishu robot', wecom: 'WeCom robot', serverchan: 'ServerChan', pushplus: 'PushPlus', nkn: 'NKN (P2P)' },
+    nknTopic: 'NKN topic (optional)', nknTopicHint: 'Publish to every NKN client subscribed to this topic; topic names allow letters, digits, dots, dashes and underscores.',
+    nknAddresses: 'NKN addresses (optional)', nknAddressesHint: 'Comma-separated NKN client addresses for direct end-to-end delivery.',
+    nknSeed: 'NKN seed variable name', nknSeedHint: 'Name of the NAS environment variable holding the 32-byte NKN seed (hex or base64), for example HOMESIM_NKN_SEED.',
     runtimeDraft: 'Channels are saved. Live SMS dispatch starts with the next gateway release.',
   },
   callFilter: {
@@ -113,7 +116,7 @@ export const homesimZH = {
     stateDraft: '当前为配置草稿；短信推送执行器尚未接入。',
   },
   forwarder: {
-    title: '短信转发', subtitle: '把收到的短信转发到自己的渠道：通用 Webhook、钉钉、飞书、企业微信、Server酱、PushPlus 等。Bark 和 Telegram 保留各自独立面板。',
+    title: '短信转发', subtitle: '把收到的短信转发到自己的渠道：通用 Webhook、钉钉、飞书、企业微信、Server酱、PushPlus、NKN 等。Bark 和 Telegram 保留各自独立面板。',
     addChannel: '添加渠道', channelName: '渠道名称', channelType: '类型', enabled: '启用',
     events: '触发事件', eventSms: '收到短信',
     webhookUrl: 'Webhook 地址', webhookUrlHint: 'HTTPS POST，JSON 内容 {from, to, text, received_at}。',
@@ -127,7 +130,10 @@ export const homesimZH = {
     test: '测试', testSent: '测试消息已送达', testFailed: '测试消息发送失败',
     noChannels: '还没有渠道——添加一个即可开始转发短信。',
     maxChannels: '最多 8 个渠道。',
-    types: { webhook: 'Webhook', dingtalk: '钉钉机器人', feishu: '飞书机器人', wecom: '企业微信机器人', serverchan: 'Server酱', pushplus: 'PushPlus' },
+    types: { webhook: 'Webhook', dingtalk: '钉钉机器人', feishu: '飞书机器人', wecom: '企业微信机器人', serverchan: 'Server酱', pushplus: 'PushPlus', nkn: 'NKN（P2P 直连）' },
+    nknTopic: 'NKN 主题（可选）', nknTopicHint: '发送到订阅了该主题的所有 NKN 客户端；主题名仅限字母、数字、点、横线和下划线。',
+    nknAddresses: 'NKN 地址（可选）', nknAddressesHint: '逗号分隔的 NKN 客户端地址，端到端直达，适合手机客户端白名单。',
+    nknSeed: 'NKN seed 变量名', nknSeedHint: 'NAS 环境变量名，内容为 32 字节 NKN seed（hex 或 base64），例如 HOMESIM_NKN_SEED。',
     runtimeDraft: '渠道已保存。收到新短信即自动转发。',
   },
   callFilter: {

@@ -2343,7 +2343,7 @@ onMounted(() => {
             <p v-if="simLockHint" class="homesim-sim-notice">{{ simLockHint }}</p>
             <p v-if="simLastFailure" class="inline-error" role="alert">{{ simLastFailure }}</p>
             <form class="sim-form" @submit.prevent="applySIMCommand">
-              <div class="field">
+              <div class="field sim-form__operation">
                 <span>{{ t('device.operation') }}</span>
                 <SelectControl
                   :model-value="simOperation"
@@ -2369,29 +2369,32 @@ onMounted(() => {
                 <input v-model="simRepeatPIN" type="password" inputmode="numeric" maxlength="8" autocomplete="off" />
               </label>
               <label v-if="simOperation === 'enable_pin'" class="inline-check">
-                <input v-model="simProtectionEnabled" class="ui-check" type="checkbox" />
+                <input v-model="simProtectionEnabled" class="ui-switch" type="checkbox" role="switch" />
                 <span>{{ t('device.enableProtection') }}</span>
               </label>
-              <button class="primary-action" type="submit" :disabled="simPending || simLoadStatus !== 'ready'">
+              <button class="primary-action sim-form__apply" type="submit" :disabled="simPending || simLoadStatus !== 'ready'">
                 <LoaderCircle v-if="simPending" class="spin" :size="16" />
                 {{ t('device.apply') }}
               </button>
             </form>
             <div class="homesim-sim-notice">
-              <label class="inline-check">
-                <input
-                  class="ui-check"
-                  type="checkbox"
-                  :checked="autoUnlockEnabled"
-                  :disabled="autoUnlockPending || !simAutoUnlock"
-                  @change="toggleAutoUnlock"
-                />
-                <span>{{ t('homesim.autoUnlockTitle') }}</span>
-              </label>
-              <label v-if="simAutoUnlock && !autoUnlockEnabled" class="auto-unlock-pin">
-                <span>SIM PIN</span>
-                <input v-model="autoUnlockPIN" type="password" inputmode="numeric" maxlength="8" autocomplete="off" />
-              </label>
+              <div class="sim-auto-unlock-row">
+                <label class="inline-check">
+                  <input
+                    class="ui-switch"
+                    type="checkbox"
+                    role="switch"
+                    :checked="autoUnlockEnabled"
+                    :disabled="autoUnlockPending || !simAutoUnlock"
+                    @change="toggleAutoUnlock"
+                  />
+                  <span>{{ t('homesim.autoUnlockTitle') }}</span>
+                </label>
+                <label v-if="simAutoUnlock && !autoUnlockEnabled" class="auto-unlock-pin">
+                  <span>SIM PIN</span>
+                  <input v-model="autoUnlockPIN" type="password" inputmode="numeric" maxlength="8" autocomplete="off" />
+                </label>
+              </div>
               <p v-if="autoUnlockError" class="inline-error" role="alert">{{ autoUnlockError }}</p>
               <p>{{ t('homesim.autoUnlockHint') }}</p>
             </div>
@@ -2767,6 +2770,7 @@ onMounted(() => {
 .data-apn-field > span,
 .profile-form label > span,
 .auto-unlock-pin > span,
+.sim-form__operation > span,
 .sim-form label > span,
 .configuration-control-row label > span {
   color: var(--muted);
@@ -3774,7 +3778,31 @@ onMounted(() => {
 }
 
 .sim-form {
-  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sim-form__operation {
+  grid-column: 1 / -1;
+}
+
+.sim-form__apply {
+  grid-column: 2;
+  justify-self: end;
+  min-width: 132px;
+}
+
+.sim-form .select-control__trigger {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 5px;
+}
+
+.sim-auto-unlock-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
 }
 
 .inline-check {
@@ -4164,6 +4192,16 @@ pre {
   .primary-action,
   .secondary-action {
     width: 100%;
+  }
+
+  .sim-auto-unlock-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sim-form__apply {
+    grid-column: 1;
+    justify-self: stretch;
+    min-width: 0;
   }
 
   .restart-required {

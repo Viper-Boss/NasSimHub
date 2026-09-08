@@ -22,7 +22,7 @@ const saving = ref(false)
 const testingID = ref('')
 const testResult = ref<Record<string, string>>({})
 
-const channelTypes = ['webhook', 'dingtalk', 'feishu', 'wecom', 'serverchan', 'pushplus'] as const
+const channelTypes = ['webhook', 'dingtalk', 'feishu', 'wecom', 'serverchan', 'pushplus', 'nkn'] as const
 
 const atCapacity = computed(() => settings.value.forwarders.length >= maxChannels.value)
 
@@ -99,6 +99,28 @@ function urlHint(kind: ForwarderChannel['type']): string {
   return t('homesim.forwarder.webhookUrlHint')
 }
 
+function needsCredential(kind: ForwarderChannel['type']): boolean {
+  return kind === 'serverchan' || kind === 'pushplus' || kind === 'nkn'
+}
+
+function credentialLabel(kind: ForwarderChannel['type']): string {
+  if (kind === 'serverchan') return t('homesim.forwarder.serverchanKey')
+  if (kind === 'pushplus') return t('homesim.forwarder.pushplusToken')
+  return t('homesim.forwarder.nknSeed')
+}
+
+function credentialPlaceholder(kind: ForwarderChannel['type']): string {
+  if (kind === 'serverchan') return 'HOMESIM_SERVERCHAN_KEY'
+  if (kind === 'pushplus') return 'HOMESIM_PUSHPLUS_TOKEN'
+  return 'HOMESIM_NKN_SEED'
+}
+
+function credentialHint(kind: ForwarderChannel['type']): string {
+  if (kind === 'serverchan') return t('homesim.forwarder.serverchanKeyHint')
+  if (kind === 'pushplus') return t('homesim.forwarder.pushplusTokenHint')
+  return t('homesim.forwarder.nknSeedHint')
+}
+
 async function testChannel(channel: ForwarderChannel): Promise<void> {
   testingID.value = channel.id
   try {
@@ -167,10 +189,20 @@ onMounted(load)
           <input v-model="channel.config.secret" spellcheck="false" autocomplete="off" placeholder="SEC…" />
           <small>{{ t('homesim.forwarder.dingtalkSecretHint') }}</small>
         </label>
-        <label v-if="channel.type === 'serverchan' || channel.type === 'pushplus'">
-          <span>{{ channel.type === 'serverchan' ? t('homesim.forwarder.serverchanKey') : t('homesim.forwarder.pushplusToken') }}</span>
-          <input v-model="channel.config.credential_ref" spellcheck="false" autocomplete="off" placeholder="HOMESIM_SERVERCHAN_KEY" />
-          <small>{{ channel.type === 'serverchan' ? t('homesim.forwarder.serverchanKeyHint') : t('homesim.forwarder.pushplusTokenHint') }}</small>
+        <label v-if="needsCredential(channel.type)">
+          <span>{{ credentialLabel(channel.type) }}</span>
+          <input v-model="channel.config.credential_ref" spellcheck="false" autocomplete="off" :placeholder="credentialPlaceholder(channel.type)" />
+          <small>{{ credentialHint(channel.type) }}</small>
+        </label>
+        <label v-if="channel.type === 'nkn'">
+          <span>{{ t('homesim.forwarder.nknTopic') }}</span>
+          <input v-model="channel.config.nkn_topic" spellcheck="false" autocomplete="off" placeholder="homesim-sms" />
+          <small>{{ t('homesim.forwarder.nknTopicHint') }}</small>
+        </label>
+        <label v-if="channel.type === 'nkn'">
+          <span>{{ t('homesim.forwarder.nknAddresses') }}</span>
+          <input v-model="channel.config.nkn_addresses" spellcheck="false" autocomplete="off" placeholder="2dSe77T…,2dSfYqX…" />
+          <small>{{ t('homesim.forwarder.nknAddressesHint') }}</small>
         </label>
         <div class="sms-forward-card__foot">
           <span>{{ t('homesim.forwarder.events') }}: {{ t('homesim.forwarder.eventSms') }}</span>

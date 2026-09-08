@@ -2530,12 +2530,12 @@ export async function saveCallFilter(filter: CallFilterPolicy): Promise<{ filter
   return { filter: result.filter, state: result.state || '', runtime_ready: result.runtime_ready === true }
 }
 
-export type ForwarderChannelConfig = { webhook_url?: string; secret?: string; credential_ref?: string }
+export type ForwarderChannelConfig = { webhook_url?: string; secret?: string; credential_ref?: string; nkn_topic?: string; nkn_addresses?: string }
 
 export type ForwarderChannel = {
   id: string
   name: string
-  type: 'webhook' | 'dingtalk' | 'feishu' | 'wecom' | 'serverchan' | 'pushplus'
+  type: 'webhook' | 'dingtalk' | 'feishu' | 'wecom' | 'serverchan' | 'pushplus' | 'nkn'
   enabled: boolean
   events: string[]
   config: ForwarderChannelConfig
