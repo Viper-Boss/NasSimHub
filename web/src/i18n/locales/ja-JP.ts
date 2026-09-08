@@ -830,7 +830,7 @@ export default {
     "online": "オンライン",
     "callReady": "通話準備完了",
     "messageReady": "メッセージの準備ができました",
-    "manageDevices": "デバイスの管理",
+    "manageDevices": "デバイスの管理", metricsTemp: 'モジュール温度', metricsCpu: 'CPU負荷', metricsMemory: 'メモリ', metricsFlash: 'フラッシュ', metricsData: '4Gデータ', metricsLoad: '負荷 1/5/15分', metricsLoadHint: 'CPU総容量に対する負荷平均の割合', metricsUnavailable: 'システム指標を利用できません',
     "loadingLines": "回線を読み込み中",
     "loadLinesFailed": "回線を読み込めません",
     "noLines": "行が見つかりません",

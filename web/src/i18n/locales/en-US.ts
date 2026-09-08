@@ -870,7 +870,7 @@ export default {
     online: 'online',
     callReady: 'call ready',
     messageReady: 'message ready',
-    manageDevices: 'Manage devices',
+    manageDevices: 'Manage devices', metricsTemp: 'Module temp', metricsCpu: 'CPU load', metricsMemory: 'Memory', metricsFlash: 'Flash', metricsData: '4G data', metricsLoad: 'Load 1/5/15min', metricsLoadHint: 'Load averages as percent of total CPU capacity', metricsUnavailable: 'System metrics unavailable',
     loadingLines: 'Loading lines',
     loadLinesFailed: 'Unable to load lines',
     noLines: 'No lines found',

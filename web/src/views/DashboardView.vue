@@ -38,6 +38,7 @@ import SelectableListRow from '../components/SelectableListRow.vue'
 import StatePanel from '../components/StatePanel.vue'
 import SwipeActionRow from '../components/SwipeActionRow.vue'
 import TrafficSummary from '../components/TrafficSummary.vue'
+import SystemMetricsStrip from '../components/SystemMetricsStrip.vue'
 import LoadingSkeletonBoundary from '../components/skeletons/LoadingSkeletonBoundary.vue'
 import SectionSkeleton from '../components/skeletons/SectionSkeleton.vue'
 import WorkspaceDetailSkeleton from '../components/skeletons/WorkspaceDetailSkeleton.vue'
@@ -1190,6 +1191,7 @@ onBeforeUnmount(() => {
                 <ChevronRight :size="15" />
               </RouterLink>
             </header>
+            <SystemMetricsStrip />
             <LoadingSkeletonBoundary
               :loading="bootstrapResource.status === 'loading' || bootstrapResource.status === 'idle'"
             >

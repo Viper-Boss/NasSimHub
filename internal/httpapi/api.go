@@ -145,6 +145,7 @@ type DeviceConfigurationService interface {
 		string,
 		agentclient.ApplyDeviceConfigurationRequest,
 	) (agentclient.DeviceConfiguration, error)
+	SystemMetrics(context.Context) (agentclient.SystemMetrics, error)
 }
 
 type LineService interface {
@@ -568,6 +569,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.getOnly(response, request, api.diagnosticLogStream)
 	case "/api/v1/diagnostics/logs/download":
 		api.getOnly(response, request, api.downloadDiagnosticLogs)
+	case "/api/v1/system-metrics":
+		api.getOnly(response, request, api.systemMetrics)
 	case "/api/v1/settings/telegram":
 		api.telegramCollection(response, request)
 	case "/api/v1/settings/calls":

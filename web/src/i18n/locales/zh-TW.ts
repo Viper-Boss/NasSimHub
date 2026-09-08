@@ -850,7 +850,7 @@ export default {
     online: '線上',
     callReady: '可通話',
     messageReady: '可簡訊',
-    manageDevices: '管理裝置',
+    manageDevices: '管理裝置', metricsTemp: '模組溫度', metricsCpu: 'CPU 負載', metricsMemory: '記憶體', metricsFlash: '快閃儲存', metricsData: '4G 流量', metricsLoad: '負載 1/5/15 分鐘', metricsLoadHint: '負載佔 CPU 總容量的百分比', metricsUnavailable: '系統指標不可用',
     loadingLines: '正在載入線路',
     loadLinesFailed: '無法載入線路',
     noLines: '尚未發現線路',

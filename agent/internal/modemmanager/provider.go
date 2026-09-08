@@ -61,6 +61,7 @@ type Provider struct {
 	signalSetupStates  map[string]signalSetupState
 	servingRadioMu     sync.Mutex
 	servingRadioStates map[string]servingRadioState
+	modemTemp          modemTempCache
 
 	voiceProbeMu sync.Mutex
 	voiceProbes  map[string]voiceProbeResult

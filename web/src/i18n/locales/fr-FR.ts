@@ -830,7 +830,7 @@ export default {
     "online": "en ligne",
     "callReady": "appel prêt",
     "messageReady": "message prêt",
-    "manageDevices": "Gérer les appareils",
+    "manageDevices": "Gérer les appareils", metricsTemp: 'Temp. du module', metricsCpu: 'Charge CPU', metricsMemory: 'Mémoire', metricsFlash: 'Flash', metricsData: 'Données 4G', metricsLoad: 'Charge 1/5/15 min', metricsLoadHint: 'Moyennes de charge en pourcentage de la capacité CPU totale', metricsUnavailable: 'Métriques système indisponibles',
     "loadingLines": "Lignes de chargement",
     "loadLinesFailed": "Impossible de charger les lignes",
     "noLines": "Aucune ligne trouvée",

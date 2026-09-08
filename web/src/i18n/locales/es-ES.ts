@@ -830,7 +830,7 @@ export default {
     "online": "en línea",
     "callReady": "llamada lista",
     "messageReady": "mensaje listo",
-    "manageDevices": "Administrar dispositivos",
+    "manageDevices": "Administrar dispositivos", metricsTemp: 'Temp. del módulo', metricsCpu: 'Carga de CPU', metricsMemory: 'Memoria', metricsFlash: 'Flash', metricsData: 'Datos 4G', metricsLoad: 'Carga 1/5/15 min', metricsLoadHint: 'Promedios de carga como porcentaje de la capacidad total de CPU', metricsUnavailable: 'Métricas del sistema no disponibles',
     "loadingLines": "Líneas de carga",
     "loadLinesFailed": "No se pueden cargar líneas",
     "noLines": "No se encontraron líneas",

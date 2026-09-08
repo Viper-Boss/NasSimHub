@@ -30,6 +30,7 @@ type handler struct {
 	network              domain.NetworkProvider
 	networkSelection     domain.NetworkSelectionProvider
 	diagnosticLogs       diagnostics.LogSource
+	systemMetrics        domain.SystemMetricsProvider
 	agentVersion         string
 	media                *media.Manager
 }
@@ -99,6 +100,7 @@ func NewWithOptions(
 	h.telemetry, _ = provider.(domain.TelemetryProvider)
 	h.callMedia, _ = provider.(domain.CallMediaActivator)
 	h.messageDeleter, _ = provider.(domain.MessageDeleter)
+	h.systemMetrics, _ = provider.(domain.SystemMetricsProvider)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health", h.health)
 	mux.HandleFunc("GET /v1/events", h.events)
@@ -107,6 +109,7 @@ func NewWithOptions(
 	mux.HandleFunc("DELETE /v1/control-lease", h.releaseControlLease)
 	mux.HandleFunc("GET /v1/snapshot", h.snapshot)
 	mux.HandleFunc("GET /v1/telemetry", h.getTelemetry)
+	mux.HandleFunc("GET /v1/system/metrics", h.getSystemMetrics)
 	mux.HandleFunc("GET /v1/lines/{id}/configuration", h.getDeviceConfiguration)
 	mux.HandleFunc("PATCH /v1/lines/{id}/configuration", h.patchDeviceConfiguration)
 	mux.HandleFunc("GET /v1/lines/{id}/sim", h.getSIMStatus)

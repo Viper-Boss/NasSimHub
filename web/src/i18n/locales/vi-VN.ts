@@ -830,7 +830,7 @@ export default {
     "online": "trực tuyến",
     "callReady": "cuộc gọi đã sẵn sàng",
     "messageReady": "tin nhắn đã sẵn sàng",
-    "manageDevices": "Quản lý thiết bị",
+    "manageDevices": "Quản lý thiết bị", metricsTemp: 'Nhiệt độ module', metricsCpu: 'Tải CPU', metricsMemory: 'Bộ nhớ', metricsFlash: 'Flash', metricsData: 'Dữ liệu 4G', metricsLoad: 'Tải 1/5/15 phút', metricsLoadHint: 'Tải trung bình theo phần trăm tổng dung lượng CPU', metricsUnavailable: 'Không khả dụng chỉ số hệ thống',
     "loadingLines": "Đang tải đường dây",
     "loadLinesFailed": "Không thể tải đường dây",
     "noLines": "Không tìm thấy đường dây nào",

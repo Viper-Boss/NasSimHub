@@ -62,6 +62,7 @@ type Agent interface {
 		string,
 		agentclient.ApplyDeviceConfigurationRequest,
 	) (agentclient.DeviceConfiguration, error)
+	SystemMetrics(context.Context) (agentclient.SystemMetrics, error)
 }
 
 type AgentChangeSource interface {

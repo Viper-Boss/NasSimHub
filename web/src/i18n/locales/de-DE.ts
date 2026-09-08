@@ -830,7 +830,7 @@ export default {
     "online": "online",
     "callReady": "Anruf bereit",
     "messageReady": "Nachricht bereit",
-    "manageDevices": "Geräte verwalten",
+    "manageDevices": "Geräte verwalten", metricsTemp: 'Modultemperatur', metricsCpu: 'CPU-Last', metricsMemory: 'Arbeitsspeicher', metricsFlash: 'Flash', metricsData: '4G-Daten', metricsLoad: 'Last 1/5/15 Min', metricsLoadHint: 'Lastmittelwerte als Prozent der CPU-Gesamtkapazität', metricsUnavailable: 'Systemkennzahlen nicht verfügbar',
     "loadingLines": "Ladelinien",
     "loadLinesFailed": "Zeilen können nicht geladen werden",
     "noLines": "Keine Zeilen gefunden",

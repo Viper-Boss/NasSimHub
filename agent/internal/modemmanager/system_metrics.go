@@ -1,0 +1,261 @@
+package modemmanager
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/human-agent65535/modemdeck/agent/internal/domain"
+)
+
+// SystemMetrics observes NAS host health (CPU load, memory, flash usage, the
+// 4G data-port counters) plus the module temperature over the ModemManager AT
+// passthrough. Everything is best-effort: individual collectors that fail are
+// simply omitted from the result so the dashboard can render what is known.
+//
+// The temperature query costs a modem round-trip, so it is cached briefly.
+
+const (
+	systemMetricsTempTTL = 30 * time.Second
+	modemTempCommand     = "AT+QTEMP"
+	modemTempNumberLimit = 110
+)
+
+type modemTempCache struct {
+	mu        sync.Mutex
+	value     *float64
+	readAt    time.Time
+	inFlight  bool
+	succeeded bool
+}
+
+var numberPattern = regexp.MustCompile(`\d+(?:\.\d+)?`)
+
+func (p *Provider) SystemMetrics(ctx context.Context) (domain.SystemMetrics, error) {
+	metrics := domain.SystemMetrics{ObservedAt: time.Now().UTC()}
+	p.collectLoad(&metrics)
+	p.collectMemory(&metrics)
+	collectFlash(&metrics)
+	metrics.Interfaces = collectNetworkCounters()
+	metrics.ModemTempCelsius = p.cachedModemTemperature(ctx)
+	if metrics.Interfaces == nil {
+		metrics.Interfaces = []domain.NetworkInterfaceCounters{}
+	}
+	return metrics, nil
+}
+
+func (p *Provider) collectLoad(metrics *domain.SystemMetrics) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return
+	}
+	load1, err1 := strconv.ParseFloat(fields[0], 64)
+	load5, err5 := strconv.ParseFloat(fields[1], 64)
+	load15, err15 := strconv.ParseFloat(fields[2], 64)
+	if err1 != nil || err5 != nil || err15 != nil {
+		return
+	}
+	cores := systemCPUCount()
+	metrics.LoadRaw1 = load1
+	metrics.LoadRaw5 = load5
+	metrics.LoadRaw15 = load15
+	metrics.Cores = cores
+	if cores > 0 {
+		metrics.LoadPercent1 = percentOfCapacity(load1, cores)
+		metrics.LoadPercent5 = percentOfCapacity(load5, cores)
+		metrics.LoadPercent = percentOfCapacity(load15, cores)
+	}
+}
+
+func percentOfCapacity(load float64, cores int) float64 {
+	if cores <= 0 {
+		return 0
+	}
+	return load / float64(cores) * 100
+}
+
+func systemCPUCount() int {
+	data, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return 0
+	}
+	cores := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "processor") {
+			cores++
+		}
+	}
+	return cores
+}
+
+func (p *Provider) collectMemory(metrics *domain.SystemMetrics) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return
+	}
+	values := make(map[string]uint64)
+	for _, line := range strings.Split(string(data), "\n") {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		fields := strings.Fields(parts[1])
+		if len(fields) == 0 {
+			continue
+		}
+		value, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		values[parts[0]] = value * 1024
+	}
+	total := values["MemTotal"]
+	available := values["MemAvailable"]
+	if total == 0 {
+		return
+	}
+	metrics.MemoryTotalBytes = total
+	metrics.MemoryAvailableBytes = available
+	metrics.MemoryUsedPercent = float64(total-available) / float64(total) * 100
+}
+
+// collectFlash reports usage of the filesystem that holds the reviewed voice
+// runtime bind mount, which is the host SSD data volume. When the mount is
+// unavailable the container /tmp is reported as a degraded fallback.
+func collectFlash(metrics *domain.SystemMetrics) {
+	path := strings.TrimSpace(os.Getenv("MODEMDECK_QDC507_VOICE_RUNTIME_DIR"))
+	if path == "" {
+		path = "/tmp"
+	}
+	total, free, err := statfsBytes(path)
+	if err != nil {
+		path = "/tmp"
+		total, free, err = statfsBytes(path)
+		if err != nil {
+			return
+		}
+	}
+	metrics.FlashPath = path
+	metrics.FlashTotalBytes = total
+	metrics.FlashFreeBytes = free
+	if total > 0 {
+		metrics.FlashUsedPercent = float64(total-free) / float64(total) * 100
+	}
+}
+
+func collectNetworkCounters() []domain.NetworkInterfaceCounters {
+	entries, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return nil
+	}
+	interfaces := make([]domain.NetworkInterfaceCounters, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "lo" {
+			continue
+		}
+		rx, rxErr := readCounterFile("/sys/class/net", name, "rx_bytes")
+		tx, txErr := readCounterFile("/sys/class/net", name, "tx_bytes")
+		if rxErr != nil || txErr != nil {
+			continue
+		}
+		interfaces = append(interfaces, domain.NetworkInterfaceCounters{
+			Name:    name,
+			RxBytes: rx,
+			TxBytes: tx,
+		})
+	}
+	sort.Slice(interfaces, func(left, right int) bool {
+		return interfaces[left].Name < interfaces[right].Name
+	})
+	return interfaces
+}
+
+func readCounterFile(base, name, counter string) (uint64, error) {
+	data, err := os.ReadFile(fmt.Sprintf("%s/%s/statistics/%s", base, name, counter))
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+}
+
+// cachedModemTemperature returns the cached module temperature when fresh;
+// otherwise it queries AT+QTEMP over the ModemManager passthrough once. A
+// failed query is retried on the next call but never blocks longer than the
+// command timeout.
+func (p *Provider) cachedModemTemperature(ctx context.Context) *float64 {
+	p.modemTemp.mu.Lock()
+	if p.modemTemp.inFlight || (p.modemTemp.succeeded && time.Since(p.modemTemp.readAt) < systemMetricsTempTTL) {
+		value := p.modemTemp.value
+		p.modemTemp.mu.Unlock()
+		return value
+	}
+	p.modemTemp.inFlight = true
+	p.modemTemp.mu.Unlock()
+
+	value := p.queryModemTemperature(ctx)
+
+	p.modemTemp.mu.Lock()
+	p.modemTemp.inFlight = false
+	p.modemTemp.readAt = time.Now()
+	if value != nil {
+		p.modemTemp.value = value
+		p.modemTemp.succeeded = true
+	}
+	p.modemTemp.mu.Unlock()
+	return value
+}
+
+func (p *Provider) queryModemTemperature(ctx context.Context) *float64 {
+	parsed, err := p.snapshotContent(ctx, "system_metrics")
+	if err != nil {
+		return nil
+	}
+	for index := range parsed.Lines {
+		line := parsed.Lines[index]
+		if !line.Capabilities.ModemInterface {
+			continue
+		}
+		path, found := parsed.LinePaths[line.ID]
+		if !found || !path.IsValid() {
+			continue
+		}
+		response, err := p.commandATPath(ctx, path, "system_metrics", modemTempCommand)
+		if err != nil {
+			continue
+		}
+		return parseModemTemperature(response)
+	}
+	return nil
+}
+
+// parseModemTemperature takes the highest plausible Celsius value from a
+// QTEMP-style response (for example: +QTEMP: "cpu_die_tem",41 / "pa_tem",38).
+func parseModemTemperature(response string) *float64 {
+	best := 0.0
+	found := false
+	for _, match := range numberPattern.FindAllString(response, -1) {
+		value, err := strconv.ParseFloat(match, 64)
+		if err != nil || value <= 0 || value > modemTempNumberLimit {
+			continue
+		}
+		if !found || value > best {
+			best = value
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	return &best
+}

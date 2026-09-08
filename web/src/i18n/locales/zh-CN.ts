@@ -850,7 +850,7 @@ export default {
     online: '在线',
     callReady: '可通话',
     messageReady: '可短信',
-    manageDevices: '管理设备',
+    manageDevices: '管理设备', metricsTemp: '模组温度', metricsCpu: 'CPU 负载', metricsMemory: '内存', metricsFlash: '闪存', metricsData: '4G 流量', metricsLoad: '负载 1/5/15 分钟', metricsLoadHint: '负载占 CPU 总容量的百分比', metricsUnavailable: '系统指标不可用',
     loadingLines: '正在载入线路',
     loadLinesFailed: '无法载入线路',
     noLines: '尚未发现线路',

@@ -2682,6 +2682,61 @@ export interface NKNNetworkStatus {
   topic: string
 }
 
+export interface SystemMetricsInterfaceCounters {
+  name: string
+  rx_bytes: number
+  tx_bytes: number
+}
+
+export interface SystemMetricsSnapshot {
+  observed_at: string
+  load_raw_1: number
+  load_raw_5: number
+  load_raw_15: number
+  load_percent_1: number
+  load_percent_5: number
+  load_percent_15: number
+  cores: number
+  memory_total_bytes: number
+  memory_available_bytes: number
+  memory_used_percent: number
+  flash_path: string
+  flash_total_bytes: number
+  flash_free_bytes: number
+  flash_used_percent: number
+  modem_temp_celsius: number | null
+  interfaces: SystemMetricsInterfaceCounters[]
+  available: boolean
+  error?: string
+}
+
+export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
+  if (fixtureMode) throw new Error('当前为演示模式，系统指标未连接 NAS。')
+  const result = await get(`${API_ROOT}/system-metrics`) as Partial<SystemMetricsSnapshot> | null
+  if (!result || !Array.isArray(result.interfaces)) throw new Error('系统指标响应无效。')
+  return {
+    observed_at: typeof result.observed_at === 'string' ? result.observed_at : '',
+    load_raw_1: Number(result.load_raw_1 ?? 0),
+    load_raw_5: Number(result.load_raw_5 ?? 0),
+    load_raw_15: Number(result.load_raw_15 ?? 0),
+    load_percent_1: Number(result.load_percent_1 ?? 0),
+    load_percent_5: Number(result.load_percent_5 ?? 0),
+    load_percent_15: Number(result.load_percent_15 ?? 0),
+    cores: Number(result.cores ?? 0),
+    memory_total_bytes: Number(result.memory_total_bytes ?? 0),
+    memory_available_bytes: Number(result.memory_available_bytes ?? 0),
+    memory_used_percent: Number(result.memory_used_percent ?? 0),
+    flash_path: typeof result.flash_path === 'string' ? result.flash_path : '',
+    flash_total_bytes: Number(result.flash_total_bytes ?? 0),
+    flash_free_bytes: Number(result.flash_free_bytes ?? 0),
+    flash_used_percent: Number(result.flash_used_percent ?? 0),
+    modem_temp_celsius: typeof result.modem_temp_celsius === 'number' ? result.modem_temp_celsius : null,
+    interfaces: result.interfaces,
+    available: result.available === true,
+    error: typeof result.error === 'string' ? result.error : undefined
+  }
+}
+
 export interface NKNNetworkPeer {
   address: string
   meta?: string
