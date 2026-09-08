@@ -90,7 +90,7 @@ test('settings landing remains a directory and mobile preference rows keep balan
   assert.doesNotMatch(shell, /settingsLanding/)
   assert.match(
     shell,
-    /class="rail-link"[\s\S]*:class="\{ 'is-current': route\.name === 'settings' && !\['devices', 'diagnostics', 'about', 'telegram'\]\.includes\(String\(route\.params\.section\)\) \}"[\s\S]*:to="\{ name: 'settings' \}"/
+    /class="rail-link"[\s\S]*:class="\{ 'is-current': route\.name === 'settings' && !\['devices', 'diagnostics', 'about', 'telegram', 'preferences'\]\.includes\(String\(route\.params\.section\)\) \}"[\s\S]*:to="\{ name: 'settings' \}"/
   )
   assert.match(
     view,

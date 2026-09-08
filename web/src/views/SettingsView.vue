@@ -236,12 +236,13 @@ const sections = computed<SettingsSectionDefinition[]>(() => {
     .map(sectionID => catalog.get(sectionID))
     .filter((section): section is SettingsSectionDefinition => section !== undefined)
 })
+const settingsQuery = ref('')
 const sectionGroups = computed(() =>
   (['personal', 'communication', 'network', 'management'] as const).map((group: SettingsSectionGroup) => ({
     id: group,
     label: ({ personal: t('homesim.advanced.text3'), communication: t('homesim.advanced.text4'), network: t('homesim.advanced.text5'), management: t('homesim.advanced.text6') })[group],
-    sections: sections.value.filter(section => settingsSectionGroup(section.id) === group)
-  }))
+    sections: sections.value.filter(section => settingsSectionGroup(section.id) === group && `${section.label} ${section.description}`.toLocaleLowerCase().includes(settingsQuery.value.trim().toLocaleLowerCase()))
+  })).filter(group => group.sections.length > 0)
 )
 const selectedSection = computed<SettingsSection | ''>(() => {
   const value = String(route.params.section || '')
@@ -415,6 +416,7 @@ onMounted(() => {
   <section class="workspace settings-workspace" :class="{ 'has-selection': selectedSection }">
     <aside class="list-pane settings-list-pane">
       <header class="pane-header"><h1>{{ t('settings.title') }}</h1></header>
+      <div class="settings-search"><input v-model="settingsQuery" type="search" :placeholder="t('homesim.settingsSearch')" :aria-label="t('homesim.settingsSearch')" /><p v-if="!sectionGroups.length" role="status">{{ t('homesim.settingsNoResults') }}</p></div>
       <div class="item-list settings-list">
         <button
           class="list-item settings-overview-link"
@@ -452,6 +454,7 @@ onMounted(() => {
             :key="section.id"
             class="list-item"
             :class="{ 'is-selected': selectedSection === section.id }"
+            :aria-current="selectedSection === section.id ? 'page' : undefined"
             type="button"
             @focus="preloadSection(section.id)"
             @pointerenter="preloadSection(section.id)"
@@ -551,8 +554,8 @@ onMounted(() => {
 
             <div v-else-if="selectedSection === 'audio'" class="settings-content">
               <PageContentFrame mode="reading">
-                <HomeSIMServicesPanel v-if="isAdmin" />
                 <AudioSettingsForm />
+                <details v-if="isAdmin" class="settings-experimental"><summary class="ui-disclosure-summary">{{ t('homesim.settingsExperimental') }}</summary><HomeSIMServicesPanel /></details>
               </PageContentFrame>
             </div>
 
@@ -643,6 +646,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.settings-search { padding: 0 16px 12px; }
+.settings-experimental { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.settings-search input { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; background: var(--surface); color: var(--text); }
+.settings-search p { color: var(--muted); font-size: 13px; padding-top: 8px; }
+.settings-nav-group .list-item { border-radius: 12px; margin-block: 2px; }
+.settings-nav-group .list-item__content small { line-height: 1.5; overflow-wrap: anywhere; }
 .settings-nav-group {
   display: grid;
   padding-block: 10px 4px;
@@ -658,7 +667,7 @@ onMounted(() => {
   margin: 0;
   padding: 0 12px 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
   letter-spacing: 0.08em;
   line-height: 1.2;

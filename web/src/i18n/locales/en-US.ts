@@ -288,7 +288,7 @@ export default {
     nknNode: 'NKN node',
     nknNodeDescription: 'Embedded NKN relay node (off by default); rewards are yours',
     nknNetwork: 'ModemDeck network',
-    nknNetworkDescription: 'ModemDeck devices seen online in the last 24 hours (rolling window, off by default, public on-chain directory)',
+    nknNetworkDescription: 'Public directory enabled by default; can be disabled. Registration does not prove real-time availability.',
     iosApp: 'Pairing',
     iosAppDescription: 'Pair this account with an iPhone',
     tls: 'Access',

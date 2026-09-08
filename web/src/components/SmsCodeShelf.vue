@@ -3,7 +3,6 @@ import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { KeyRound, Trash2, X } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import { messageResources } from '../state/workspace'
-import { deleteMessageThreads } from '../state/workspace'
 import type { MessageThread, Message } from '../api/types'
 import { gateway } from '../api/client'
 import { collectCodeSuggestions } from '../utils/smsInsight'
@@ -23,9 +22,10 @@ const scanError = ref('')
 const scanComplete = ref(false)
 const scannedCount = ref(0)
 let generation = 0
-const codes = computed(() => collectCodeSuggestions(props.threads, messageResources, props.lineFilter))
+const dismissed = ref(new Set<string>())
+const codes = computed(() => collectCodeSuggestions(props.threads, messageResources, props.lineFilter).filter(item => !dismissed.value.has(item.key)))
 const library = computed(() => scannedThreads.value.length
-  ? collectCodeSuggestions(scannedThreads.value, scanned.value, props.lineFilter, Number.MAX_SAFE_INTEGER, false)
+  ? collectCodeSuggestions(scannedThreads.value, scanned.value, props.lineFilter, Number.MAX_SAFE_INTEGER, false).filter(item => !dismissed.value.has(item.key))
   : codes.value)
 const recent = computed(() => (scanComplete.value ? library.value : codes.value).slice(0, 3))
 function cancelScan(): void { generation++; scanning.value = false }
@@ -75,7 +75,7 @@ function select(key: string): void { expanded.value = false; emit('select', key)
 function openLibrary(): void { expanded.value = true; void scanAll() }
 
 const clearing = ref(false)
-// 一键清空：删除当前验证码列表里出现的所有会话（危险操作，需确认）
+// Clear only the current view. A code-bearing thread can also contain ordinary SMS.
 async function clearCodes(): Promise<void> {
   if (clearing.value) return
   const source = scanComplete.value ? library.value : codes.value
@@ -89,12 +89,8 @@ async function clearCodes(): Promise<void> {
   if (!confirmed) return
   clearing.value = true
   try {
-    const byKey = new Map([...props.threads, ...scannedThreads.value].map(thread => [thread.key, thread]))
-    const threads = [...new Set(source.map(item => item.threadKey))]
-      .map(key => byKey.get(key))
-      .filter((thread): thread is MessageThread => Boolean(thread))
     cancelScan()
-    await deleteMessageThreads(threads)
+    dismissed.value = new Set([...dismissed.value, ...source.map(item => item.key)])
   } finally {
     clearing.value = false
   }

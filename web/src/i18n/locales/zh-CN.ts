@@ -288,7 +288,7 @@ export default {
     nknNode: 'NKN 中继节点',
     nknNodeDescription: '可选的独立中继节点，默认关闭',
     nknNetwork: '公开设备目录',
-    nknNetworkDescription: '链上有效登记，不代表实时在线；默认不公开本机身份',
+    nknNetworkDescription: '公开目录默认开启，可关闭；链上登记不代表实时在线',
     iosApp: '手机配对',
     iosAppDescription: '二维码连接手机与管理设备授权',
     tls: '接入',

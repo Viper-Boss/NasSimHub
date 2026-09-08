@@ -96,12 +96,6 @@ const facts = computed(() => ownNumberFacts(line.value?.phone_number || '', line
 const remoteGeo = ref<{ province: string; carrier: string } | undefined>()
 
 watch(
-  () => line.value?.id,
-  () => { void refreshDataState() },
-  { immediate: true }
-)
-
-watch(
   () => line.value?.phone_number || '',
   number => {
     remoteGeo.value = undefined
@@ -115,14 +109,14 @@ const geoLine = computed(() => {
     const parts = [remoteGeo.value.province, remoteGeo.value.carrier].filter(Boolean)
     if (parts.length) return parts.join(' · ')
   }
-  // 运营商名称已单独显示在左侧，归属行只保留地区和可读运营商名（过滤 46011 这类裸代码）
+  // Keep readable region/carrier labels; hide raw PLMN identifiers.
   const parts = [facts.value.region, facts.value.carrier].filter(Boolean)
   return parts.join(' · ')
 })
 
 const networkLabel = computed(() => accessTechnologyLabel(line.value?.serving_radio?.access_technology))
 
-// 运营商名称：优先把 PLMN 代码（46011）翻译成中文名，其次回退到号码归属或上报的字符串
+// Prefer the mapped carrier name over a raw PLMN identifier.
 const carrierName = computed(() => {
   const value = line.value
   if (!value) return ''
@@ -133,21 +127,31 @@ const carrierName = computed(() => {
   return facts.value.carrier || ''
 })
 
-// 移动数据开关：取设备配置里是否有已连接的数据连接；null = 未知（灰色不闪）
+// A null data state means unknown, not disconnected.
 const dataOn = ref<boolean | null>(null)
+const wifiCapability = ref<boolean | null>(null)
+const vowifiOn = computed(() => callState.sessions.some(session => session.line_id === line.value?.id && session.phase === 'active' && session.bearer === 'vowifi'))
+const vowifiHint = computed(() => t(vowifiOn.value ? 'homesim.strip.vowifiActive' : wifiCapability.value === false ? 'homesim.strip.vowifiUnavailable' : 'homesim.strip.vowifiHint'))
+let deviceRequest = 0
+
+watch(() => line.value?.id, () => { void refreshDataState() }, { immediate: true })
 
 async function refreshDataState(): Promise<void> {
+  const request = ++deviceRequest
   const value = line.value
+  dataOn.value = null
+  wifiCapability.value = null
   if (!value?.id) {
     dataOn.value = null
     return
   }
   try {
     const config = await gateway.getDeviceConfiguration(value.id)
-    if (line.value?.id !== value.id) return
+    if (request !== deviceRequest || line.value?.id !== value.id) return
     dataOn.value = (config.hardware?.data_connections || []).some(connection => connection.connected)
+    wifiCapability.value = config.hardware?.capabilities.vowifi.implemented ?? null
   } catch {
-    dataOn.value = null
+    if (request === deviceRequest) { dataOn.value = null; wifiCapability.value = null }
   }
 }
 
@@ -253,8 +257,10 @@ onBeforeUnmount(() => {
           >VoLTE</span>
           <span
             class="line-status__vowifi"
-            :title="t('homesim.strip.vowifiHint')"
-            :aria-label="t('homesim.strip.vowifiHint')"
+            :class="{ 'is-on': vowifiOn }"
+            :title="vowifiHint"
+            :aria-label="vowifiHint"
+            role="img"
           >
             <Phone :size="11" :stroke-width="2.6" aria-hidden="true" />
             <svg width="9" height="5" viewBox="0 0 10 6" fill="none" aria-hidden="true">
@@ -475,8 +481,10 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   align-items: flex-start;
   gap: 1px;
-  color: var(--accent-strong, var(--accent));
+  color: var(--muted);
 }
+
+.line-status__vowifi.is-on { color: var(--success); }
 
 .line-status__vowifi svg {
   display: block;
@@ -495,7 +503,6 @@ onBeforeUnmount(() => {
 
 .line-status__data.is-on {
   color: var(--success, #34d399);
-  animation: line-status-data-blink 1.6s ease-in-out infinite;
 }
 
 @keyframes line-status-data-blink {
@@ -871,11 +878,14 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1479px) {
   .line-status__geo,
-  .line-status__version {
+  .line-status__version,
+  .line-status__ring {
     display: none;
   }
+  .line-status__row { gap: 5px; }
+  .line-status { min-width: 190px; }
 }
 
 @media (max-width: 860px) {
