@@ -94,7 +94,7 @@ func (p *Provider) ReconcileDataPlane(ctx context.Context) error {
 				nil,
 			)
 		}
-		if err := p.dataPlane.Configure(ctx, owned.LineID, connection); err != nil {
+		if err := p.configureDataPlane(ctx, owned.LineID, connection); err != nil {
 			return domain.FailedPrecondition(
 				operation,
 				fmt.Sprintf(
@@ -167,7 +167,7 @@ func (p *Provider) activateOwnedBearerData(
 		} else if reuseExisting &&
 			connection.Connected &&
 			dataConnectionMatches(connection, effectiveAPN, ipFamily) {
-			if err := p.dataPlane.Configure(ctx, lineID, connection); err != nil {
+			if err := p.configureDataPlane(ctx, lineID, connection); err != nil {
 				return "", domain.FailedPrecondition(
 					operation,
 					"the existing ModemDeck bearer network state could not be restored",
@@ -286,7 +286,7 @@ func (p *Provider) activateOwnedBearerData(
 			),
 		)
 	}
-	if err := p.dataPlane.Configure(ctx, lineID, connection); err != nil {
+	if err := p.configureDataPlane(ctx, lineID, connection); err != nil {
 		return "", p.activationFailureWithCleanup(
 			modemPath,
 			lineID,
