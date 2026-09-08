@@ -132,6 +132,12 @@ const carrierName = computed(() => {
   return facts.value.carrier || ''
 })
 
+// 顶栏左侧「运营商 + 归属地」（如：中国联通 上海）——按号码归属展示（166=联通），
+// 归属地查询结果优先，其次号段表，最后回退服务网络 PLMN 名
+const homeCarrier = computed(() => remoteGeo.value?.carrier || facts.value.carrier || carrierName.value)
+const homeRegion = computed(() => remoteGeo.value?.province || facts.value.region || '')
+const carrierGeo = computed(() => [homeCarrier.value, homeRegion.value].filter(Boolean).join(' '))
+
 // 移动数据开关：取设备配置里是否有已连接的数据连接；null = 未知（灰色不闪）
 const dataOn = ref<boolean | null>(null)
 
@@ -233,7 +239,7 @@ onBeforeUnmount(() => {
     >
       <div class="line-status__grid">
         <div class="line-status__row">
-          <span v-if="carrierName" class="line-status__carrier">{{ carrierName }}</span>
+          <span v-if="carrierGeo" class="line-status__carrier" :title="carrierGeo">{{ carrierGeo }}</span>
           <span
             class="line-status__vowifi"
             :title="t('homesim.strip.vowifiHint')"
@@ -299,7 +305,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="line-status__row line-status__row--split">
           <span class="line-status__number">{{ facts.formatted }}</span>
-          <span v-if="geoLine" class="line-status__geo" :title="geoLine">{{ geoLine }}</span>
+          <span v-if="!carrierGeo && geoLine" class="line-status__geo" :title="geoLine">{{ geoLine }}</span>
           <span v-else-if="line.operator && !/^\d+$/.test(line.operator)" class="line-status__geo">{{ line.operator }}</span>
         </div>
       </div>
