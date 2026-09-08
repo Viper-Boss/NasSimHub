@@ -2578,6 +2578,8 @@ export interface NKNNodeRuntime {
   wallet_address?: string
   started_at?: string
   sync_state?: string
+  wallet_balance?: string
+  relay_count?: number
   error?: string
 }
 

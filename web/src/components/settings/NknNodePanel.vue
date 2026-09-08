@@ -162,6 +162,16 @@ onMounted(() => { void load() })
           <dd><SensitiveValue :value="status.wallet_password" :label="t('homesim.nknNode.walletPassword')" /></dd>
           <small class="nkn-node__hint">{{ t('homesim.nknNode.walletPasswordHint') }}</small>
         </dl>
+        <dl v-if="status.runtime.wallet_balance">
+          <dt>{{ t('homesim.nknNode.walletBalance') }}</dt>
+          <dd><strong>{{ status.runtime.wallet_balance }}</strong></dd>
+          <small class="nkn-node__hint">{{ t('homesim.nknNode.walletBalanceHint') }}</small>
+        </dl>
+        <dl v-if="status.runtime.relay_count">
+          <dt>{{ t('homesim.nknNode.relayCount') }}</dt>
+          <dd>{{ status.runtime.relay_count.toLocaleString() }}</dd>
+          <small class="nkn-node__hint">{{ t('homesim.nknNode.relayCountHint') }}</small>
+        </dl>
         <dl>
           <dt>{{ t('homesim.nknNode.lightSync') }}</dt>
           <dd>{{ t('homesim.nknNode.lightSyncValue') }}</dd>
