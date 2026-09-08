@@ -23,7 +23,7 @@ func TestNKNNetworkSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadSettings on missing file: %v", err)
 	}
-	if settings.Enabled || settings.Revision != 0 {
+	if !settings.Enabled || settings.Revision != 0 {
 		t.Fatalf("unexpected factory defaults: %+v", settings)
 	}
 	settings = nknNetworkSettings{Enabled: true, Revision: 7}
@@ -62,8 +62,10 @@ func TestNKNNetworkApplyRevisionConflict(t *testing.T) {
 
 func TestNKNNetworkStatusStates(t *testing.T) {
 	manager := newTestNKNNetworkManager(t)
-	if state := manager.status().Runtime.State; state != "disabled" {
-		t.Fatalf("state with no settings: %q", state)
+	// Factory defaults enable the directory, but with no worker running and
+	// no subscription the state machine reports an error, not "disabled".
+	if state := manager.status().Runtime.State; state != "error" {
+		t.Fatalf("state with factory defaults (enabled, no worker): %q", state)
 	}
 	// Enabled settings persisted without a running worker surface as an
 	// error state rather than a permanent "joining" limbo.
