@@ -51,6 +51,25 @@ var nknOfficialSeedRPC = []string{
 	"http://mainnet-seed-0008.nkn.org:30003",
 }
 
+// nknCommunitySeedRPC lists community-operated seed RPC servers physically in
+// mainland China. The official 44 seeds all resolve overseas (verified
+// 2026-09-08: 8 unique IPs in SG/US/NL/GB/DE/CA/IN), so a domestic seed cuts
+// first-connect latency for China deployments. Entries are probed for a
+// working JSON-RPC on 30003 before being listed. Community IPs drift —
+// re-run dev/collect_nkn_cn_nodes.py to refresh before editing.
+var nknCommunitySeedRPC = []string{
+	"http://183.53.109.45:30003", // Chinanet, ~95ms from a Shanghai LAN, verified 2026-09-08
+}
+
+// nknSeedRPCList returns seed RPC candidates in preference order: verified
+// China community nodes first, then the official list as the durable fallback.
+func nknSeedRPCList() []string {
+	list := make([]string, 0, len(nknCommunitySeedRPC)+len(nknOfficialSeedRPC))
+	list = append(list, nknCommunitySeedRPC...)
+	list = append(list, nknOfficialSeedRPC...)
+	return list
+}
+
 type homeSIMNKNClient struct {
 	client  *nkn.MultiClient
 	ready   chan struct{}
@@ -79,19 +98,18 @@ func (api *API) homeSIMNKNClient(seed []byte) (*homeSIMNKNClient, error) {
 		go func(entry *homeSIMNKNClient, seed []byte) {
 			account, err := nkn.NewAccount(seed)
 			if err == nil {
-				var clientConfig *nkn.ClientConfig
+				// Seed preference: built-in node (while running), then the
+				// operator's env override, then verified China community
+				// seeds, with the official seeds always appended as fallback
+				// so a dead local or community node never blocks delivery.
 				var addrs []string
 				if builtin := api.nknNode.seedRPCAddress(); builtin != "" {
 					addrs = append(addrs, builtin)
 				}
 				addrs = append(addrs, nknAddressList(os.Getenv(nknSeedRPCEnv))...)
-				if len(addrs) > 0 {
-					// Official seeds stay appended as fallback so a dead local
-					// node never blocks delivery.
-					addrs = append(addrs, nknOfficialSeedRPC...)
-					clientConfig = &nkn.ClientConfig{
-						SeedRPCServerAddr: nkngomobile.NewStringArray(addrs...),
-					}
+				addrs = append(addrs, nknSeedRPCList()...)
+				clientConfig := &nkn.ClientConfig{
+					SeedRPCServerAddr: nkngomobile.NewStringArray(addrs...),
 				}
 				var multi *nkn.MultiClient
 				multi, err = nkn.NewMultiClient(account, nknBaseIdentifier, 2, false, clientConfig)

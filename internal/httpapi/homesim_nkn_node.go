@@ -53,7 +53,11 @@ const (
 // candidates concurrently, so a longer list directly improves the odds that
 // the FIRST launch reaches a reachable seed quickly — notably from networks
 // where some overseas seeds are flaky. Order is irrelevant to correctness.
+// The China community seed sits first anyway: the official 44 seeds all
+// resolve overseas (verified 2026-09-08), so a domestic candidate wins the
+// race from China deployments when it is up. See dev/collect_nkn_cn_nodes.py.
 var nknNodeOfficialSeeds = []string{
+	"http://183.53.109.45:30003", // China community seed, verified 2026-09-08
 	"http://seed.nkn.org:30003",
 	"http://mainnet-seed-0001.nkn.org:30003",
 	"http://mainnet-seed-0002.nkn.org:30003",

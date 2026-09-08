@@ -303,7 +303,7 @@ func (m *nknNetworkManager) unsubscribeBestEffort(seed []byte, api *API) {
 // over JSON-RPC, rotating official seeds until one answers. No connection or
 // identity is needed to look — the directory is public by design.
 func fetchNKNNetworkPeers(selfAddress string) (nknNetworkPeersResponse, error) {
-	return fetchNKNNetworkPeersFrom(selfAddress, nknOfficialSeedRPC)
+	return fetchNKNNetworkPeersFrom(selfAddress, nknSeedRPCList())
 }
 
 func fetchNKNNetworkPeersFrom(selfAddress string, seeds []string) (nknNetworkPeersResponse, error) {

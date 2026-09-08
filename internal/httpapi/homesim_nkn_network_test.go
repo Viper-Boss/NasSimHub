@@ -141,3 +141,21 @@ func TestNKNNetworkPeersAllSeedsFail(t *testing.T) {
 		t.Fatal("expected an error when no seed answers")
 	}
 }
+
+func TestNKNSeedRPCListPutsChinaFirstWithOfficialFallback(t *testing.T) {
+	list := nknSeedRPCList()
+	if len(list) != len(nknCommunitySeedRPC)+len(nknOfficialSeedRPC) {
+		t.Fatalf("seed list length: %d", len(list))
+	}
+	for i, seed := range nknCommunitySeedRPC {
+		if list[i] != seed {
+			t.Fatalf("community seed %d must stay in front: %s", i, list[i])
+		}
+	}
+	offset := len(nknCommunitySeedRPC)
+	for i, seed := range nknOfficialSeedRPC {
+		if list[offset+i] != seed {
+			t.Fatalf("official fallback %d missing or reordered: %s", i, list[offset+i])
+		}
+	}
+}
