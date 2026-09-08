@@ -744,6 +744,52 @@ func (m *nknNodeManager) loadSeedCache() []string {
 	return addrs
 }
 
+// seedCandidates merges the gateway's whole seed pool in priority order
+// (user overrides > cached low-latency nodes > official mainnet seeds),
+// deduplicated and capped at limit. Used by the network diagnostics endpoint
+// to report which NKN nodes the gateway can currently reach, regardless of
+// whether the embedded node is enabled.
+func (m *nknNodeManager) seedCandidates(limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	m.mu.Lock()
+	settings, err := m.loadSettings()
+	m.mu.Unlock()
+	if err != nil {
+		return nil
+	}
+	var custom []string
+	if overrides, err := nknNodeParseSeedOverrides(settings.SeedOverrides); err == nil {
+		custom = overrides
+	}
+	seen := make(map[string]struct{}, len(nknNodeOfficialSeeds)+len(custom)+nknNodeSeedCacheSize)
+	merged := make([]string, 0, len(nknNodeOfficialSeeds)+len(custom)+nknNodeSeedCacheSize)
+	add := func(seed string) {
+		if seed == "" {
+			return
+		}
+		if _, dup := seen[seed]; dup {
+			return
+		}
+		seen[seed] = struct{}{}
+		merged = append(merged, seed)
+	}
+	for _, seed := range custom {
+		add(seed)
+	}
+	for _, seed := range m.loadSeedCache() {
+		add(seed)
+	}
+	for _, seed := range nknNodeOfficialSeeds {
+		add(seed)
+	}
+	if len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged
+}
+
 // copyWebAssets mirrors the official entrypoint which copies the bundled web
 // directory into the working directory on first start.
 func (m *nknNodeManager) copyWebAssets() error {

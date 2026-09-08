@@ -2734,6 +2734,36 @@ export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
   }
 }
 
+export interface NKNNetworkNodeReport {
+  address: string
+  rtt_ms: number
+  connections?: number
+}
+
+export interface NKNNetworkNodes {
+  nodes: NKNNetworkNodeReport[]
+  reachable: number
+  probed: number
+}
+
+export async function getNKNNetworkNodes(): Promise<NKNNetworkNodes> {
+  if (fixtureMode) throw new Error('当前为演示模式，网络目录未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/nkn-network/nodes`) as Partial<NKNNetworkNodes> | null
+  if (!result || !Array.isArray(result.nodes)) throw new Error('NKN 节点探测响应无效。')
+  const nodes = result.nodes
+    .filter(node => typeof node?.address === 'string' && node.address)
+    .map(node => ({
+      address: node.address,
+      rtt_ms: typeof node.rtt_ms === 'number' ? node.rtt_ms : -1,
+      connections: typeof node.connections === 'number' && node.connections >= 0 ? node.connections : undefined
+    }))
+  return {
+    nodes,
+    reachable: typeof result.reachable === 'number' ? result.reachable : nodes.filter(node => node.rtt_ms >= 0).length,
+    probed: typeof result.probed === 'number' ? result.probed : nodes.length
+  }
+}
+
 export async function getHomeSIMIntegrationDraft(): Promise<HomeSIMIntegrationDraft> {
   if (fixtureMode) return emptyIntegrationDraft()
   const result = await get(`${API_ROOT}/settings/homesim`) as { draft: HomeSIMIntegrationDraft }

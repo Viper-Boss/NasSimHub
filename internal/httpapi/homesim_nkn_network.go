@@ -412,3 +412,88 @@ func (api *API) nknNetworkPeers(response http.ResponseWriter, request *http.Requ
 	}
 	writeJSON(response, http.StatusOK, peers)
 }
+
+// nknNetworkNodeProbeCount caps how many seed-pool candidates the diagnostics
+// endpoint probes per request (seed cache first, then officials — the merge
+// in seedCandidates already orders by priority).
+const nknNetworkNodeProbeCount = 12
+
+// nknNodeProbeWithConnections dials a candidate RPC endpoint with
+// getconnectioncount and returns both the round-trip milliseconds and the
+// node's reported connection count; failures return rtt = -1.
+func nknNodeProbeWithConnections(addr string) (int, *int) {
+	body := strings.NewReader(`{"jsonrpc":"2.0","method":"getconnectioncount","params":{},"id":1}`)
+	start := time.Now()
+	response, err := nknRPCClient.Post(addr, "application/json", body)
+	if err != nil {
+		return -1, nil
+	}
+	defer response.Body.Close()
+	var payload struct {
+		Result *float64 `json:"result"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 512)).Decode(&payload); err != nil || payload.Result == nil {
+		return -1, nil
+	}
+	rtt := int(time.Since(start).Milliseconds())
+	connections := int(*payload.Result)
+	return rtt, &connections
+}
+
+type nknNetworkNodeReport struct {
+	Address     string `json:"address"`
+	RTTMs       int    `json:"rtt_ms"`
+	Connections *int   `json:"connections,omitempty"`
+}
+
+type nknNetworkNodesResponse struct {
+	Nodes     []nknNetworkNodeReport `json:"nodes"`
+	Reachable int                    `json:"reachable"`
+	Probed    int                    `json:"probed"`
+}
+
+// nknNetworkNodes probes the gateway's merged seed pool (custom overrides >
+// cached low-latency nodes > official seeds) concurrently and reports which
+// nodes are reachable right now, so the header popover can show real
+// connectivity instead of a guess. The whole probe is bounded by the shared
+// 1.5s RPC client timeout, so worst case is one timeout window.
+func (api *API) nknNetworkNodes(response http.ResponseWriter, request *http.Request) {
+	candidates := api.nknNode.seedCandidates(nknNetworkNodeProbeCount)
+	reports := make([]nknNetworkNodeReport, 0, len(candidates))
+	if len(candidates) > 0 {
+		next := make(chan string, len(candidates))
+		for _, addr := range candidates {
+			next <- addr
+		}
+		close(next)
+		results := make(chan nknNetworkNodeReport, len(candidates))
+		workers := nknNodeSeedProbeWorkers
+		if len(candidates) < workers {
+			workers = len(candidates)
+		}
+		var wg sync.WaitGroup
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for addr := range next {
+					rtt, connections := nknNodeProbeWithConnections(addr)
+					results <- nknNetworkNodeReport{Address: addr, RTTMs: rtt, Connections: connections}
+				}
+			}()
+		}
+		wg.Wait()
+		close(results)
+		for report := range results {
+			reports = append(reports, report)
+		}
+		sort.Slice(reports, func(i, j int) bool { return reports[i].RTTMs < reports[j].RTTMs })
+	}
+	reachable := 0
+	for _, report := range reports {
+		if report.RTTMs >= 0 {
+			reachable++
+		}
+	}
+	writeJSON(response, http.StatusOK, nknNetworkNodesResponse{Nodes: reports, Reachable: reachable, Probed: len(candidates)})
+}

@@ -74,6 +74,13 @@ export const homesimEN = {
     empty: 'No devices yet. Enable the switch above and wait for the first publish, then refresh.',
     fetchFailed: 'Could not load the device directory.', save: 'Save and apply', saved: 'Network directory settings applied', loadFailed: 'Failed to load network directory status',
   },
+  nknBadge: {
+    title: 'NKN network', state_active: 'Online', state_joining: 'Joining…', state_error: 'Error', state_offline: 'Not joined', state_disabled: 'Off',
+    disabledHint: 'The NKN network directory is off. Enable it in Settings → Network directory.',
+    daily: '24-hour active', monthly: 'Monthly active', registered: 'All-time registered', nodes: 'Nodes online',
+    noNodes: 'No seed nodes reachable right now.',
+    copy: 'Copy', copied: 'Copied', qrAlt: 'NKN address QR code', qrHint: 'Scan with an NKN wallet to use this address.',
+  },
   callFilter: {
     title: 'Incoming call filter', mode: 'Filter mode',
     modeOff: 'Off — ring every call', modeBlacklist: 'Hang up blacklisted numbers', modeWhitelist: 'Ring whitelisted numbers only',
@@ -174,6 +181,13 @@ export const homesimZH = {
     topicLabel: '链上主题', windowLabel: '统计窗口',
     empty: '还没有设备。打开上方开关等首次上链后，点刷新查看。',
     fetchFailed: '设备目录加载失败。', save: '保存并应用', saved: '网络目录设置已保存', loadFailed: '网络目录状态加载失败',
+  },
+  nknBadge: {
+    title: 'NKN 网络', state_active: '在线', state_joining: '加入中…', state_error: '异常', state_offline: '未加入', state_disabled: '未开启',
+    disabledHint: 'NKN 网络目录未开启，请到「设置 → 网络目录」打开。',
+    daily: '日活跃', monthly: '月活跃', registered: '历史注册', nodes: '在线节点',
+    noNodes: '暂无可达节点。',
+    copy: '复制', copied: '已复制', qrAlt: 'NKN 地址二维码', qrHint: '用 NKN 钱包扫码即可使用该地址。',
   },
   callFilter: {
     title: '来电过滤', mode: '过滤模式',

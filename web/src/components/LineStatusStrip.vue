@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import QRCode from 'qrcode'
 import { bootstrapResource } from '../state/workspace'
 import { requestPhoneGeo } from '../state/phoneGeo'
 import { accessTechnologyLabel, ownNumberFacts } from '../utils/phoneRegion'
 import { voiceStatus, chineseLineState } from '../utils/voiceStatus'
 import { isRegisteredNetwork } from '../utils/operatorNetwork'
 import { callState } from '../state/call'
+import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus } from '../api/client'
+import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus } from '../api/client'
 const LineSelector = defineAsyncComponent(() => import('./LineSelector.vue'))
 
 const { t } = useI18n()
@@ -18,6 +21,69 @@ const lines = computed(() => bootstrapResource.data?.lines || [])
 
 const BUILD_ID = import.meta.env.VITE_MODEMDECK_BUILD_ID
 const version = typeof BUILD_ID === 'string' && BUILD_ID.trim() ? `v${BUILD_ID.trim().replace(/^v/, '')}` : ''
+
+// --- NKN network badge + popover -------------------------------------------
+const nknOpen = ref(false)
+const nknStatus = ref<NKNNetworkStatus | null>(null)
+const nknPeers = ref<NKNNetworkPeers | null>(null)
+const nknNodes = ref<NKNNetworkNodes | null>(null)
+const nknDetailLoading = ref(false)
+const nknDetailError = ref('')
+const nknQr = ref('')
+const nknCopied = ref(false)
+
+const nknState = computed(() => nknStatus.value?.runtime.state || 'unknown')
+const nknDotClass = computed(() => {
+  if (nknState.value === 'active') return 'is-green'
+  if (nknState.value === 'joining') return 'is-amber'
+  return 'is-red'
+})
+const nknStateLabel = computed(() => t(`homesim.nknBadge.state_${nknState.value === 'unknown' ? 'offline' : nknState.value}`))
+const nknAddress = computed(() => nknStatus.value?.runtime.my_address || '')
+
+let nknTimer: ReturnType<typeof setInterval> | undefined
+
+async function refreshNknStatus(): Promise<void> {
+  try {
+    nknStatus.value = await getNKNNetworkStatus()
+  } catch {
+    nknStatus.value = null
+  }
+}
+
+async function loadNknDetails(): Promise<void> {
+  nknDetailLoading.value = true
+  nknDetailError.value = ''
+  nknPeers.value = null
+  nknNodes.value = null
+  const [peers, nodes] = await Promise.allSettled([getNKNNetworkPeers(), getNKNNetworkNodes()])
+  if (peers.status === 'fulfilled') nknPeers.value = peers.value
+  if (nodes.status === 'fulfilled') nknNodes.value = nodes.value
+  if (peers.status === 'rejected' && nodes.status === 'rejected') {
+    nknDetailError.value = peers.reason instanceof Error ? peers.reason.message : String(peers.reason)
+  }
+  nknDetailLoading.value = false
+  if (nknAddress.value) {
+    try { nknQr.value = await QRCode.toDataURL(nknAddress.value, { width: 200, margin: 2, errorCorrectionLevel: 'M' }) } catch { nknQr.value = '' }
+  }
+}
+
+function toggleNkn(): void {
+  nknOpen.value = !nknOpen.value
+  if (nknOpen.value) {
+    nknCopied.value = false
+    void loadNknDetails()
+  }
+}
+
+async function copyNknAddress(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(nknAddress.value)
+    nknCopied.value = true
+    setTimeout(() => { nknCopied.value = false }, 2000)
+  } catch { /* clipboard unavailable */ }
+}
+// ---------------------------------------------------------------------------
 
 const line = computed(() => {
   return lines.value.find(item => item.id === selectedLineID.value) || lines.value.find(item => isRegisteredNetwork(item)) || lines.value[0]
@@ -93,11 +159,21 @@ function toggle(): void {
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
-  if (root.value && !root.value.contains(event.target as Node)) open.value = false
+  if (root.value && !root.value.contains(event.target as Node)) {
+    open.value = false
+    nknOpen.value = false
+  }
 }
 
-onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPointerDown))
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  void refreshNknStatus()
+  nknTimer = setInterval(() => { void refreshNknStatus() }, 60_000)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  if (nknTimer) clearInterval(nknTimer)
+})
 </script>
 
 <template>
@@ -131,6 +207,20 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
             :class="{ 'is-unknown': volteState === 'unknown' }"
             :title="volte.hint"
           >VoLTE</span>
+          <button
+            type="button"
+            class="nkn-badge"
+            :class="nknDotClass"
+            :title="nknStateLabel"
+            :aria-label="nknStateLabel"
+            :aria-expanded="nknOpen"
+            @click.stop="toggleNkn"
+            @keydown.enter.prevent="toggleNkn"
+            @keydown.space.prevent="toggleNkn"
+          >
+            <span class="nkn-badge__dot" aria-hidden="true" />
+            <span class="nkn-badge__label">NKN</span>
+          </button>
           <span v-if="!registered" class="line-status__state">{{ chineseLineState(line.state) }}</span>
           <span
             v-for="ring in quotaRings"
@@ -190,6 +280,45 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
         </span>
       </div>
       <p v-if="!quotaRings.length" class="line-status-pop__empty">{{ t('homesim.quotaEmpty') }}</p>
+    </div>
+
+    <!-- NKN network popover: live status, directory stats, node connectivity, own address QR -->
+    <div v-if="nknOpen" class="nkn-pop" @click.stop>
+      <header>
+        <span class="nkn-badge__dot" :class="nknDotClass" aria-hidden="true" />
+        <span>{{ t('homesim.nknBadge.title') }}</span>
+        <span class="nkn-pop__state">{{ nknStateLabel }}</span>
+      </header>
+      <p v-if="nknState === 'disabled'" class="nkn-pop__hint">{{ t('homesim.nknBadge.disabledHint') }}</p>
+      <p v-else-if="nknState === 'error' && nknStatus?.runtime.last_error" class="nkn-pop__hint nkn-pop__hint--error">{{ nknStatus.runtime.last_error }}</p>
+      <div class="nkn-pop__stats">
+        <div class="nkn-pop__stat">
+          <em>{{ t('homesim.nknBadge.daily') }}</em>
+          <strong>{{ nknDetailLoading ? '…' : (nknPeers?.active_24h ?? '—') }}</strong>
+        </div>
+        <div class="nkn-pop__stat">
+          <em>{{ t('homesim.nknBadge.monthly') }}</em>
+          <strong>{{ nknDetailLoading ? '…' : (nknPeers?.active_month ?? '—') }}</strong>
+        </div>
+        <div class="nkn-pop__stat">
+          <em>{{ t('homesim.nknBadge.registered') }}</em>
+          <strong>{{ nknDetailLoading ? '…' : (nknPeers?.registered_total ?? '—') }}</strong>
+        </div>
+        <div class="nkn-pop__stat">
+          <em>{{ t('homesim.nknBadge.nodes') }}</em>
+          <strong>{{ nknDetailLoading ? '…' : (nknNodes ? `${nknNodes.reachable}/${nknNodes.probed}` : '—') }}</strong>
+        </div>
+      </div>
+      <p v-if="nknDetailError" class="nkn-pop__hint nkn-pop__hint--error">{{ nknDetailError }}</p>
+      <p v-else-if="!nknDetailLoading && nknNodes && !nknNodes.reachable" class="nkn-pop__hint">{{ t('homesim.nknBadge.noNodes') }}</p>
+      <div v-if="nknAddress" class="nkn-pop__address">
+        <code :title="nknAddress">{{ nknAddress }}</code>
+        <button type="button" class="nkn-pop__copy" @click="copyNknAddress">{{ nknCopied ? t('homesim.nknBadge.copied') : t('homesim.nknBadge.copy') }}</button>
+      </div>
+      <div v-if="nknQr" class="nkn-pop__qr">
+        <img :src="nknQr" :alt="t('homesim.nknBadge.qrAlt')" width="176" height="176" />
+        <span>{{ t('homesim.nknBadge.qrHint') }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -444,6 +573,175 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPoin
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* NKN badge: state dot + label, styled like the VoLTE tag but clickable */
+.nkn-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+
+.nkn-badge:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.nkn-badge__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.nkn-badge.is-green .nkn-badge__dot {
+  background: var(--success, #34d399);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--success, #34d399) 60%, transparent);
+}
+
+.nkn-badge.is-amber .nkn-badge__dot {
+  background: var(--warning, #fbbf24);
+}
+
+.nkn-badge.is-red .nkn-badge__dot {
+  background: var(--danger, #f87171);
+}
+
+/* NKN popover */
+.nkn-pop {
+  position: absolute;
+  z-index: var(--layer-popover);
+  top: calc(100% + 8px);
+  left: 0;
+  width: 300px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(16 24 40 / 16%);
+}
+
+.nkn-pop header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.nkn-pop__state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.nkn-pop__stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.nkn-pop__stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 6px 9px;
+  background: var(--surface-subtle);
+  border-radius: 7px;
+}
+
+.nkn-pop__stat em {
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.nkn-pop__stat strong {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.nkn-pop__hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.nkn-pop__hint--error {
+  color: var(--danger);
+}
+
+.nkn-pop__address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.nkn-pop__address code {
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 5px 7px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--surface-subtle);
+  border-radius: 6px;
+}
+
+.nkn-pop__copy {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.nkn-pop__copy:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.nkn-pop__qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.nkn-pop__qr img {
+  display: block;
+  padding: 6px;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.nkn-pop__qr span {
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
 }
 
 @media (max-width: 1100px) {
