@@ -2610,6 +2610,65 @@ export async function updateNKNNode(next: { enabled: boolean; beneficiary_addr: 
   return { settings: result.settings, runtime: result.runtime, wallet_password: result.wallet_password, binary_present: result.binary_present === true }
 }
 
+export interface NKNNetworkSettings {
+  enabled: boolean
+  revision: number
+}
+
+export interface NKNNetworkRuntime {
+  state: string // disabled | joining | active | error
+  my_address?: string
+  last_renew?: string
+  last_error?: string
+}
+
+export interface NKNNetworkStatus {
+  settings: NKNNetworkSettings
+  runtime: NKNNetworkRuntime
+  topic: string
+}
+
+export interface NKNNetworkPeer {
+  address: string
+  meta?: string
+  is_self?: boolean
+}
+
+export interface NKNNetworkPeers {
+  topic: string
+  window: string
+  count: number
+  peers: NKNNetworkPeer[]
+  fetched_at: string
+}
+
+export async function getNKNNetworkStatus(): Promise<NKNNetworkStatus> {
+  if (fixtureMode) throw new Error('当前为演示模式，网络目录未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/nkn-network`) as Partial<NKNNetworkStatus> | null
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('网络目录状态响应无效。')
+  return { settings: result.settings, runtime: result.runtime, topic: typeof result.topic === 'string' ? result.topic : '' }
+}
+
+export async function updateNKNNetwork(next: { enabled: boolean; expected_revision: number }): Promise<NKNNetworkStatus> {
+  if (fixtureMode) throw new Error('当前为演示模式，网络目录未保存到 NAS。')
+  const result = await writeJSON(`${API_ROOT}/settings/nkn-network`, 'PUT', next, 200) as Partial<NKNNetworkStatus> | null
+  if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('网络目录保存响应无效。')
+  return { settings: result.settings, runtime: result.runtime, topic: typeof result.topic === 'string' ? result.topic : '' }
+}
+
+export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
+  if (fixtureMode) throw new Error('当前为演示模式，网络目录未连接 NAS。')
+  const result = await get(`${API_ROOT}/settings/nkn-network/peers`) as Partial<NKNNetworkPeers> | null
+  if (!result || !Array.isArray(result.peers)) throw new Error('网络目录列表响应无效。')
+  return {
+    topic: typeof result.topic === 'string' ? result.topic : '',
+    window: typeof result.window === 'string' ? result.window : '',
+    count: typeof result.count === 'number' ? result.count : result.peers.length,
+    peers: result.peers,
+    fetched_at: typeof result.fetched_at === 'string' ? result.fetched_at : ''
+  }
+}
+
 export async function getHomeSIMIntegrationDraft(): Promise<HomeSIMIntegrationDraft> {
   if (fixtureMode) return emptyIntegrationDraft()
   const result = await get(`${API_ROOT}/settings/homesim`) as { draft: HomeSIMIntegrationDraft }

@@ -17,6 +17,7 @@ import {
   RadioTower,
   BellRing,
   Network,
+  Radar,
   Send,
   Server,
   Wifi,
@@ -81,6 +82,7 @@ const loadSmsForwardPanel = () => import('../components/settings/SmsForwardPanel
 const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
 const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
+const loadNknNetworkPanel = () => import('../components/settings/NknNetworkPanel.vue')
 
 const AccountPreferencesPanel = defineAsyncComponent(loadAccountPreferencesPanel)
 const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel)
@@ -101,6 +103,7 @@ const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
 const NknNodePanel = defineAsyncComponent(loadNknNodePanel)
+const NknNetworkPanel = defineAsyncComponent(loadNknNetworkPanel)
 
 const route = useRoute()
 const router = useRouter()
@@ -201,6 +204,12 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     label: t('settings.nknNode'),
     description: t('settings.nknNodeDescription'),
     icon: Server
+  },
+  {
+    id: 'nkn-network',
+    label: t('settings.nknNetwork'),
+    description: t('settings.nknNetworkDescription'),
+    icon: Radar
   },
   {
     id: 'connectivity',
@@ -326,6 +335,8 @@ function preloadSection(section: SettingsSection): void {
         return loadNetworkSwitchesPanel
       case 'nkn-node':
         return loadNknNodePanel
+      case 'nkn-network':
+        return loadNknNetworkPanel
       case 'pairing':
         return loadPairingSettingsPanel
       case 'connectivity':
@@ -573,6 +584,12 @@ onMounted(() => {
             <div v-else-if="selectedSection === 'nkn-node'" class="settings-content">
               <PageContentFrame mode="reading">
                 <NknNodePanel />
+              </PageContentFrame>
+            </div>
+
+            <div v-else-if="selectedSection === 'nkn-network'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <NknNetworkPanel />
               </PageContentFrame>
             </div>
 
