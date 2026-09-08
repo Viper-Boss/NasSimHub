@@ -1,9 +1,33 @@
-# 部署脚本必须在 Linux 上按原样执行：强制 LF，防止 Windows checkout 变 CRLF
-# 导致容器入口 / NAS host 脚本报错（exit 127 / '\r': command not found）。
-*.sh text eol=lf
-*.rules text eol=lf
-*.py text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
-*.conf text eol=lf
-*.md text eol=lf
+# 全局：文本文件一律 LF（含 checkout），杜绝 CRLF 进入仓库/部署产物。
+# 历史：按扩展名白名单（*.sh/*.py 等）没覆盖 .go/.ts/.vue/.json，GPT/Windows
+# 侧带来的 CRLF 源文件曾导致容器脚本 exit 127、构建行尾漂移——2026-09-09 十八轮
+# 改为全局规则 + git add --renormalize 一次性归一。
+* text=auto eol=lf
+
+# Windows 专属脚本保留 CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 显式二进制（text=auto 通常能自动识别，这里声明防止误判）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.exe binary
+*.bin binary
+*.db binary
+*.sqlite binary
+*.der binary
+*.p12 binary
+*.pfx binary
+*.wasm binary
