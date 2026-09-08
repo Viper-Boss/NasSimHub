@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -272,6 +273,11 @@ func nknNodeParseSeedOverrides(raw string) ([]string, error) {
 		}
 		if !nknNodeSeedAddrPattern.MatchString(seed) {
 			return nil, fmt.Errorf("invalid seed address %q: use http://host:port (official seeds use port 30003)", seed)
+		}
+		if idx := strings.LastIndex(seed, ":"); idx >= 0 && idx > len("https://") {
+			if port, err := strconv.Atoi(seed[idx+1:]); err == nil && (port < 1 || port > 65535) {
+				return nil, fmt.Errorf("invalid seed address %q: port out of range", seed)
+			}
 		}
 		seeds = append(seeds, seed)
 	}

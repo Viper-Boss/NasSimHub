@@ -108,8 +108,9 @@ func TestNKNNodeWriteNodeConfigSeedOverrides(t *testing.T) {
 	if err := os.MkdirAll(manager.dir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	// Custom seed leads the list and official duplicates are dropped.
-	settings := nknNodeSettings{SeedOverrides: "http://mainnet-seed-0001.nkn.org:30003, http://cn-node.example.com:30003"}
+	// Custom seeds lead the list in the admin's own order and official
+	// duplicates are dropped.
+	settings := nknNodeSettings{SeedOverrides: "http://cn-node.example.com:30003, http://mainnet-seed-0001.nkn.org:30003"}
 	if err := manager.writeNodeConfig(settings); err != nil {
 		t.Fatalf("writeNodeConfig: %v", err)
 	}
