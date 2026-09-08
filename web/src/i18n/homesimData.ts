@@ -57,7 +57,7 @@ export const homesimEN = {
   nknNode: {
     title: 'Embedded NKN relay node', subtitle: 'Run an optional lightweight NKN node on this gateway (disabled by default) to lower latency for local clients. Rewards belong to whoever runs it.',
     enable: 'Run the embedded NKN node',
-    enableHint: 'Off by default. When enabled the gateway runs a light-sync NKN node as a supervised child process; no Docker socket, extra container or port mapping is required.',
+    enableHint: 'Off by default. When enabled the gateway runs a light-sync NKN node (light sync) as a supervised child process: disk usage stays in the GB range instead of 20G+ for a full node, with identical mining rewards. No Docker socket, extra container or port mapping required.',
     beneficiary: 'Reward payout address (optional)',
     beneficiaryHint: 'Leave empty to accumulate mining rewards in the node wallet below; enter an NKN address (NKN…) to send rewards there instead.',
     idRegistration: 'First-time registration',
@@ -65,6 +65,7 @@ export const homesimEN = {
     save: 'Save and apply', saved: 'NKN node settings applied', loadFailed: 'Failed to load NKN node status',
     conflict: 'Settings were changed elsewhere; reload and try again.',
     state: 'State', stateRunning: 'Running', stateStopped: 'Stopped', stateError: 'Error', stateUnavailable: 'Unavailable',
+    lightSync: 'Node type', lightSyncValue: 'Light sync (light sync) — same mining rewards as a full node, 90%+ less disk (GB range instead of 20G+)',
     walletAddress: 'Node wallet address', copy: 'Copy', copied: 'Copied',
     walletPassword: 'Wallet password', walletPasswordHint: 'Used when importing wallet.json into an NKN wallet app to withdraw rewards.',
     syncState: 'Chain sync', startedAt: 'Started at', lastError: 'Last error',
@@ -156,7 +157,7 @@ export const homesimZH = {
   nknNode: {
     title: '内置 NKN 中继节点', subtitle: '可选功能（默认关闭）：在网关上运行轻同步 NKN 节点，为本机与手机客户端降低延迟。谁跑节点，奖励归谁。',
     enable: '运行内置 NKN 节点',
-    enableHint: '默认关闭。开启后网关以受管子进程方式运行轻同步节点，无需 Docker socket、额外容器或端口映射。',
+    enableHint: '默认关闭。开启后网关以受管子进程方式运行轻同步节点（light sync）：磁盘占用 GB 级（全量要 20G+），挖矿奖励与全量节点完全相同。无需 Docker socket、额外容器或端口映射。',
     beneficiary: '奖励收款地址（可选）',
     beneficiaryHint: '留空 = 挖到的奖励自动累积到下方节点钱包；填写 NKN 地址（NKN 开头）则奖励发往该地址。',
     idRegistration: '首次入网注册',
@@ -164,6 +165,7 @@ export const homesimZH = {
     save: '保存并应用', saved: 'NKN 节点设置已应用', loadFailed: 'NKN 节点状态加载失败',
     conflict: '设置已在其他窗口修改，请刷新后重试。',
     state: '运行状态', stateRunning: '运行中', stateStopped: '已停止', stateError: '异常', stateUnavailable: '不可用',
+    lightSync: '节点类型', lightSyncValue: '轻同步（light sync）——挖矿奖励与全量节点完全相同，磁盘省 90%+（GB 级 vs 全量 20G+）',
     walletAddress: '节点钱包地址', copy: '复制', copied: '已复制',
     walletPassword: '钱包密码', walletPasswordHint: '把 wallet.json 导入 NKN 钱包应用领取奖励时使用。',
     syncState: '链同步', startedAt: '启动时间', lastError: '最近错误',
