@@ -1,0 +1,17 @@
+# wg0.conf template for the fnOS NAS (server). Copy to /etc/wireguard/wg0.conf
+# and replace __SERVER_PRIVATE_KEY__ with the content of keys/server.key.
+# Each phone peer is appended by the NKN pairing flow (see README-CN.md):
+#
+# [Peer]
+# PublicKey = <phone public key>
+# PresharedKey = <keys/pskN>
+# AllowedIPs = 10.66.0.2N/32
+#
+# Endpoint and port: NAS needs a reachable address (public IPv4 port-forward,
+# IPv6, or DDNS). Listen port 51820/udp.
+
+[Interface]
+Address = 10.66.0.1/24
+ListenPort = 51820
+PrivateKey = __SERVER_PRIVATE_KEY__
+MTU = 1420
