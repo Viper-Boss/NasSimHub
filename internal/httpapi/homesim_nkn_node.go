@@ -83,9 +83,9 @@ type nknNodeLogsResponse struct {
 }
 
 type nknNodeUpdateRequest struct {
-	Enabled         bool   `json:"enabled"`
-	BeneficiaryAddr string `json:"beneficiary_addr"`
-	ExpectedRevision int64 `json:"expected_revision"`
+	Enabled          bool   `json:"enabled"`
+	BeneficiaryAddr  string `json:"beneficiary_addr"`
+	ExpectedRevision int64  `json:"expected_revision"`
 }
 
 // nknNodeConfig mirrors the official nknd config.json (mainnet template) so
@@ -670,6 +670,20 @@ func (m *nknNodeManager) recentLogs(limit int) []string {
 		return append([]string(nil), m.logs[len(m.logs)-limit:]...)
 	}
 	return append([]string(nil), m.logs...)
+}
+
+// seedRPCAddress reports the RPC endpoint of the built-in node while it is
+// running, so the gateway's own NKN client can route through it first. An
+// empty string means the node is off and callers should fall back to the
+// environment-configured and official seeds.
+func (m *nknNodeManager) seedRPCAddress() string {
+	m.mu.Lock()
+	running := m.running
+	m.mu.Unlock()
+	if !running {
+		return ""
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d", nknNodeRPCPort)
 }
 
 var errNKNNodeRevisionConflict = errors.New("nkn node settings changed since they were loaded")

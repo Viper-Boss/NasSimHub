@@ -28,9 +28,11 @@ const (
 	nknTestTimeout       = 45 * time.Second
 	// nknSeedRPCEnv optionally names environment variables holding seed RPC
 	// addresses (comma separated) that the gateway's own NKN client should
-	// contact first, e.g. HOMESIM_NKN_SEED_RPC=http://127.0.0.1:30003 for a
-	// self-hosted node on the same host. Official seeds are appended as
-	// fallback so a dead local node never blocks delivery.
+	// contact, e.g. HOMESIM_NKN_SEED_RPC=http://127.0.0.1:30003 for a
+	// self-hosted node on the same host. The seed list sent to the SDK is:
+	// built-in node (while running) first, then this environment variable,
+	// then the official seeds appended as fallback so a dead local node never
+	// blocks delivery.
 	nknSeedRPCEnv = "HOMESIM_NKN_SEED_RPC"
 )
 
@@ -69,8 +71,15 @@ func (api *API) homeSIMNKNClient(seed []byte) (*homeSIMNKNClient, error) {
 			account, err := nkn.NewAccount(seed)
 			if err == nil {
 				var clientConfig *nkn.ClientConfig
-				if local := nknAddressList(os.Getenv(nknSeedRPCEnv)); len(local) > 0 {
-					addrs := append(append([]string(nil), local...), nknOfficialSeedRPC...)
+				var addrs []string
+				if builtin := api.nknNode.seedRPCAddress(); builtin != "" {
+					addrs = append(addrs, builtin)
+				}
+				addrs = append(addrs, nknAddressList(os.Getenv(nknSeedRPCEnv))...)
+				if len(addrs) > 0 {
+					// Official seeds stay appended as fallback so a dead local
+					// node never blocks delivery.
+					addrs = append(addrs, nknOfficialSeedRPC...)
 					clientConfig = &nkn.ClientConfig{
 						SeedRPCServerAddr: nkngomobile.NewStringArray(addrs...),
 					}
