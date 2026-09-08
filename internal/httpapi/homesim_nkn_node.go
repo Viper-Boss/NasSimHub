@@ -38,6 +38,12 @@ const (
 	nknNodeLogFile      = "nknd.log"
 	nknNodeLogMaxBytes  = 8 << 20
 	nknNodeRPCPort      = 30003
+	// nknNodeRPCAddressEnv overrides how the gateway reaches the built-in
+	// node's RPC from this process. Inside a container the host loopback
+	// (127.0.0.1) is the container itself, so compose.fnos.yml sets this to
+	// http://host.docker.internal:30003 (host-gateway); plain-host installs
+	// keep the loopback default.
+	nknNodeRPCAddressEnv = "HOMESIM_NKN_NODE_RPC"
 	nknNodeLogCap       = 400
 	nknNodeRestartDelay = 5 * time.Second
 	nknNodeStopGrace    = 8 * time.Second
@@ -1233,6 +1239,9 @@ func (m *nknNodeManager) seedRPCAddress() string {
 	m.mu.Unlock()
 	if !running {
 		return ""
+	}
+	if override := strings.TrimSpace(os.Getenv(nknNodeRPCAddressEnv)); override != "" {
+		return override
 	}
 	return fmt.Sprintf("http://127.0.0.1:%d", nknNodeRPCPort)
 }

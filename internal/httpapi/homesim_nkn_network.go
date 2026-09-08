@@ -24,8 +24,8 @@ import (
 // the instance renews while it runs. The topic's subscriber list therefore IS
 // the "devices seen online in the last 24 hours" directory: public, verifiable
 // by anyone through any seed node, with zero ModemDeck-operated infrastructure
-// and zero cost. Off by default; the listed identity is an anonymous NKN
-// public key with no real-world attachment.
+// and zero cost. On by default (users may still switch it off); the listed
+// identity is an anonymous NKN public key with no real-world attachment.
 
 const (
 	nknNetworkTopic          = "modemdecknet"
@@ -106,7 +106,9 @@ func newNKNNetworkManager(logger *slog.Logger) *nknNetworkManager {
 }
 
 func (m *nknNetworkManager) loadSettings() (nknNetworkSettings, error) {
-	settings := nknNetworkSettings{}
+	// Default ON (绥哥's call): a fresh install joins the network directory
+	// without visiting settings. An existing settings file always wins.
+	settings := nknNetworkSettings{Enabled: true}
 	raw, err := os.ReadFile(filepath.Join(m.dir, nknNetworkSettingsFile))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

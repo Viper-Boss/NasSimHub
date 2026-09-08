@@ -56,7 +56,7 @@ export const homesimEN = {
     runtimeDraft: 'Channels are saved. Live SMS dispatch starts with the next gateway release.',
   },
   nknNetwork: {
-    title: 'ModemDeck network directory', subtitle: 'Optional (off by default): list ModemDeck devices seen online in the last 24 hours. Only instances of this program participate — the on-chain topic is program-specific, not the whole NKN network.',
+    title: 'ModemDeck network directory', subtitle: 'On by default (can be turned off below): list ModemDeck devices seen online in the last 24 hours. Only instances of this program participate — the on-chain topic is program-specific, not the whole NKN network.',
     enable: 'Join the ModemDeck network directory',
     enableHint: 'When enabled, this gateway publishes its anonymous NKN identity to the shared on-chain topic (fee 0) and renews it every 6 hours; it expires 24 hours after going offline. Turning it off unsubscribes immediately.',
     privacy: 'Only an anonymous NKN public key is published — no phone number, no location, nothing that links back to you.',
@@ -164,7 +164,7 @@ export const homesimZH = {
     runtimeDraft: '渠道已保存。收到新短信即自动转发。',
   },
   nknNetwork: {
-    title: 'ModemDeck 网络目录', subtitle: '可选功能（默认关闭）：展示 24 小时内在线的 ModemDeck 设备。只统计本程序的实例——链上主题是本程序专属的，与 NKN 全网无关。',
+    title: 'ModemDeck 网络目录', subtitle: '默认开启（可在下方关闭）：展示 24 小时内在线的 ModemDeck 设备。只统计本程序的实例——链上主题是本程序专属的，与 NKN 全网无关。',
     enable: '加入 ModemDeck 网络目录',
     enableHint: '开启后，网关把自己的匿名 NKN 身份发布到共享链上主题（费用为 0），每 6 小时自动续期；离线 24 小时后自然过期。关闭时立即取消订阅。',
     privacy: '链上只公开一个匿名 NKN 公钥——不含手机号、位置或任何可追溯到你的信息。',

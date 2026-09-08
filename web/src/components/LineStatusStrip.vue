@@ -207,20 +207,6 @@ onBeforeUnmount(() => {
             :class="{ 'is-unknown': volteState === 'unknown' }"
             :title="volte.hint"
           >VoLTE</span>
-          <button
-            type="button"
-            class="nkn-badge"
-            :class="nknDotClass"
-            :title="nknStateLabel"
-            :aria-label="nknStateLabel"
-            :aria-expanded="nknOpen"
-            @click.stop="toggleNkn"
-            @keydown.enter.prevent="toggleNkn"
-            @keydown.space.prevent="toggleNkn"
-          >
-            <span class="nkn-badge__dot" aria-hidden="true" />
-            <span class="nkn-badge__label">NKN</span>
-          </button>
           <span v-if="!registered" class="line-status__state">{{ chineseLineState(line.state) }}</span>
           <span
             v-for="ring in quotaRings"
@@ -254,6 +240,23 @@ onBeforeUnmount(() => {
       </div>
       <span v-if="version" class="line-status__version">{{ version }}</span>
     </div>
+
+    <!-- NKN network: standalone box beside the status strip -->
+    <button
+      type="button"
+      class="nkn-badge"
+      :class="nknDotClass"
+      :title="nknStateLabel"
+      :aria-label="nknStateLabel"
+      :aria-expanded="nknOpen"
+      @click.stop="toggleNkn"
+      @keydown.enter.prevent="toggleNkn"
+      @keydown.space.prevent="toggleNkn"
+    >
+      <span class="nkn-badge__dot" aria-hidden="true" />
+      <span>NKN</span>
+      <span class="nkn-badge__state">{{ nknStateLabel }}</span>
+    </button>
 
     <!-- Quota popover: horizontal bars, colors match the header rings -->
     <div v-if="open" class="line-status-pop">
@@ -575,31 +578,39 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
-/* NKN badge: state dot + label, styled like the VoLTE tag but clickable */
+/* NKN badge: standalone box beside the status strip, same surface look */
 .nkn-badge {
   display: inline-flex;
   flex: 0 0 auto;
+  align-self: stretch;
   align-items: center;
-  gap: 4px;
-  padding: 0 5px;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 0 10px;
   font: inherit;
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--muted);
   letter-spacing: 0.02em;
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: 4px;
-  background: transparent;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  transition: border-color var(--motion-fast) var(--ease-standard);
 }
 
 .nkn-badge:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+.nkn-badge__state {
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .nkn-badge__dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--muted);
@@ -623,7 +634,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: var(--layer-popover);
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
   width: 300px;
   padding: 12px 14px;
   background: var(--surface);
