@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +77,64 @@ func TestNKNNodeWriteNodeConfig(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("config.json missing %s in:\n%s", want, text)
 		}
+	}
+	// The official mainnet seed template ships 0001..0044 — all of them must
+	// be present so the first launch has plenty of connect candidates.
+	if got := strings.Count(text, "mainnet-seed-"); got != 44 {
+		t.Fatalf("expected 44 official mainnet seeds in config.json, got %d", got)
+	}
+}
+
+func TestNKNNodeParseSeedOverrides(t *testing.T) {
+	seeds, err := nknNodeParseSeedOverrides("  http://10.0.0.1:30003 , http://my-node.local:30003\n")
+	if err != nil {
+		t.Fatalf("valid overrides rejected: %v", err)
+	}
+	if len(seeds) != 2 || seeds[0] != "http://10.0.0.1:30003" || seeds[1] != "http://my-node.local:30003" {
+		t.Fatalf("unexpected parse result: %v", seeds)
+	}
+	if seeds, err := nknNodeParseSeedOverrides(""); err != nil || seeds != nil {
+		t.Fatalf("empty input should yield nil, got %v err %v", seeds, err)
+	}
+	for _, bad := range []string{"ftp://x", "10.0.0.1:30003", "http://bad host:30003", "http://host:99999"} {
+		if _, err := nknNodeParseSeedOverrides(bad); err == nil {
+			t.Fatalf("expected %q to be rejected", bad)
+		}
+	}
+}
+
+func TestNKNNodeWriteNodeConfigSeedOverrides(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	if err := os.MkdirAll(manager.dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Custom seed leads the list and official duplicates are dropped.
+	settings := nknNodeSettings{SeedOverrides: "http://mainnet-seed-0001.nkn.org:30003, http://cn-node.example.com:30003"}
+	if err := manager.writeNodeConfig(settings); err != nil {
+		t.Fatalf("writeNodeConfig: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(manager.dir, nknNodeConfigFile))
+	if err != nil {
+		t.Fatalf("read config.json: %v", err)
+	}
+	var config nknNodeConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("unmarshal config.json: %v", err)
+	}
+	if len(config.SeedList) < 2 {
+		t.Fatalf("expected merged seed list, got %v", config.SeedList)
+	}
+	if config.SeedList[0] != "http://cn-node.example.com:30003" {
+		t.Fatalf("custom seed should come first, got %v", config.SeedList[:2])
+	}
+	count := 0
+	for _, seed := range config.SeedList {
+		if seed == "http://mainnet-seed-0001.nkn.org:30003" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("official seed duplicated after merge: %d occurrences", count)
 	}
 }
 

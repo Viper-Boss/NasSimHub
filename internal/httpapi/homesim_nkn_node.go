@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -46,12 +47,57 @@ const (
 	nknNodeStateError       = "error"
 )
 
+// nknNodeOfficialSeeds mirrors the official mainnet config template
+// (config.mainnet.json ships mainnet-seed-0001..0044). nknd probes seed
+// candidates concurrently, so a longer list directly improves the odds that
+// the FIRST launch reaches a reachable seed quickly — notably from networks
+// where some overseas seeds are flaky. Order is irrelevant to correctness.
 var nknNodeOfficialSeeds = []string{
 	"http://seed.nkn.org:30003",
 	"http://mainnet-seed-0001.nkn.org:30003",
 	"http://mainnet-seed-0002.nkn.org:30003",
 	"http://mainnet-seed-0003.nkn.org:30003",
 	"http://mainnet-seed-0004.nkn.org:30003",
+	"http://mainnet-seed-0005.nkn.org:30003",
+	"http://mainnet-seed-0006.nkn.org:30003",
+	"http://mainnet-seed-0007.nkn.org:30003",
+	"http://mainnet-seed-0008.nkn.org:30003",
+	"http://mainnet-seed-0009.nkn.org:30003",
+	"http://mainnet-seed-0010.nkn.org:30003",
+	"http://mainnet-seed-0011.nkn.org:30003",
+	"http://mainnet-seed-0012.nkn.org:30003",
+	"http://mainnet-seed-0013.nkn.org:30003",
+	"http://mainnet-seed-0014.nkn.org:30003",
+	"http://mainnet-seed-0015.nkn.org:30003",
+	"http://mainnet-seed-0016.nkn.org:30003",
+	"http://mainnet-seed-0017.nkn.org:30003",
+	"http://mainnet-seed-0018.nkn.org:30003",
+	"http://mainnet-seed-0019.nkn.org:30003",
+	"http://mainnet-seed-0020.nkn.org:30003",
+	"http://mainnet-seed-0021.nkn.org:30003",
+	"http://mainnet-seed-0022.nkn.org:30003",
+	"http://mainnet-seed-0023.nkn.org:30003",
+	"http://mainnet-seed-0024.nkn.org:30003",
+	"http://mainnet-seed-0025.nkn.org:30003",
+	"http://mainnet-seed-0026.nkn.org:30003",
+	"http://mainnet-seed-0027.nkn.org:30003",
+	"http://mainnet-seed-0028.nkn.org:30003",
+	"http://mainnet-seed-0029.nkn.org:30003",
+	"http://mainnet-seed-0030.nkn.org:30003",
+	"http://mainnet-seed-0031.nkn.org:30003",
+	"http://mainnet-seed-0032.nkn.org:30003",
+	"http://mainnet-seed-0033.nkn.org:30003",
+	"http://mainnet-seed-0034.nkn.org:30003",
+	"http://mainnet-seed-0035.nkn.org:30003",
+	"http://mainnet-seed-0036.nkn.org:30003",
+	"http://mainnet-seed-0037.nkn.org:30003",
+	"http://mainnet-seed-0038.nkn.org:30003",
+	"http://mainnet-seed-0039.nkn.org:30003",
+	"http://mainnet-seed-0040.nkn.org:30003",
+	"http://mainnet-seed-0041.nkn.org:30003",
+	"http://mainnet-seed-0042.nkn.org:30003",
+	"http://mainnet-seed-0043.nkn.org:30003",
+	"http://mainnet-seed-0044.nkn.org:30003",
 }
 
 // nknNodeSettings is the persisted administrator configuration. It lives in
@@ -60,7 +106,12 @@ var nknNodeOfficialSeeds = []string{
 type nknNodeSettings struct {
 	Enabled         bool   `json:"enabled"`
 	BeneficiaryAddr string `json:"beneficiary_addr"`
-	Revision        int64  `json:"revision"`
+	// SeedOverrides optionally lists user-supplied seed RPC addresses
+	// (comma/space separated, http(s)://host[:port]). They are placed ahead
+	// of the official seeds in the generated node config so self-hosted or
+	// regionally closer seeds win the first-connect race.
+	SeedOverrides string `json:"seed_overrides,omitempty"`
+	Revision      int64  `json:"revision"`
 }
 
 type nknNodeRuntime struct {
@@ -85,6 +136,7 @@ type nknNodeLogsResponse struct {
 type nknNodeUpdateRequest struct {
 	Enabled          bool   `json:"enabled"`
 	BeneficiaryAddr  string `json:"beneficiary_addr"`
+	SeedOverrides    string `json:"seed_overrides"`
 	ExpectedRevision int64  `json:"expected_revision"`
 }
 
@@ -205,12 +257,52 @@ func (m *nknNodeManager) saveSettings(settings nknNodeSettings) error {
 	return os.WriteFile(filepath.Join(m.dir, nknNodeSettingsFile), raw, 0o600)
 }
 
+// nknNodeParseSeedOverrides splits a raw comma/space separated list of seed
+// addresses, validates each entry, and returns them in order. An empty input
+// yields nil. Invalid entries produce an error naming the offender.
+func nknNodeParseSeedOverrides(raw string) ([]string, error) {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == ';'
+	})
+	var seeds []string
+	for _, field := range fields {
+		seed := strings.TrimSpace(field)
+		if seed == "" {
+			continue
+		}
+		if !nknNodeSeedAddrPattern.MatchString(seed) {
+			return nil, fmt.Errorf("invalid seed address %q: use http://host:port (official seeds use port 30003)", seed)
+		}
+		seeds = append(seeds, seed)
+	}
+	return seeds, nil
+}
+
+var nknNodeSeedAddrPattern = regexp.MustCompile(`^https?://[A-Za-z0-9._\-]+(:[0-9]{1,5})?$`)
+
 // writeNodeConfig regenerates config.json from the persisted settings. Called
 // on every launch so a BeneficiaryAddr change takes effect on restart.
 func (m *nknNodeManager) writeNodeConfig(settings nknNodeSettings) error {
+	// User-supplied seeds lead the list so a regionally closer or
+	// self-hosted seed wins the first-connect race; official seeds follow.
+	seedList := append([]string(nil), nknNodeOfficialSeeds...)
+	if custom, err := nknNodeParseSeedOverrides(settings.SeedOverrides); err != nil {
+		return err
+	} else if len(custom) > 0 {
+		seen := make(map[string]struct{}, len(custom)+len(seedList))
+		merged := make([]string, 0, len(custom)+len(seedList))
+		for _, seed := range append(append([]string(nil), custom...), seedList...) {
+			if _, dup := seen[seed]; dup {
+				continue
+			}
+			seen[seed] = struct{}{}
+			merged = append(merged, seed)
+		}
+		seedList = merged
+	}
 	config := nknNodeConfig{
 		BeneficiaryAddr:     strings.TrimSpace(settings.BeneficiaryAddr),
-		SeedList:            append([]string(nil), nknNodeOfficialSeeds...),
+		SeedList:            seedList,
 		ChordPort:           30000,
 		NodePort:            30001,
 		HttpWsPort:          30002,
@@ -595,6 +687,12 @@ func (m *nknNodeManager) apply(request nknNodeUpdateRequest) (nknNodeStatusRespo
 	if beneficiary != "" && (!strings.HasPrefix(beneficiary, "NKN") || len(beneficiary) < 20 || len(beneficiary) > 100) {
 		return nknNodeStatusResponse{}, errors.New("beneficiary_addr must be an NKN wallet address (starts with NKN) or empty for rewards to accumulate in the node wallet")
 	}
+	seedOverrides := strings.TrimSpace(request.SeedOverrides)
+	if seedOverrides != "" {
+		if _, err := nknNodeParseSeedOverrides(seedOverrides); err != nil {
+			return nknNodeStatusResponse{}, err
+		}
+	}
 	m.mu.Lock()
 	current, err := m.loadSettings()
 	m.mu.Unlock()
@@ -607,6 +705,7 @@ func (m *nknNodeManager) apply(request nknNodeUpdateRequest) (nknNodeStatusRespo
 	next := nknNodeSettings{
 		Enabled:         request.Enabled,
 		BeneficiaryAddr: beneficiary,
+		SeedOverrides:   seedOverrides,
 		Revision:        current.Revision + 1,
 	}
 	if err := m.saveSettings(next); err != nil {
@@ -616,9 +715,10 @@ func (m *nknNodeManager) apply(request nknNodeUpdateRequest) (nknNodeStatusRespo
 	running := m.running
 	m.mu.Unlock()
 	beneficiaryChanged := beneficiary != strings.TrimSpace(current.BeneficiaryAddr)
+	seedsChanged := seedOverrides != strings.TrimSpace(current.SeedOverrides)
 
 	if next.Enabled {
-		if running && beneficiaryChanged {
+		if running && (beneficiaryChanged || seedsChanged) {
 			m.stop()
 			running = false
 		}

@@ -36,10 +36,19 @@ const (
 	nknSeedRPCEnv = "HOMESIM_NKN_SEED_RPC"
 )
 
+// nknOfficialSeedRPC mirrors the nkn-sdk-go DefaultSeedRPCServerAddr list
+// (seed.nkn.org + mainnet-seed-0001..0008). More candidates mean the gateway
+// client fails over faster when a particular seed RPC is slow or unreachable.
 var nknOfficialSeedRPC = []string{
 	"http://seed.nkn.org:30003",
 	"http://mainnet-seed-0001.nkn.org:30003",
 	"http://mainnet-seed-0002.nkn.org:30003",
+	"http://mainnet-seed-0003.nkn.org:30003",
+	"http://mainnet-seed-0004.nkn.org:30003",
+	"http://mainnet-seed-0005.nkn.org:30003",
+	"http://mainnet-seed-0006.nkn.org:30003",
+	"http://mainnet-seed-0007.nkn.org:30003",
+	"http://mainnet-seed-0008.nkn.org:30003",
 }
 
 type homeSIMNKNClient struct {
