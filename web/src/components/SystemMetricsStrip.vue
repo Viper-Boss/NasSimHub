@@ -258,7 +258,7 @@ const flashUsedBytes = computed(() => {
           <span class="tm-stat__label">{{ t('dashboard.metricsCpuTemp') }}</span>
           <b class="tm-stat__value" :class="cpuTempLevel">{{ formatTemp(cpuTempValue) }}</b>
         </div>
-        <div class="tm-stat tm-stat--purple">
+        <div class="tm-stat tm-stat--purple tm-stat--wide">
           <span class="tm-stat__label">{{ t('dashboard.metricsLoad') }}</span>
           <b class="tm-stat__value tm-stat__value--small">{{ current.load_raw_1?.toFixed(2) ?? '—' }} · {{ current.load_raw_5?.toFixed(2) ?? '—' }} · {{ current.load_raw_15?.toFixed(2) ?? '—' }}</b>
         </div>
@@ -308,14 +308,6 @@ const flashUsedBytes = computed(() => {
         <div class="tm-stat tm-stat--purple">
           <span class="tm-stat__label">{{ t('dashboard.metricsCapacity') }}</span>
           <b class="tm-stat__value">{{ formatBytes(current.memory_total_bytes) }}</b>
-        </div>
-        <div class="tm-stat tm-stat--orange">
-          <span class="tm-stat__label">{{ t('dashboard.metricsUsed') }}</span>
-          <b class="tm-stat__value">{{ formatBytes(usedBytes) }}</b>
-        </div>
-        <div class="tm-stat tm-stat--green">
-          <span class="tm-stat__label">{{ t('dashboard.metricsAvailable') }}</span>
-          <b class="tm-stat__value">{{ formatBytes(current.memory_available_bytes) }}</b>
         </div>
       </div>
     </article>
@@ -570,18 +562,20 @@ const flashUsedBytes = computed(() => {
 .tm-ring__label.is-danger { color: var(--danger, #f87171); }
 
 .tm-stats {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
 .tm-stat {
-  flex: 1 1 0;
   min-width: 0;
   padding-left: 8px;
   border-left: 3px solid var(--border);
 }
+
+.tm-stat--wide { grid-column: 1 / -1; }
 
 .tm-stat--blue { border-left-color: var(--accent, #4f8cff); }
 .tm-stat--orange { border-left-color: #f59e0b; }
@@ -599,10 +593,13 @@ const flashUsedBytes = computed(() => {
 }
 
 .tm-stat__value {
-  font-size: 15px;
+  overflow: hidden;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tm-stat__value--small {
@@ -648,6 +645,7 @@ const flashUsedBytes = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .tm-dot {
