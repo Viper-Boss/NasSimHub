@@ -403,7 +403,7 @@ const flashUsedBytes = computed(() => {
 .tm {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -427,11 +427,11 @@ const flashUsedBytes = computed(() => {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 16px 18px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 14px;
 }
 
 .tm-box__head {
@@ -660,7 +660,8 @@ const flashUsedBytes = computed(() => {
 .tm-dot--buffers { background: #22d3ee; }
 .tm-dot--free { background: var(--border); }
 
-@media (max-width: 1100px) {
+/* Wide enough for a 4-up row only above the 1480px shared band; below that spread 2x2 */
+@media (max-width: 1479px) {
   .tm {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
