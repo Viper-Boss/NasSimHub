@@ -4,6 +4,10 @@ services:
   hardware:
     container_name: nas-comm-hardware
     image: nas-comm-hardware:fnos-local-0.1
+    # Host PID namespace so the system-metrics panel reports the real host
+    # process/thread counts (task-manager style dashboard), not the
+    # container's.
+    pid: "host"
     # Reviewed QDC507 module voice runtime. The host directory holding the four
     # reviewed artifacts (manifest.json, qdc507_aprv3.ko, qdc507_voice.ko,
     # mavo-pcm-bridge.armv7) is bind-mounted read-only at /tmp/qdc507-voice.
