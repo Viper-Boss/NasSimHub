@@ -66,7 +66,7 @@ function markFailed(key: string): void {
   place-items: center;
   width: 56px;
   height: 56px;
-  border-radius: 18px;
+  border-radius: var(--radius-surface);
   background: linear-gradient(135deg, #f97316, #ec4899);
   color: #fff;
   box-shadow: 0 6px 18px rgb(236 72 153 / 25%);
@@ -93,7 +93,7 @@ function markFailed(key: string): void {
   margin: 0;
   padding: 22px 18px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-surface);
   background: var(--surface-subtle);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -106,7 +106,7 @@ function markFailed(key: string): void {
   width: 100%;
   max-width: 300px;
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: #fff;
   object-fit: contain;
 }
@@ -118,7 +118,7 @@ function markFailed(key: string): void {
   aspect-ratio: 1;
   padding: 12px;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   font-size: 12px;
   text-align: center;

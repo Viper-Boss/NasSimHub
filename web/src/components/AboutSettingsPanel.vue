@@ -608,7 +608,7 @@ onBeforeUnmount(() => {
   place-items: center;
   background: color-mix(in srgb, var(--surface) 58%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
 }
 
 .about-status__copy {
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
   margin-top: 9px;
   overflow: hidden;
   background: color-mix(in srgb, var(--about-status-color) 13%, var(--surface));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .about-update__progress > span {
@@ -770,7 +770,7 @@ onBeforeUnmount(() => {
   font-weight: 750;
   background: var(--success-soft);
   border: 1px solid var(--success-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .about-update__components--progress .about-update__component-row {
@@ -868,7 +868,7 @@ onBeforeUnmount(() => {
   color: var(--text);
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .about-legal__links > a:hover {
@@ -906,7 +906,7 @@ onBeforeUnmount(() => {
   place-items: center;
   color: var(--accent-strong);
   background: var(--accent-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 @container (max-width: 460px) {

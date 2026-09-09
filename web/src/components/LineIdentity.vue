@@ -157,7 +157,7 @@ const toneStyle = computed<Record<string, string> | undefined>(() => {
   font-size: 12px;
   font-weight: 700;
   background: var(--accent-soft);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .line-identity--option {
@@ -194,7 +194,7 @@ const toneStyle = computed<Record<string, string> | undefined>(() => {
 .line-identity--filter .line-identity__icon {
   width: 26px;
   height: 26px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .line-identity--compact .line-identity__name-row strong {

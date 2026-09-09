@@ -168,7 +168,7 @@ async function clearCodes(): Promise<void> {
 .sms-code-shelf header strong svg { color: var(--accent); }
 .sms-code-shelf__scope, .sms-code-library > p { color: var(--muted); font-size: .75rem; line-height: 1.5; margin: 8px 0; }
 .sms-code-shelf__list { max-height: min(280px, 32dvh); overflow-y: auto; }
-.sms-code-shelf__item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 13px; }
+.sms-code-shelf__item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); }
 .sms-code-shelf__identity { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; color: var(--text); background: transparent; text-align: left; }
 .sms-code-shelf__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
 .sms-code-shelf__meta small { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

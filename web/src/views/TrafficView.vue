@@ -459,7 +459,7 @@ onMounted(() => {
   font-size: 12px;
   background: var(--accent-soft);
   border: 1px solid var(--accent-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .traffic-banner.is-warning {
@@ -493,7 +493,7 @@ onMounted(() => {
   font-weight: 650;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .traffic-line-filter > button:hover {
@@ -574,7 +574,7 @@ onMounted(() => {
   color: var(--muted);
   background: var(--surface);
   border: 1px dashed var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .proxy-add-card:hover:not(:disabled) {
@@ -591,7 +591,7 @@ onMounted(() => {
   justify-self: center;
   color: var(--accent-strong);
   background: var(--accent-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .proxy-add-card strong {

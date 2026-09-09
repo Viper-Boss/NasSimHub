@@ -67,7 +67,7 @@ function iconFor(tone: FeedbackTone): typeof CircleCheck {
   background: rgb(255 255 255 / 98%);
   border: 1px solid var(--border);
   border-left: 4px solid var(--accent);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   box-shadow: var(--shadow-lg);
   grid-template-columns: auto minmax(0, 1fr) auto;
   pointer-events: auto;

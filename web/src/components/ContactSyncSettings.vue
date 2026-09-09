@@ -425,7 +425,7 @@ onMounted(() => {
   padding: 5px 8px;
   color: var(--muted);
   background: var(--surface-hover);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 700;
 }
@@ -465,7 +465,7 @@ onMounted(() => {
   padding: 2px 5px;
   color: var(--text);
   background: var(--surface-hover);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .contact-sync-help a {
@@ -484,7 +484,7 @@ onMounted(() => {
   padding: 12px 14px;
   text-align: left;
   background: var(--surface-hover);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
 }
 
 .contact-sync-direction strong,

@@ -163,7 +163,7 @@ function arcDash(percent: number): string {
   padding: 18px 20px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-surface);
   box-shadow: 0 18px 40px rgb(0 0 0 / 35%);
 }
 

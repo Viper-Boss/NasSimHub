@@ -248,7 +248,7 @@ watch(
   padding: 10px 12px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .recording-list__meta {

@@ -107,7 +107,7 @@ async function importReport(event: Event): Promise<void> {
 .nas-preflight__checks, .nas-preflight__devices { list-style: none; padding: 0; margin: 1rem 0; }
 .nas-preflight__checks li { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: .85rem 0; border-bottom: 1px solid var(--border); }
 .nas-preflight__checks p { color: var(--muted); font-size: .875rem; overflow-wrap: anywhere; }
-.nas-preflight__badge { flex-shrink: 0; white-space: nowrap; padding: .1rem .5rem; border-radius: 5px; background: var(--surface-hover); color: var(--muted-strong); font-size: .875rem; }
+.nas-preflight__badge { flex-shrink: 0; white-space: nowrap; padding: .1rem .5rem; border-radius: var(--radius-sm); background: var(--surface-hover); color: var(--muted-strong); font-size: .875rem; }
 .nas-preflight__badge--pass { color: var(--success); background: var(--success-soft); }
 .nas-preflight__badge--warn { color: var(--warning-strong); background: var(--warning-soft); }
 .nas-preflight__badge--fail { color: var(--danger); background: var(--danger-soft); }

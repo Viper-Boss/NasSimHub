@@ -384,26 +384,26 @@ onMounted(() => { void load() })
 .nkn-node__header h2 { font-size: 18px; }
 .nkn-node__header p { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .nkn-node__loading { display: grid; place-items: center; padding: 30px; color: var(--muted); }
-.nkn-node__warn { padding: 10px 12px; color: var(--text); font-size: 12.5px; background: var(--warning-soft, var(--surface-subtle)); border: 1px solid var(--border); border-radius: 9px; }
-.nkn-node__card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
+.nkn-node__warn { padding: 10px 12px; color: var(--text); font-size: 12.5px; background: var(--warning-soft, var(--surface-subtle)); border: 1px solid var(--border); border-radius: var(--radius-control); }
+.nkn-node__card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface-subtle); }
 .nkn-node__card h3 { margin: 0; font-size: 14.5px; }
 .nkn-node__card label { display: grid; gap: 6px; font-size: 13px; }
 .nkn-node__card label > span { font-weight: 650; }
-.nkn-node__card input:not([type=checkbox]):not([type=password]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
-.nkn-node__card label input[type=password] { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
-.nkn-node__card textarea { width: 100%; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; font-family: var(--mono, monospace); font-size: 11.5px; resize: vertical; }
+.nkn-node__card input:not([type=checkbox]):not([type=password]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); }
+.nkn-node__card label input[type=password] { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); }
+.nkn-node__card textarea { width: 100%; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); font-family: var(--mono, monospace); font-size: 11.5px; resize: vertical; }
 .nkn-node__enabled { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
 .nkn-node__check { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 8px; }
 .nkn-node__hint { color: var(--muted); font-size: 11.5px; }
 .nkn-node__wallet-tabs { display: flex; gap: 8px; }
-.nkn-node__wallet-tabs button { flex: 1; padding: 8px 10px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; font-size: 13px; cursor: pointer; }
+.nkn-node__wallet-tabs button { flex: 1; padding: 8px 10px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); font-size: 13px; cursor: pointer; }
 .nkn-node__wallet-tabs button.active { color: var(--text); font-weight: 650; border-color: var(--accent, var(--border)); }
 .nkn-node__wallet-form { display: grid; gap: 12px; }
 .nkn-node__password-row { display: flex; gap: 8px; }
 .nkn-node__password-row input { flex: 1; }
 .nkn-node__wallet-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .nkn-node__danger.armed { color: var(--danger-fg, #fff); background: var(--danger, #b33); border-color: var(--danger, #b33); }
-.nkn-node__status { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; font-size: 13px; }
+.nkn-node__status { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-surface); font-size: 13px; }
 .nkn-node__status.is-running { border-color: var(--success-border); background: var(--success-soft); }
 .nkn-node__status.is-error { border-color: var(--danger-border, var(--border)); background: var(--danger-soft, var(--surface-subtle)); }
 .nkn-node__status dl { display: grid; gap: 4px; margin: 0; }
@@ -418,11 +418,11 @@ onMounted(() => { void load() })
 .nkn-node__copied { color: var(--success); font-size: 12px; }
 .nkn-node__lasterror { margin: 0; overflow-wrap: anywhere; color: var(--danger, inherit); font-size: 12.5px; }
 .nkn-node__logs summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-.nkn-node__logtail { max-height: 260px; overflow: auto; margin: 8px 0 0; padding: 10px; color: var(--text); font-size: 11.5px; line-height: 1.5; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 9px; white-space: pre-wrap; word-break: break-all; }
+.nkn-node__logtail { max-height: 260px; overflow: auto; margin: 8px 0 0; padding: 10px; color: var(--text); font-size: 11.5px; line-height: 1.5; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-control); white-space: pre-wrap; word-break: break-all; }
 .nkn-node__saved { color: var(--success); font-size: 13px; }
 .nkn-node__footer { display: flex; justify-content: flex-end; }
 .nkn-node__qr-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgb(0 0 0 / 45%); }
-.nkn-node__qr-card { display: grid; gap: 12px; justify-items: center; max-width: 320px; padding: 20px; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 14px; }
+.nkn-node__qr-card { display: grid; gap: 12px; justify-items: center; max-width: 320px; padding: 20px; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: var(--radius-surface); }
 .nkn-node__qr-card h3 { margin: 0; font-size: 15px; }
 .nkn-node__qr-card img { width: 240px; height: 240px; }
 .nkn-node__qr-card code { max-width: 100%; overflow-wrap: anywhere; color: var(--text); font-size: 11.5px; text-align: center; }

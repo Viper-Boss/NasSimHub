@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
 .nmobile { display: grid; gap: 14px; }
 .nmobile__head h1 { font-size: 20px; }
 .nmobile__head p { margin-top: 4px; color: var(--muted); font-size: 13px; }
-.nmobile__compose { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
+.nmobile__compose { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface-subtle); }
 .nmobile__compose-row { display: flex; gap: 8px; align-items: flex-end; }
 .nmobile__draft { flex: 1 1 auto; resize: vertical; min-height: 44px; }
 .nmobile__empty { padding: 30px; text-align: center; color: var(--muted); font-size: 13px; }
@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
   font-size: 11.5px;
   color: var(--muted);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   cursor: pointer;
   overflow-wrap: anywhere;
@@ -177,7 +177,7 @@ onBeforeUnmount(() => {
   max-width: 72%;
   padding: 8px 12px;
   font-size: 13.5px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   overflow-wrap: anywhere;

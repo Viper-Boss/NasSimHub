@@ -41,7 +41,7 @@ defineProps<{ label: string }>()
 
 .traffic-skeleton__summary > span {
   height: 92px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .traffic-skeleton__filters {
@@ -52,7 +52,7 @@ defineProps<{ label: string }>()
 .traffic-skeleton__filters > span {
   width: 104px;
   height: 36px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .traffic-skeleton__section {
@@ -76,7 +76,7 @@ defineProps<{ label: string }>()
 .traffic-skeleton__section header > span:last-child {
   width: 28px;
   height: 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .traffic-skeleton__grid {
@@ -85,7 +85,7 @@ defineProps<{ label: string }>()
 
 .traffic-skeleton__grid > span {
   height: 184px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 @media (max-width: 860px) {

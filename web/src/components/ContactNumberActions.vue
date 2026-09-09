@@ -358,7 +358,7 @@ async function addToContact(): Promise<void> {
   gap: 16px;
   padding: 0 12px;
   background: var(--surface-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .quick-contact-target span,
@@ -376,7 +376,7 @@ async function addToContact(): Promise<void> {
   max-height: min(360px, 44dvh);
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .quick-contact-option {

@@ -1518,7 +1518,7 @@ onBeforeUnmount(() => {
   color: var(--accent-strong);
   background: var(--surface);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .message-read-error {
@@ -1532,7 +1532,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   background: var(--danger-soft);
   border: 1px solid var(--danger-border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .message-read-error button {

@@ -101,7 +101,7 @@ const emit = defineEmits<{
   font-size: 11px;
   font-weight: 650;
   background: transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .batch-action-bar button:hover:not(:disabled) {
@@ -131,7 +131,7 @@ const emit = defineEmits<{
   font-size: 11px;
   font-weight: 650;
   background: transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .batch-action-bar__actions :deep(button:hover:not(:disabled)) {

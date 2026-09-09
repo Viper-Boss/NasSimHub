@@ -872,7 +872,7 @@ onMounted(() => {
   font-size: 10px;
   font-weight: 750;
   background: var(--accent-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .user-editor__heading small {
@@ -959,7 +959,7 @@ onMounted(() => {
   font-weight: 650;
   line-height: 1.4;
   background: var(--surface-hover);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .user-pairing-state.is-paired {

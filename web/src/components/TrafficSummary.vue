@@ -64,7 +64,7 @@ function formatBytes(bytes: number): string {
   display: grid;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -89,7 +89,7 @@ function formatBytes(bytes: number): string {
   place-items: center;
   color: var(--warning-strong);
   background: var(--warning-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .traffic-summary__icon.is-blue {

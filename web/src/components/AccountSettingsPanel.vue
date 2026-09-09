@@ -139,6 +139,6 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 700;
   background: var(--accent-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 </style>

@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     border-color var(--motion-fast) var(--ease-standard),
@@ -367,7 +367,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
 }
 
@@ -390,7 +390,7 @@ onBeforeUnmount(() => {
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
 .select-control.is-compact .select-control__trigger {
   min-height: 36px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .select-control.is-compact .select-control__options {

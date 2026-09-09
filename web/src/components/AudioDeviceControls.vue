@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
   height: 8px;
   overflow: hidden;
   background: var(--surface-hover);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .microphone-level > span {

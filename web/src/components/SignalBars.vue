@@ -82,7 +82,7 @@ const accessibleLabel = computed(() => {
 .signal-bars__bar {
   width: 3px;
   background: color-mix(in srgb, var(--muted) 24%, transparent);
-  border-radius: 1px 1px 0 0;
+  border-radius: var(--radius-xs) 1px 0 0;
 }
 
 .signal-bars__bar:nth-child(1) {

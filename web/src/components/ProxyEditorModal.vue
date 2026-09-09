@@ -313,7 +313,7 @@ watch(
   padding: 0 11px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .proxy-fields-row {
@@ -333,7 +333,7 @@ watch(
   grid-template-columns: repeat(2, minmax(110px, auto));
   padding: 3px;
   background: var(--surface-hover);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .proxy-segmented button {
@@ -343,7 +343,7 @@ watch(
   font-size: 12px;
   font-weight: 650;
   background: transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .proxy-segmented button.is-selected {

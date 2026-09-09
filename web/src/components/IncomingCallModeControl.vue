@@ -253,7 +253,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .incoming-call-mode__trigger:disabled {
@@ -270,7 +270,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 12px 32px rgb(16 24 40 / 16%);
 }
 

@@ -178,7 +178,7 @@ function applyStateLabel(): string {
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .proxy-card > header {
@@ -215,7 +215,7 @@ function applyStateLabel(): string {
   color: var(--muted);
   font-size: 12px;
   background: var(--surface-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .proxy-card__runtime-label {
@@ -230,7 +230,7 @@ function applyStateLabel(): string {
   font-size: 11px;
   font-weight: 650;
   background: var(--warning-soft);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .proxy-card__runtime-error {

@@ -900,7 +900,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 700;
   background: var(--surface-hover);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .ios-status.is-active {
@@ -933,7 +933,7 @@ onBeforeUnmount(() => {
   line-height: 1.5;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .ios-diagnostics {
@@ -1053,7 +1053,7 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
   background: var(--surface-hover);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .ios-pairing-code .secondary-button {
@@ -1071,7 +1071,7 @@ onBeforeUnmount(() => {
   width: min(320px, 100%);
   height: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .ios-qr-warning {

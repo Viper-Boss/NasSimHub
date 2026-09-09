@@ -1636,7 +1636,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   background: var(--danger-soft);
   border-left: 3px solid var(--danger);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .runtime-errors p,
@@ -1678,7 +1678,7 @@ onBeforeUnmount(() => {
   color: var(--danger);
   background: var(--danger-soft);
   border-left: 3px solid var(--danger);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .line-health-alert.is-degraded {
@@ -1742,7 +1742,7 @@ onBeforeUnmount(() => {
   padding: 9px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .line-health-alert__identity strong,
@@ -1853,7 +1853,7 @@ onBeforeUnmount(() => {
   color: var(--muted);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-weight: 650;
 }
 
@@ -2016,7 +2016,7 @@ onBeforeUnmount(() => {
   padding: 0 13px;
   color: var(--on-accent);
   background: var(--danger);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 700;
 }
@@ -2185,7 +2185,7 @@ onBeforeUnmount(() => {
   overflow: auto;
   background: #151a21;
   border: 1px solid #252d38;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   scrollbar-color: #4d5968 #151a21;
 }
 

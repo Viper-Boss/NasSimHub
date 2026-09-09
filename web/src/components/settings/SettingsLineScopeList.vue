@@ -111,7 +111,7 @@ function onLineChange(id: string, event: Event): void {
   padding: 8px 12px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     border-color var(--motion-base) var(--ease-standard),
@@ -152,7 +152,7 @@ function onLineChange(id: string, event: Event): void {
   place-items: center;
   color: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .settings-line-scope-option.is-selected .settings-line-scope-option__check {

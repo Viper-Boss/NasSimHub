@@ -95,11 +95,11 @@ onMounted(() => { load(); loadCallFilter() })
 </template>
 
 <style scoped>
-.homesim-services { padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
+.homesim-services { padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); border-radius: var(--radius-dialog); background: var(--surface); }
 .homesim-services header, .homesim-services footer, .homesim-service-toggle { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .homesim-services h2 { font-size: 20px; }
 .homesim-services header p { margin-top: 6px; color: var(--muted); font-size: 14px; }
-.homesim-service-state { flex-shrink: 0; padding: 6px 10px; border-radius: 20px; background: var(--accent-soft); color: var(--accent); font-size: 12px; }
+.homesim-service-state { flex-shrink: 0; padding: 6px 10px; border-radius: var(--radius-dialog); background: var(--accent-soft); color: var(--accent); font-size: 12px; }
 .homesim-service-warning { padding: 14px; margin: 20px 0; background: var(--surface-subtle); border-left: 3px solid var(--warning); font-size: 14px; color: var(--muted); line-height: 1.7; }
 .homesim-services nav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
 .homesim-services nav button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 7px; padding: 12px 4px; color: var(--muted); background: transparent; font-size: 14px; border-bottom: 2px solid transparent; }
@@ -108,16 +108,16 @@ onMounted(() => { load(); loadCallFilter() })
 .homesim-services fieldset:disabled { opacity: .6; }
 .homesim-service-fields { display: grid; gap: 20px; font-size: 14px; line-height: 1.6; }
 .homesim-service-fields label { display: grid; gap: 8px; }
-.homesim-service-fields input:not([type=checkbox]), .homesim-service-fields select, .homesim-service-fields textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface-subtle); }
+.homesim-service-fields input:not([type=checkbox]), .homesim-service-fields select, .homesim-service-fields textarea { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); color: var(--text); background: var(--surface-subtle); }
 .homesim-service-fields textarea { resize: vertical; }
 .homesim-service-fields small { font-size: 12px; color: var(--muted); }
 .homesim-service-fields a { color: var(--accent); }
 .homesim-service-columns { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
-.homesim-service-toggle { padding: 14px; background: var(--surface-subtle); border-radius: 12px; }
+.homesim-service-toggle { padding: 14px; background: var(--surface-subtle); border-radius: var(--radius-control); }
 .homesim-service-toggle > div { display: grid; gap: 5px; }
 .homesim-service-fields label.homesim-service-check { display: flex; align-items: center; gap: 9px; }
 .homesim-ai-stages { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 0; list-style: none; }
-.homesim-ai-stages li { display: grid; gap: 5px; padding: 14px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 12px; }
+.homesim-ai-stages li { display: grid; gap: 5px; padding: 14px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-control); }
 .homesim-cf-actions { display: flex; align-items: center; gap: 12px; }
 .homesim-cf-actions small { color: var(--muted); }
 .homesim-services footer { margin-top: 24px; }

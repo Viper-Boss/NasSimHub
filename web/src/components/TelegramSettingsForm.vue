@@ -940,7 +940,7 @@ onMounted(() => {
   color: var(--accent-strong);
   background: var(--accent-soft);
   border: 1px solid var(--success-border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .telegram-form-heading__icon {
@@ -970,7 +970,7 @@ onMounted(() => {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .telegram-editor-section__heading h4 {
@@ -1025,7 +1025,7 @@ onMounted(() => {
   grid-template-columns: 22px minmax(0, 1fr) 18px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .telegram-access-options > label:hover {
@@ -1114,7 +1114,7 @@ onMounted(() => {
   padding: 8px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -1162,7 +1162,7 @@ onMounted(() => {
   padding: 12px;
   background: var(--surface-subtle);
   border: 1px dashed var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   grid-column: 1 / -1;
 }
 

@@ -388,7 +388,7 @@ const radioRows = computed(() => {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   transition:
     border-color var(--motion-base) var(--ease-standard),
     box-shadow var(--motion-base) var(--ease-standard),
@@ -467,7 +467,7 @@ const radioRows = computed(() => {
   place-items: center;
   color: var(--blue);
   background: var(--blue-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .module-card__identity {
@@ -517,7 +517,7 @@ const radioRows = computed(() => {
   font-size: 12px;
   font-weight: 650;
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .module-card__call-status {
@@ -530,7 +530,7 @@ const radioRows = computed(() => {
   font-size: 12px;
   font-weight: 650;
   background: var(--accent-soft);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .module-card__data-status {
@@ -557,7 +557,7 @@ const radioRows = computed(() => {
   padding: 10px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .module-card__facts div {
@@ -683,7 +683,7 @@ const radioRows = computed(() => {
   padding: 0 8px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -692,7 +692,7 @@ const radioRows = computed(() => {
   color: var(--danger);
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 

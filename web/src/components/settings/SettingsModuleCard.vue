@@ -61,7 +61,7 @@ const headingTag = computed(() => `h${props.headingLevel}`)
   padding: 18px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .settings-module-card--subtle {
@@ -83,7 +83,7 @@ const headingTag = computed(() => `h${props.headingLevel}`)
   place-items: center;
   color: var(--accent-strong);
   background: var(--accent-soft);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
 }
 
 .settings-module-card__icon--danger {

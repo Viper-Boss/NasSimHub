@@ -131,7 +131,7 @@ const showNumber = computed(
 .homesim-call-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px; border-bottom: 1px solid var(--border); }
 .homesim-call-row > .list-item { border-bottom: 0; min-width: 0; }
 .homesim-call-recording { display: grid; place-items: center; }
-.homesim-recording-toggle { display: flex; align-items: center; gap: 5px; padding: 8px; color: var(--accent); background: var(--accent-soft); border-radius: 12px; font-size: 12px; }
+.homesim-recording-toggle { display: flex; align-items: center; gap: 5px; padding: 8px; color: var(--accent); background: var(--accent-soft); border-radius: var(--radius-control); font-size: 12px; }
 .homesim-no-recording { color: var(--faint); }
 .homesim-call-playback { grid-column: 1 / -1; display: grid; gap: 12px; padding: 6px 20px 16px 64px; }
 .homesim-call-playback p { color: var(--muted); font-size: 12px; }

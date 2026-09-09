@@ -36,6 +36,6 @@ async function copy(): Promise<void> {
 
 <style scoped>
 .sms-code-action { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.sms-code-copy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent-border); border-radius: 11px; background: var(--accent-soft); color: var(--accent-strong); font-size: .875rem; white-space: nowrap; }
+.sms-code-copy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--accent-border); border-radius: var(--radius-control); background: var(--accent-soft); color: var(--accent-strong); font-size: .875rem; white-space: nowrap; }
 .sms-code-error { color: var(--danger); font-size: .875rem; line-height: 1.5; }
 </style>

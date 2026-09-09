@@ -158,7 +158,7 @@ onMounted(load)
   padding: 16px;
   background: color-mix(in srgb, var(--surface) 60%, transparent);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .net-switches__card header {
@@ -199,7 +199,7 @@ onMounted(load)
   cursor: pointer;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   transition: background var(--motion-fast) var(--ease-standard);
 }
 
@@ -225,7 +225,7 @@ onMounted(load)
 .net-switches__guide {
   padding: 10px 12px;
   background: var(--surface-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .net-switches__guide-title {

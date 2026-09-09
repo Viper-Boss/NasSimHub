@@ -2794,7 +2794,7 @@ onMounted(() => {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .primary-action,
@@ -2807,7 +2807,7 @@ onMounted(() => {
   padding: 0 11px;
   font-size: 13px;
   font-weight: 650;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .primary-action {
@@ -2903,7 +2903,7 @@ onMounted(() => {
   place-items: center;
   color: var(--muted);
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .module-name-edit-button:hover,
@@ -2972,7 +2972,7 @@ onMounted(() => {
   color: var(--warning-strong);
   background: var(--warning-soft);
   border: 1px solid var(--warning-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .device-recovery-notice > span {
@@ -3042,7 +3042,7 @@ onMounted(() => {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .line-color-picker {
@@ -3076,7 +3076,7 @@ onMounted(() => {
   height: 26px;
   place-items: center;
   border: 1px solid;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   transition:
     box-shadow var(--motion-fast) var(--ease-standard),
     transform var(--motion-fast) var(--ease-standard);
@@ -3126,7 +3126,7 @@ onMounted(() => {
   padding: 0 10px;
   font-size: 13px;
   line-height: 32px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .line-label-status {
@@ -3209,7 +3209,7 @@ onMounted(() => {
   margin: 8px 0 0;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   list-style: none;
 }
 
@@ -3289,7 +3289,7 @@ onMounted(() => {
   color: var(--warning-strong);
   background: var(--warning-soft);
   border: 1px solid var(--warning-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .volte-provisioning {
@@ -3354,7 +3354,7 @@ onMounted(() => {
   padding: 3px;
   background: var(--surface-subtle);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .ip-mode-options label {
@@ -3373,7 +3373,7 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .ip-mode-options input:checked + span {
@@ -3520,7 +3520,7 @@ onMounted(() => {
   isolation: isolate;
   background: var(--surface-subtle);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .network-selection-mode__slider {
@@ -3532,7 +3532,7 @@ onMounted(() => {
   width: calc((100% - 6px) / 2);
   pointer-events: none;
   background: var(--surface);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 1px 3px rgb(16 24 40 / 12%);
   transition: transform var(--motion-base) var(--ease-standard);
 }
@@ -3555,7 +3555,7 @@ onMounted(() => {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .network-selection-mode__options input:checked + span {
@@ -3735,7 +3735,7 @@ onMounted(() => {
   padding: 4px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .profile-list > div > button:first-child {
@@ -3795,7 +3795,7 @@ onMounted(() => {
   height: 36px;
   min-height: 36px;
   padding: 0 9px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .sim-auto-unlock-row {
@@ -3841,7 +3841,7 @@ onMounted(() => {
   padding: 10px 12px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .sim-slot__name {
@@ -3890,7 +3890,7 @@ onMounted(() => {
   color: var(--muted);
   font-size: 12px;
   background: var(--surface-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .configuration-control-row {
@@ -3945,7 +3945,7 @@ onMounted(() => {
   isolation: isolate;
   background: var(--surface-subtle);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .incoming-policy__slider {
@@ -3957,7 +3957,7 @@ onMounted(() => {
   width: calc((100% - 6px) / 3);
   pointer-events: none;
   background: var(--surface);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 1px 3px rgb(16 24 40 / 12%);
   transform: translateX(0);
   transition: transform var(--motion-base) var(--ease-standard);
@@ -3987,7 +3987,7 @@ onMounted(() => {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .incoming-policy__options input:checked + span {
@@ -4059,7 +4059,7 @@ onMounted(() => {
   color: var(--danger);
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 .voice-status span {
@@ -4126,7 +4126,7 @@ pre {
   white-space: pre-wrap;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 
 @media (max-width: 1100px) {

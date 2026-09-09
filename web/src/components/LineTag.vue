@@ -51,7 +51,7 @@ const toneStyle = computed(() => ({
   text-overflow: ellipsis;
   white-space: nowrap;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 </style>

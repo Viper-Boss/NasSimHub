@@ -642,9 +642,9 @@ onMounted(() => {
 <style scoped>
 .settings-search { padding: 0 16px 12px; }
 .settings-experimental { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
-.settings-search input { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; background: var(--surface); color: var(--text); }
+.settings-search input { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 8px 12px; background: var(--surface); color: var(--text); }
 .settings-search p { color: var(--muted); font-size: 13px; padding-top: 8px; }
-.settings-nav-group .list-item { border-radius: 12px; margin-block: 2px; }
+.settings-nav-group .list-item { border-radius: var(--radius-control); margin-block: 2px; }
 .settings-nav-group .list-item__content small { line-height: 1.5; overflow-wrap: anywhere; }
 .settings-nav-group {
   display: grid;

@@ -744,7 +744,7 @@ onBeforeUnmount(() => {
   line-height: 1;
   background: var(--danger);
   border: 2px solid var(--surface);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
 }
 
 @media (max-width: 860px) {
@@ -782,7 +782,7 @@ onBeforeUnmount(() => {
     color: var(--text);
     font-size: 14px;
     font-weight: 650;
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     transition:
       color var(--motion-fast) var(--ease-standard),
       background var(--motion-fast) var(--ease-standard),

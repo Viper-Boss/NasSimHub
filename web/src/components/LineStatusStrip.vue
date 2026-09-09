@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.line-status-picker { max-width: 140px; min-width: 70px; margin-right: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+.line-status-picker { max-width: 140px; min-width: 70px; margin-right: 8px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 6px; }
 .line-status__tag.is-unknown { color: var(--muted); background: var(--surface-subtle); }
 .line-status-wrap {
   position: relative;
@@ -595,7 +595,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
   transition: border-color var(--motion-fast) var(--ease-standard);
 }
@@ -694,7 +694,7 @@ onBeforeUnmount(() => {
 .line-status__bar {
   width: 3px;
   background: color-mix(in srgb, var(--muted) 28%, transparent);
-  border-radius: 1px 1px 0 0;
+  border-radius: var(--radius-xs) 1px 0 0;
 }
 
 .line-status__bar:nth-child(1) {
@@ -725,7 +725,7 @@ onBeforeUnmount(() => {
   color: var(--accent-strong);
   letter-spacing: 0.02em;
   border: 1px solid color-mix(in srgb, var(--accent-strong) 36%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .line-status__tag.is-off {
@@ -793,7 +793,7 @@ onBeforeUnmount(() => {
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   box-shadow: 0 12px 32px rgb(16 24 40 / 16%);
 }
 
@@ -825,13 +825,13 @@ onBeforeUnmount(() => {
   height: 8px;
   overflow: hidden;
   background: var(--surface-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 
 .line-status-pop__fill {
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   transition: width var(--motion-base) var(--ease-standard);
 }
 
@@ -931,7 +931,7 @@ onBeforeUnmount(() => {
   margin: 4px 0 8px;
   padding: 8px 10px;
   background: var(--surface-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .line-status-pop__switch-row {
@@ -962,7 +962,7 @@ onBeforeUnmount(() => {
   margin-top: 2px;
   padding: 8px 10px;
   background: var(--surface-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .vowifi-diag__head {
@@ -981,7 +981,7 @@ onBeforeUnmount(() => {
   color: var(--text);
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
 }
 
@@ -1062,7 +1062,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.02em;
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
   transition: border-color var(--motion-fast) var(--ease-standard);
 }
@@ -1110,7 +1110,7 @@ onBeforeUnmount(() => {
   padding: 12px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   box-shadow: 0 12px 32px rgb(16 24 40 / 16%);
 }
 
@@ -1144,7 +1144,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   padding: 6px 9px;
   background: var(--surface-subtle);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .nkn-pop__stat em {
@@ -1187,7 +1187,7 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   background: var(--surface-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .nkn-pop__copy {
@@ -1197,7 +1197,7 @@ onBeforeUnmount(() => {
   color: var(--text);
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
 }
 
@@ -1217,7 +1217,7 @@ onBeforeUnmount(() => {
   display: block;
   padding: 6px;
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .nkn-pop__qr span {

@@ -891,7 +891,7 @@ onBeforeUnmount(() => {
   font-weight: 800;
   background: var(--accent-soft);
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--radius-surface);
   cursor: pointer;
 }
 
@@ -1043,7 +1043,7 @@ onBeforeUnmount(() => {
   padding: 5px 11px 5px 6px;
   background: var(--accent-soft);
   border: 1px solid rgb(17 120 100 / 12%);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .dialer-contact-match__copy {
@@ -1234,7 +1234,7 @@ onBeforeUnmount(() => {
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--radius-md) 8px 0 0;
   }
 
   .dialer-surface-enter-from .dialer-panel,
@@ -1293,7 +1293,7 @@ onBeforeUnmount(() => {
   width: min(440px, 100%);
   padding: 22px;
   border: 1px solid var(--border-strong);
-  border-radius: 18px;
+  border-radius: var(--radius-surface);
   background: var(--surface);
   box-shadow: var(--shadow-lg);
 }
@@ -1324,7 +1324,7 @@ onBeforeUnmount(() => {
   min-height: 40px;
   padding: 0 18px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--surface-hover);
   color: var(--text);
   font-weight: 650;

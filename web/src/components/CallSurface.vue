@@ -810,7 +810,7 @@ onBeforeUnmount(() => {
   color: var(--muted);
   background: var(--surface-hover);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }

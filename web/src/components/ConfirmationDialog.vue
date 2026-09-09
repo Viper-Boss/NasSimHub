@@ -111,7 +111,7 @@ const messageID = `confirmation-message-${useId()}`
   font-size: 13px;
   font-weight: 650;
   background: var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .confirmation-action.is-secondary {

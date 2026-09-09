@@ -450,7 +450,7 @@ onBeforeUnmount(() => {
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     border-color var(--motion-base) var(--ease-standard),
@@ -499,7 +499,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   box-shadow: 0 14px 32px rgb(24 39 55 / 18%);
 }
 
@@ -522,7 +522,7 @@ onBeforeUnmount(() => {
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -579,7 +579,7 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr) 14px;
   gap: 6px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .line-selector.is-compact.is-all .line-selector__control {
@@ -615,7 +615,7 @@ onBeforeUnmount(() => {
   padding: 4px;
   background: var(--surface-subtle);
   border-color: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .line-selector.is-filter.is-filtered .line-selector__control {

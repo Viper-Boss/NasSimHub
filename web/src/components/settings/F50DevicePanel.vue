@@ -587,7 +587,7 @@ onBeforeUnmount(() => {
   gap: 14px;
   padding: 18px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-surface);
   background: color-mix(in srgb, var(--surface) 60%, transparent);
 }
 
@@ -611,7 +611,7 @@ onBeforeUnmount(() => {
   padding: 0 10px;
   min-height: 28px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--muted);
   font-size: 12px;
@@ -642,7 +642,7 @@ onBeforeUnmount(() => {
 
 .f50-signalbars__bar {
   width: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--text) 14%, transparent);
 }
 
@@ -671,7 +671,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: var(--surface-subtle);
 }
 
@@ -710,7 +710,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: var(--surface-subtle);
 }
 
@@ -735,7 +735,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   margin-left: auto;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--text);
   font-size: 10.5px;
@@ -758,7 +758,7 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
-.f50-signalbars--sm .f50-signalbars__bar { width: 4px; gap: 2px; border-radius: 2px; }
+.f50-signalbars--sm .f50-signalbars__bar { width: 4px; gap: 2px; border-radius: var(--radius-xs); }
 
 /* Signal quality bars */
 .f50-siggrid {
@@ -785,7 +785,7 @@ onBeforeUnmount(() => {
 
 .f50-sig__bar {
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text) 10%, transparent);
   overflow: hidden;
 }
@@ -793,7 +793,7 @@ onBeforeUnmount(() => {
 .f50-sig__bar i {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   transition: width var(--motion-normal, 0.3s) var(--ease-standard);
 }
 
@@ -857,14 +857,14 @@ onBeforeUnmount(() => {
 /* Plan traffic bar */
 .f50-traffic__bar {
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text) 10%, transparent);
   overflow: hidden;
 }
 
 .f50-traffic__bar-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #e5484d));
   transition: width var(--motion-normal, 0.3s) var(--ease-standard);
 }
@@ -903,7 +903,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 11px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: var(--surface-subtle);
   color: var(--text);
   font-size: 12.5px;
@@ -928,7 +928,7 @@ onBeforeUnmount(() => {
 .f50-unread-badge {
   min-width: 18px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: #fff;
   font-size: 11px;
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
   padding: 12px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .f50-actions {
@@ -981,7 +981,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   background: var(--surface-subtle);
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   transition: border-color var(--motion-fast) var(--ease-standard);
 }
 
@@ -1041,7 +1041,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   padding: 3px 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text);
   font-size: 11px;

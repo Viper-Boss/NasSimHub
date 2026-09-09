@@ -234,19 +234,19 @@ onMounted(load)
 .sms-forward__header p { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .sms-forward__note, .sms-forward__empty { color: var(--muted); font-size: 12.5px; }
 .sms-forward__loading { display: grid; place-items: center; padding: 30px; color: var(--muted); }
-.sms-forward-card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
+.sms-forward-card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: var(--surface-subtle); }
 .sms-forward-card.is-disabled { opacity: .55; }
 .sms-forward-card__head { display: flex; align-items: center; justify-content: space-between; }
 .sms-forward-card__enabled { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
 .sms-forward-card__grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .sms-forward-card label { display: grid; gap: 6px; font-size: 13px; }
 .sms-forward-card label > span { font-weight: 650; }
-.sms-forward-card input:not([type=checkbox]), .sms-forward-card select { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; }
+.sms-forward-card input:not([type=checkbox]), .sms-forward-card select { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 11px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control); }
 .sms-forward-card small { color: var(--muted); font-size: 11.5px; }
 .sms-forward-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 .sms-forward-card__result { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
 .sms-forward__saved { color: var(--success); font-size: 13px; }
-.sms-forward__ready { padding: 10px 12px; color: var(--success); font-size: 12.5px; background: var(--success-soft); border: 1px solid var(--success-border); border-radius: 9px; }
+.sms-forward__ready { padding: 10px 12px; color: var(--success); font-size: 12.5px; background: var(--success-soft); border: 1px solid var(--success-border); border-radius: var(--radius-control); }
 .sms-forward__footer { display: flex; justify-content: flex-end; }
 @media (max-width: 560px) { .sms-forward-card__grid { grid-template-columns: 1fr; } }
 </style>

@@ -282,22 +282,22 @@ onBeforeUnmount(() => {
   appearance: none;
   background: var(--control-muted);
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .recording-audio-player__timeline progress::-webkit-progress-bar {
   background: var(--control-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .recording-audio-player__timeline progress::-webkit-progress-value {
   background: var(--accent-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .recording-audio-player__timeline progress::-moz-progress-bar {
   background: var(--accent-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .recording-audio-player__timeline input {

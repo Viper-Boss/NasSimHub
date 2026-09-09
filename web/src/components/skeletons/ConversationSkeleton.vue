@@ -161,7 +161,7 @@ withDefaults(
 .conversation-skeleton__row > span {
   width: clamp(150px, 42%, 360px);
   height: 52px;
-  border-radius: 14px;
+  border-radius: var(--radius-surface);
 }
 
 .conversation-skeleton__row:nth-child(2) > span,

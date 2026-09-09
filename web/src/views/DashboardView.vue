@@ -1327,7 +1327,7 @@ onBeforeUnmount(() => {
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   transition:
     border-color var(--motion-base) var(--ease-standard),
     background var(--motion-base) var(--ease-standard);
@@ -1346,7 +1346,7 @@ onBeforeUnmount(() => {
   place-items: center;
   color: var(--blue);
   background: var(--blue-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .dashboard-summary-card.is-missed .dashboard-summary-icon {
@@ -1459,7 +1459,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .dashboard-contact-row:last-child {
@@ -1498,7 +1498,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .dashboard-favorites-empty {

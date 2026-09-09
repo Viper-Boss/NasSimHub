@@ -151,7 +151,7 @@ function handleDrop(event: DragEvent): void {
   text-align: left;
   background: var(--surface-subtle);
   border: 1px dashed var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     border-color var(--motion-fast) var(--ease-standard),
@@ -186,7 +186,7 @@ function handleDrop(event: DragEvent): void {
   place-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .file-drop-control__copy {

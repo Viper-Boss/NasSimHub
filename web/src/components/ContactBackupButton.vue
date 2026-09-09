@@ -29,7 +29,7 @@ async function backup(): Promise<void> {
   </section>
 </template>
 <style scoped>
-.homesim-contact-backup { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 18px; margin: 4px 12px 12px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 14px; }
+.homesim-contact-backup { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 18px; margin: 4px 12px 12px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: var(--radius-surface); }
 .homesim-contact-backup > div { display: grid; gap: 4px; }
 .homesim-contact-backup strong { font-size: 14px; }
 .homesim-contact-backup small, .homesim-contact-backup p { font-size: 12px; color: var(--muted); }

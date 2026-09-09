@@ -38,13 +38,13 @@ onBeforeUnmount(() => { alive = false; clearInterval(timer); image.value = '' })
   </section>
 </template>
 <style scoped>
-.mobile-enrollment { display: grid; gap: 24px; padding: 24px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
-header { display: flex; align-items: center; gap: 16px; } .mobile-enrollment__icon { display: grid; place-items: center; width: 56px; height: 56px; background: color-mix(in srgb,var(--accent) 12%,transparent); border-radius: 16px; color: var(--accent); }
+.mobile-enrollment { display: grid; gap: 24px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-dialog); background: var(--surface); }
+header { display: flex; align-items: center; gap: 16px; } .mobile-enrollment__icon { display: grid; place-items: center; width: 56px; height: 56px; background: color-mix(in srgb,var(--accent) 12%,transparent); border-radius: var(--radius-surface); color: var(--accent); }
 h2,h3,p { margin: 0; } h2 { font-size: 22px; } h3 { font-size: 15px; } p,footer { color: var(--muted); line-height: 1.8; font-size: 13px; }
 .mobile-enrollment__layout { display: grid; grid-template-columns: 1fr 270px; gap: 24px; }
-.mobile-enrollment__form { display: grid; gap: 14px; } label { display: grid; gap: 8px; } input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--text); }
+.mobile-enrollment__form { display: grid; gap: 14px; } label { display: grid; gap: 8px; } input { width: 100%; padding: 12px; border-radius: var(--radius-control); border: 1px solid var(--border); background: var(--surface-subtle); color: var(--text); }
 button { display: inline-flex; align-items: center; gap: 8px; justify-self: start; }
-.mobile-enrollment__qr { display: grid; place-items: center; align-content: center; gap: 14px; background: var(--surface-subtle); padding: 16px; border-radius: 16px; color: var(--muted); min-height: 270px; }
-img { width: 100%; max-width: 250px; border-radius: 10px; } footer { display: flex; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); } footer svg { flex-shrink: 0; margin-top: 4px; }
+.mobile-enrollment__qr { display: grid; place-items: center; align-content: center; gap: 14px; background: var(--surface-subtle); padding: 16px; border-radius: var(--radius-surface); color: var(--muted); min-height: 270px; }
+img { width: 100%; max-width: 250px; border-radius: var(--radius-control); } footer { display: flex; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); } footer svg { flex-shrink: 0; margin-top: 4px; }
 @media(max-width: 860px) { .mobile-enrollment__layout { grid-template-columns: 1fr; } }
 </style>

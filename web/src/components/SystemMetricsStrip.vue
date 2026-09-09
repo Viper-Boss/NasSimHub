@@ -481,7 +481,7 @@ const flashUsedBytes = computed(() => {
   padding: 16px 18px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-surface);
 }
 
 .tm-box__head {
@@ -694,7 +694,7 @@ const flashUsedBytes = computed(() => {
   display: flex;
   overflow: hidden;
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--border);
 }
 
