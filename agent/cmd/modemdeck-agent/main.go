@@ -402,6 +402,13 @@ func runQDC507VoiceReconciler(
 	}
 
 	reconcile()
+	// A periodic tick is required in addition to modem lifecycle events: when
+	// the module is stable but its adbd is wedged (the field failure this
+	// guards against), no lifecycle events fire, and the consecutive-failure
+	// counter behind the forced QADBKEY re-authorization would never reach
+	// its threshold.
+	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -410,6 +417,8 @@ func runQDC507VoiceReconciler(
 			if !open {
 				return
 			}
+			reconcile()
+		case <-ticker.C:
 			reconcile()
 		}
 	}
