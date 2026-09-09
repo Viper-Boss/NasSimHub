@@ -54,11 +54,11 @@ test('settings navigation groups personal and managed surfaces behind one visibi
   )
   assert.ok(
     visibleSettingsSectionIDs({ isAdmin: true, canPairIOS: true, nknUnlocked: true })
-      .filter(section => ['nkn', 'nkn-node', 'nkn-network'].includes(section)).length === 3
+      .filter(section => ['nkn-node', 'nkn-network'].includes(section)).length === 2
   )
   assert.ok(
     !visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: true, nknUnlocked: true })
-      .includes('nkn')
+      .includes('nkn-network')
   )
   for (const section of ['preferences', 'security']) {
     assert.equal(settingsSectionGroup(section), 'personal')
@@ -73,7 +73,7 @@ test('settings navigation groups personal and managed surfaces behind one visibi
   for (const section of ['audio', 'contacts', 'devices', 'telegram', 'bark', 'sms-forward']) {
     assert.equal(settingsSectionGroup(section), 'communication')
   }
-  for (const section of ['pairing', 'f50', 'net-switches', 'connectivity', 'nkn', 'nkn-node', 'nkn-network', 'wireguard']) {
+  for (const section of ['pairing', 'f50', 'net-switches', 'connectivity', 'nkn-node', 'nkn-network', 'wireguard']) {
     assert.equal(settingsSectionGroup(section), 'network')
   }
   assert.ok(visibleSettingsSectionIDs({isAdmin:true, canPairIOS:true, advancedNetwork:true}).includes('wireguard'))

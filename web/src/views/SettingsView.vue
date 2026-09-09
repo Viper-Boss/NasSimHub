@@ -100,8 +100,6 @@ const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
 const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
-const loadNKNSettingsPanel = () => import('../components/settings/NKNSettingsPanel.vue')
-const NKNSettingsPanel = defineAsyncComponent(loadNKNSettingsPanel)
 const loadWireGuardPanel = () => import('../components/settings/WireGuardPanel.vue')
 const WireGuardPanel = defineAsyncComponent(loadWireGuardPanel)
 const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
@@ -135,7 +133,6 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
   { id: 'nkn-node', label: t('settings.nknNode'), description: t('settings.nknNodeDescription'), icon: Network },
   { id: 'nkn-network', label: t('settings.nknNetwork'), description: t('settings.nknNetworkDescription'), icon: Globe2 },
   { id: 'wireguard', label: 'WireGuard', description: t('homesim.advanced.text0'), icon: ShieldCheck },
-  { id: 'nkn', label: t('homesim.advanced.text1'), description: t('homesim.advanced.text2'), icon: Globe2 },
   {
     id: 'preferences',
     label: t('settings.system'),
@@ -333,8 +330,6 @@ function preloadSection(section: SettingsSection): void {
         return loadF50DevicePanel
       case 'net-switches':
         return loadNetworkSwitchesPanel
-      case 'nkn':
-        return loadNKNSettingsPanel
       case 'wireguard':
         return loadWireGuardPanel
       case 'nkn-node':
@@ -599,9 +594,6 @@ onMounted(() => {
               </PageContentFrame>
             </div>
 
-            <div v-else-if="selectedSection === 'nkn'" class="settings-content">
-              <PageContentFrame mode="reading"><NKNSettingsPanel /></PageContentFrame>
-            </div>
             <div v-else-if="selectedSection === 'nkn-node'" class="settings-content">
               <PageContentFrame mode="reading"><NknNodePanel /></PageContentFrame>
             </div>

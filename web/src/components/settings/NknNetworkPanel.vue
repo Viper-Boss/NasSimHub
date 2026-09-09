@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { Copy, LoaderCircle, RefreshCw, Save } from '@lucide/vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useAdvancedI18n } from '../../i18n/useAdvancedI18n'
+import { Copy, LoaderCircle, RefreshCw } from '@lucide/vue'
+import { fixtureMode, getNKNSettings, saveNKNSettings, type NKNSettingsResponse } from '../../api/client'
 import {
   getNKNNetworkPeers,
   getNKNNetworkStatus,
@@ -10,7 +11,7 @@ import {
   type NKNNetworkStatus
 } from '../../api/client'
 
-const { t } = useI18n()
+const { t } = useAdvancedI18n()
 const status = ref<NKNNetworkStatus | null>(null)
 const peers = ref<NKNNetworkPeers | null>(null)
 const enabled = ref(false)
@@ -22,6 +23,31 @@ const error = ref('')
 const peersError = ref('')
 const saved = ref(false)
 const copied = ref(false)
+let savedTimer: number | undefined
+
+// Merged master NKN client (identity + remote messaging) from the former
+// standalone NKN panel; both switches live on this single section now.
+const client = ref<NKNSettingsResponse | null>(null)
+const clientBusy = ref(false)
+const clientError = ref('')
+
+const clientStateLabel = computed(() => {
+  switch (client.value?.status.state) {
+    case 'connected': return t('homesim.advanced.text8')
+    case 'connecting': return t('homesim.advanced.text9')
+    case 'disabled': return t('homesim.advanced.text10')
+    default: return t('homesim.advanced.text11')
+  }
+})
+
+const clientStateClass = computed(() => {
+  switch (client.value?.status.state) {
+    case 'connected': return 'is-running'
+    case 'connecting': return 'is-joining'
+    case 'error': return 'is-error'
+    default: return 'is-idle'
+  }
+})
 
 const stateLabel = computed(() => {
   switch (status.value?.runtime.state) {
@@ -57,18 +83,42 @@ async function load(): Promise<void> {
   }
 }
 
-async function save(): Promise<void> {
+async function loadClient(): Promise<void> {
+  try {
+    client.value = await getNKNSettings()
+  } catch (reason) {
+    clientError.value = reason instanceof Error ? reason.message : t('homesim.advanced.text12')
+  }
+}
+
+async function toggleClient(): Promise<void> {
+  if (!client.value || clientBusy.value || fixtureMode) return
+  clientBusy.value = true
+  clientError.value = ''
+  try {
+    client.value = await saveNKNSettings({ revision: client.value.settings.revision, enabled: !client.value.settings.enabled })
+  } catch (reason) {
+    clientError.value = reason instanceof Error ? reason.message : t('homesim.advanced.text13')
+  } finally {
+    clientBusy.value = false
+  }
+}
+
+async function toggleDirectory(): Promise<void> {
   if (saving.value || !status.value) return
   saving.value = true
   error.value = ''
   saved.value = false
   try {
     const result = await updateNKNNetwork({
-      enabled: enabled.value,
+      enabled: !enabled.value,
       expected_revision: status.value.settings.revision
     })
     status.value = result
+    enabled.value = result.settings.enabled
     saved.value = true
+    window.clearTimeout(savedTimer)
+    savedTimer = window.setTimeout(() => { saved.value = false }, 2500)
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : t('homesim.nknNetwork.loadFailed')
   } finally {
@@ -90,7 +140,7 @@ async function refreshPeers(): Promise<void> {
 }
 
 async function copyAddress(): Promise<void> {
-  const address = status.value?.runtime.my_address
+  const address = client.value?.status.address || status.value?.runtime.my_address
   if (!address) return
   try {
     await navigator.clipboard.writeText(address)
@@ -101,9 +151,16 @@ async function copyAddress(): Promise<void> {
   }
 }
 
+let clientTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   void load()
   void refreshPeers()
+  void loadClient()
+  clientTimer = setInterval(() => { if (!clientBusy.value) void loadClient() }, 10000)
+})
+onBeforeUnmount(() => {
+  if (clientTimer) clearInterval(clientTimer)
+  window.clearTimeout(savedTimer)
 })
 </script>
 
@@ -115,68 +172,89 @@ onMounted(() => {
     </header>
 
     <div v-if="loading" class="nkn-network__loading"><LoaderCircle class="spin" :size="18" /></div>
-    <template v-else-if="loaded && status">
+    <template v-else>
       <div class="nkn-network__card">
-        <label class="nkn-network__enabled">
-          <input v-model="enabled" class="ui-check" type="checkbox" :disabled="saving" />
-          <span>{{ t('homesim.nknNetwork.enable') }}</span>
-        </label>
-        <small class="nkn-network__hint">{{ t('homesim.nknNetwork.enableHint') }}</small>
-        <small class="nkn-network__hint nkn-network__privacy">{{ t('homesim.nknNetwork.privacy') }}</small>
+        <div class="nkn-network__switch-row">
+          <div>
+            <h3>{{ t('homesim.advanced.text15') }}</h3>
+            <p class="nkn-network__hint">{{ t('homesim.advanced.text23') }}</p>
+          </div>
+          <input type="checkbox" class="ui-switch" role="switch"
+                 :checked="client?.settings.enabled ?? false"
+                 :aria-label="t('homesim.advanced.text15')"
+                 :disabled="clientBusy || fixtureMode"
+                 @change="toggleClient" />
+        </div>
+        <div v-if="client" class="nkn-network__status" :class="clientStateClass">
+          <div class="nkn-network__status-row">
+            <span class="nkn-network__status-dot" aria-hidden="true"></span>
+            <strong>{{ t('homesim.nknNetwork.state') }}: {{ clientStateLabel }}</strong>
+          </div>
+          <dl v-if="client.status.address || status?.runtime.my_address">
+            <dt>{{ t('homesim.advanced.text24') }}</dt>
+            <dd class="nkn-network__address">
+              <code>{{ client.status.address || status?.runtime.my_address }}</code>
+              <button class="icon-button" type="button" :aria-label="t('homesim.nknNetwork.copy')" @click="copyAddress">
+                <Copy :size="14" />
+              </button>
+              <span v-if="copied" class="nkn-network__copied">{{ t('homesim.nknNetwork.copied') }}</span>
+            </dd>
+          </dl>
+          <p v-if="client.status.error" class="nkn-network__lasterror" role="alert">{{ client.status.error }}</p>
+        </div>
+        <p v-if="clientError" class="field-error" role="alert">{{ clientError }}</p>
       </div>
 
-      <div class="nkn-network__status" :class="stateClass">
-        <div class="nkn-network__status-row">
-          <span class="nkn-network__status-dot" aria-hidden="true"></span>
-          <strong>{{ t('homesim.nknNetwork.state') }}: {{ stateLabel }}</strong>
+      <div class="nkn-network__card">
+        <div class="nkn-network__switch-row">
+          <div>
+            <h3>{{ t('homesim.nknNetwork.directoryTitle') }}</h3>
+            <p class="nkn-network__hint">{{ t('homesim.nknNetwork.enableHint') }}</p>
+          </div>
+          <input type="checkbox" class="ui-switch" role="switch"
+                 :checked="enabled"
+                 :aria-label="t('homesim.nknNetwork.enable')"
+                 :disabled="saving || !loaded"
+                 @change="toggleDirectory" />
         </div>
-        <dl v-if="status.runtime.my_address">
-          <dt>{{ t('homesim.nknNetwork.myAddress') }}</dt>
-          <dd class="nkn-network__address">
-            <code>{{ status.runtime.my_address }}</code>
-            <button class="icon-button" type="button" :aria-label="t('homesim.nknNetwork.copy')" @click="copyAddress">
-              <Copy :size="14" />
-            </button>
-            <span v-if="copied" class="nkn-network__copied">{{ t('homesim.nknNetwork.copied') }}</span>
-          </dd>
+        <small class="nkn-network__hint nkn-network__privacy">{{ t('homesim.nknNetwork.privacy') }}</small>
+        <div v-if="loaded && status" class="nkn-network__status" :class="stateClass">
+          <div class="nkn-network__status-row">
+            <span class="nkn-network__status-dot" aria-hidden="true"></span>
+            <strong>{{ t('homesim.nknNetwork.state') }}: {{ stateLabel }}</strong>
+          </div>
+          <dl v-if="status.runtime.last_renew">
+            <dt>{{ t('homesim.nknNetwork.lastRenew') }}</dt>
+            <dd>{{ new Date(status.runtime.last_renew).toLocaleString() }}</dd>
+          </dl>
+          <p v-if="status.runtime.last_error" class="nkn-network__lasterror" role="alert">{{ t('homesim.nknNetwork.lastError') }}: {{ status.runtime.last_error }}</p>
+        </div>
+      </div>
+
+      <div class="nkn-network__directory">
+        <div class="nkn-network__directory-head">
+          <h3>{{ t('homesim.nknNetwork.directoryTitle') }}</h3>
+          <button class="secondary-action" type="button" :disabled="peersLoading" @click="refreshPeers">
+            <LoaderCircle v-if="peersLoading" class="spin" :size="14" />
+            <RefreshCw v-else :size="14" />{{ peersLoading ? t('homesim.nknNetwork.refreshing') : t('homesim.nknNetwork.refresh') }}
+          </button>
+        </div>
+        <dl class="nkn-network__metrics" :aria-busy="peersLoading">
+          <div><dt>{{ t('homesim.nknNetwork.active24h') }}</dt><dd>{{ peersError ? '—' : (peers?.active_24h ?? '—') }}</dd></div>
+          <div><dt>{{ t('homesim.nknNetwork.activeMonth') }}</dt><dd>{{ peersError ? '—' : (peers?.active_month ?? '—') }}</dd></div>
+          <div><dt>{{ t('homesim.nknNetwork.registeredTotal') }}</dt><dd>{{ peersError ? '—' : (peers?.registered_total ?? '—') }}</dd></div>
         </dl>
-        <dl v-if="status.runtime.last_renew">
-          <dt>{{ t('homesim.nknNetwork.lastRenew') }}</dt>
-          <dd>{{ new Date(status.runtime.last_renew).toLocaleString() }}</dd>
-        </dl>
-        <p v-if="status.runtime.last_error" class="nkn-network__lasterror" role="alert">{{ t('homesim.nknNetwork.lastError') }}: {{ status.runtime.last_error }}</p>
+        <details class="nkn-network__hint">
+          <summary class="ui-disclosure-summary">{{ t('homesim.nknNetwork.statisticsDetails') }}</summary>
+          <p>{{ t('homesim.nknNetwork.statisticsScope') }}</p>
+          <p v-if="peers?.coverage_started_at">{{ t('homesim.nknNetwork.coverageSince', {date: new Date(peers.coverage_started_at).toLocaleString()}) }}</p>
+        </details>
+        <p v-if="peersError" class="field-error" role="alert">{{ peersError }}</p>
       </div>
     </template>
 
-    <div class="nkn-network__directory">
-      <div class="nkn-network__directory-head">
-        <h3>{{ t('homesim.nknNetwork.directoryTitle') }}</h3>
-        <button class="secondary-action" type="button" :disabled="peersLoading" @click="refreshPeers">
-          <LoaderCircle v-if="peersLoading" class="spin" :size="14" />
-          <RefreshCw v-else :size="14" />{{ peersLoading ? t('homesim.nknNetwork.refreshing') : t('homesim.nknNetwork.refresh') }}
-        </button>
-      </div>
-      <dl class="nkn-network__metrics" :aria-busy="peersLoading">
-        <div><dt>{{ t('homesim.nknNetwork.active24h') }}</dt><dd>{{ peersError ? '—' : (peers?.active_24h ?? '—') }}</dd></div>
-        <div><dt>{{ t('homesim.nknNetwork.activeMonth') }}</dt><dd>{{ peersError ? '—' : (peers?.active_month ?? '—') }}</dd></div>
-        <div><dt>{{ t('homesim.nknNetwork.registeredTotal') }}</dt><dd>{{ peersError ? '—' : (peers?.registered_total ?? '—') }}</dd></div>
-      </dl>
-      <details class="nkn-network__hint">
-        <summary class="ui-disclosure-summary">{{ t('homesim.nknNetwork.statisticsDetails') }}</summary>
-        <p>{{ t('homesim.nknNetwork.statisticsScope') }}</p>
-        <p v-if="peers?.coverage_started_at">{{ t('homesim.nknNetwork.coverageSince', {date: new Date(peers.coverage_started_at).toLocaleString()}) }}</p>
-      </details>
-      <p v-if="peersError" class="field-error" role="alert">{{ peersError }}</p>
-    </div>
-
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <p v-if="saved" class="nkn-network__saved" role="status">{{ t('homesim.nknNetwork.saved') }}</p>
-    <footer class="nkn-network__footer">
-      <button class="primary-action" type="button" :disabled="saving || !loaded" @click="save">
-        <LoaderCircle v-if="saving" class="spin" :size="16" />
-        <Save v-else :size="16" />{{ t('homesim.nknNetwork.save') }}
-      </button>
-    </footer>
   </section>
 </template>
 
@@ -186,7 +264,10 @@ onMounted(() => {
 .nkn-network__header p { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .nkn-network__loading { display: grid; place-items: center; padding: 30px; color: var(--muted); }
 .nkn-network__card { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
-.nkn-network__enabled { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
+.nkn-network__switch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.nkn-network__switch-row h3 { margin: 0; font-size: 14px; }
+.nkn-network__switch-row .ui-switch { flex-shrink: 0; }
+.nkn-network__switch-row p { margin: 4px 0 0; }
 .nkn-network__hint { color: var(--muted); font-size: 11.5px; }
 .nkn-network__privacy { padding: 8px 10px; border: 1px dashed var(--border); border-radius: 9px; }
 .nkn-network__status { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; font-size: 13px; }
@@ -213,13 +294,7 @@ onMounted(() => {
 .nkn-network__metrics dt { color: var(--muted); font-size: 12px; }
 .nkn-network__metrics dd { margin: 10px 0 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .nkn-network__metrics { gap: 6px; } .nkn-network__metrics > div { padding: 12px 8px; } .nkn-network__metrics dd { font-size: 24px; } }
-.nkn-network__count { margin: 0; color: var(--muted); font-size: 12px; }
-.nkn-network__peers { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.nkn-network__peer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.nkn-network__peer code { font-size: 12px; overflow-wrap: anywhere; }
-.nkn-network__self { padding: 1px 7px; color: var(--success); font-size: 11px; font-weight: 650; border: 1px solid var(--success-border); border-radius: 999px; background: var(--success-soft); }
 .nkn-network__saved { color: var(--success); font-size: 13px; }
-.nkn-network__footer { display: flex; justify-content: flex-end; }
 .spin { animation: nkn-network-spin 1s linear infinite; }
 @keyframes nkn-network-spin { to { transform: rotate(360deg); } }
 @keyframes nkn-network-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

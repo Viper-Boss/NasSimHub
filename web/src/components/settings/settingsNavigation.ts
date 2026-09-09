@@ -11,7 +11,6 @@ export type SettingsSection =
   | 'sms-forward'
   | 'f50'
   | 'net-switches'
-  | 'nkn'
   | 'nkn-node'
   | 'nkn-network'
   | 'wireguard'
@@ -41,7 +40,6 @@ export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
   'sms-forward',
   'f50',
   'net-switches',
-  'nkn',
   'nkn-node',
   'nkn-network',
   'wireguard',
@@ -61,7 +59,6 @@ const PERSONAL_SECTIONS = new Set<SettingsSection>([
 const ADMIN_ONLY_SECTIONS = new Set<SettingsSection>([
   'nkn-node',
   'nkn-network',
-  'nkn',
   'wireguard',
   'bark',
   'sms-forward',
@@ -77,7 +74,7 @@ export function settingsSectionGroup(section: SettingsSection): SettingsSectionG
   if (section === 'nkn-node' || section === 'nkn-network') return 'network'
   if (section === 'wireguard') return 'network'
   if (['audio', 'devices', 'contacts', 'telegram', 'bark', 'sms-forward'].includes(section)) return 'communication'
-  if (['f50', 'net-switches', 'nkn', 'connectivity', 'pairing'].includes(section)) return 'network'
+  if (['f50', 'net-switches', 'connectivity', 'pairing'].includes(section)) return 'network'
   return PERSONAL_SECTIONS.has(section) ? 'personal' : 'management'
 }
 
@@ -86,7 +83,7 @@ export function visibleSettingsSectionIDs(
 ): SettingsSection[] {
   return SETTINGS_SECTION_ORDER.filter(section => {
     if (section === 'wireguard') return visibility.isAdmin && visibility.advancedNetwork === true
-    if (section === 'nkn' || section === 'nkn-node' || section === 'nkn-network') {
+    if (section === 'nkn-node' || section === 'nkn-network') {
       return visibility.isAdmin && visibility.nknUnlocked === true
     }
     if (section === 'pairing') return visibility.canPairIOS
