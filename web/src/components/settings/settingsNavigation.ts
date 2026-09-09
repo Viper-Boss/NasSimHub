@@ -11,8 +11,8 @@ export type SettingsSection =
   | 'sms-forward'
   | 'f50'
   | 'net-switches'
-  | 'nkn-node'
   | 'nkn-network'
+  | 'nkn-node'
   | 'wireguard'
   | 'connectivity'
   | 'diagnostics'
@@ -40,8 +40,8 @@ export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
   'sms-forward',
   'f50',
   'net-switches',
-  'nkn-node',
   'nkn-network',
+  'nkn-node',
   'wireguard',
   'connectivity',
   'diagnostics',

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAdvancedI18n } from '../../i18n/useAdvancedI18n'
-import { Copy, LoaderCircle, RefreshCw } from '@lucide/vue'
+import { Copy, ExternalLink, Globe2, Info, LoaderCircle, RefreshCw, ShieldCheck } from '@lucide/vue'
 import { fixtureMode, getNKNSettings, saveNKNSettings, type NKNSettingsResponse } from '../../api/client'
+import OverlayDialog from '../OverlayDialog.vue'
 import {
   getNKNNetworkPeers,
   getNKNNetworkStatus,
@@ -30,6 +31,12 @@ let savedTimer: number | undefined
 const client = ref<NKNSettingsResponse | null>(null)
 const clientBusy = ref(false)
 const clientError = ref('')
+const intro = ref(false)
+
+function dismissIntro(): void {
+  intro.value = false
+  try { localStorage.setItem('homesim.nkn.intro.v1', 'seen') } catch { /* Storage may be unavailable. */ }
+}
 
 const clientStateLabel = computed(() => {
   switch (client.value?.status.state) {
@@ -156,6 +163,7 @@ onMounted(() => {
   void load()
   void refreshPeers()
   void loadClient()
+  try { intro.value = localStorage.getItem('homesim.nkn.intro.v1') !== 'seen' } catch { intro.value = true }
   clientTimer = setInterval(() => { if (!clientBusy.value) void loadClient() }, 10000)
 })
 onBeforeUnmount(() => {
@@ -166,10 +174,17 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="nkn-network">
-    <header class="nkn-network__header">
-      <h2>{{ t('homesim.nknNetwork.title') }}</h2>
-      <p>{{ t('homesim.nknNetwork.subtitle') }}</p>
+    <header class="nkn-network__hero">
+      <span class="nkn-network__hero-icon"><Globe2 :size="28" /></span>
+      <div>
+        <p class="nkn-network__eyebrow">{{ t('homesim.advanced.text19') }}</p>
+        <h2>{{ t('homesim.nknNetwork.title') }}</h2>
+        <p>{{ t('homesim.advanced.text20') }}</p>
+        <p class="nkn-network__hero-sub">{{ t('homesim.nknNetwork.subtitle') }}</p>
+      </div>
+      <button class="secondary-action" type="button" @click="intro = true"><Info :size="16" />{{ t('homesim.advanced.text21') }}</button>
     </header>
+    <p v-if="fixtureMode" class="homesim-sim-notice">{{ t('homesim.advanced.text22') }}</p>
 
     <div v-if="loading" class="nkn-network__loading"><LoaderCircle class="spin" :size="18" /></div>
     <template v-else>
@@ -255,13 +270,58 @@ onBeforeUnmount(() => {
 
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <p v-if="saved" class="nkn-network__saved" role="status">{{ t('homesim.nknNetwork.saved') }}</p>
+
+    <div class="nkn-network__about">
+      <article class="nkn-network__about-card">
+        <ShieldCheck :size="22" />
+        <h3>{{ t('homesim.advanced.text27') }}</h3>
+        <p>{{ t('homesim.advanced.text28') }}</p>
+      </article>
+      <article class="nkn-network__about-card">
+        <Globe2 :size="22" />
+        <h3>{{ t('homesim.advanced.text29') }}</h3>
+        <p>{{ t('homesim.advanced.text30') }}</p>
+        <RouterLink :to="{ name: 'settings', params: { section: 'sms-forward' } }">{{ t('homesim.advanced.text31') }}</RouterLink>
+      </article>
+    </div>
+
+    <OverlayDialog :open="intro" :label="t('homesim.advanced.text18')" @close="dismissIntro">
+      <div class="nkn-network__intro">
+        <Globe2 :size="32" />
+        <h2>{{ t('homesim.advanced.text32') }}</h2>
+        <p>{{ t('homesim.advanced.text33') }}</p>
+        <p>{{ t('homesim.advanced.text34') }}</p>
+        <p>{{ t('homesim.advanced.text35') }}</p>
+        <p>{{ t('homesim.advanced.text36') }}</p>
+        <div class="nkn-network__intro-row">
+          <a href="https://nkn.org/" target="_blank" rel="noopener noreferrer">{{ t('homesim.advanced.text37') }} <ExternalLink :size="14" /></a>
+          <button class="primary-action" type="button" @click="dismissIntro">{{ t('homesim.advanced.text38') }}</button>
+        </div>
+      </div>
+    </OverlayDialog>
   </section>
 </template>
 
 <style scoped>
 .nkn-network { display: grid; gap: 16px; }
-.nkn-network__header h2 { font-size: 18px; }
-.nkn-network__header p { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.nkn-network__hero { display: flex; gap: 18px; align-items: center; padding: 22px 24px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(125deg, color-mix(in srgb, var(--accent) 13%, var(--surface)), var(--surface)); }
+.nkn-network__hero-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 16px; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); flex-shrink: 0; }
+.nkn-network__hero > div { min-width: 0; }
+.nkn-network__hero h2 { margin: 2px 0 0; font-size: 20px; }
+.nkn-network__hero > button { margin-left: auto; flex-shrink: 0; }
+.nkn-network__eyebrow { margin: 0; color: var(--accent); font-size: 12px; font-weight: 650; }
+.nkn-network__hero-sub { margin: 4px 0 0 !important; font-size: 12px; }
+.nkn-network__about { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.nkn-network__about-card { display: grid; gap: 8px; align-content: start; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); font-size: 13px; }
+.nkn-network__about-card h3 { margin: 0; font-size: 14px; }
+.nkn-network__about-card p { margin: 0; color: var(--muted); line-height: 1.7; }
+.nkn-network__about-card a { color: var(--accent); }
+.nkn-network__intro { padding: 26px; display: grid; gap: 16px; }
+.nkn-network__intro h2 { margin: 0; font-size: 20px; }
+.nkn-network__intro p { margin: 0; color: var(--muted); line-height: 1.8; font-size: 13px; }
+.nkn-network__intro-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.nkn-network__intro-row a { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); }
+@media (max-width: 860px) { .nkn-network__about { grid-template-columns: 1fr; } .nkn-network__hero { flex-wrap: wrap; padding: 18px; } .nkn-network__hero > button { margin-left: 0; } }
 .nkn-network__loading { display: grid; place-items: center; padding: 30px; color: var(--muted); }
 .nkn-network__card { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
 .nkn-network__switch-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
