@@ -48,7 +48,7 @@ onBeforeUnmount(() => observer?.disconnect())
     </template>
     <template v-else-if="error">
       <span>{{ error }}</span>
-      <button type="button" @click="emit('load')">
+      <button class="text-button" type="button" @click="emit('load')">
         {{ retryLabel }}
       </button>
     </template>

@@ -62,7 +62,7 @@ onMounted(() => { load(); loadCallFilter() })
         <div v-if="tab === 'spam'" class="homesim-service-fields">
           <label>{{ t('homesim.callFilter.mode') }}<SelectControl v-model="callFilterMode" :label="t('homesim.callFilter.mode')" :options="[{ value: 'off', label: t('homesim.callFilter.modeOff') }, { value: 'blacklist', label: t('homesim.callFilter.modeBlacklist') }, { value: 'whitelist', label: t('homesim.callFilter.modeWhitelist') }]" :disabled="cfSaving || !cfLoaded" /></label>
           <div class="homesim-service-columns"><label>{{ t('homesim.services.blacklist') }}<textarea v-model="cfBlacklist" rows="4" :placeholder="t('homesim.services.blackPlaceholder')" /></label><label>{{ t('homesim.services.whitelist') }}<textarea v-model="cfWhitelist" rows="4" :placeholder="t('homesim.services.whitePlaceholder')" /></label></div>
-          <div class="homesim-cf-actions"><button class="primary-action" type="button" :disabled="cfSaving || !cfLoaded" @click="saveCallFilterPolicy"><LoaderCircle v-if="cfSaving" class="spin" :size="14" /><Save v-else :size="14" />{{ t('homesim.callFilter.title') }} · {{ t('homesim.services.save') }}</button><small v-if="cfSaved && !cfRuntimeReady">{{ t('homesim.callFilter.draftOnly') }}</small></div>
+          <div class="homesim-cf-actions"><button class="primary-button" type="button" :disabled="cfSaving || !cfLoaded" @click="saveCallFilterPolicy"><LoaderCircle v-if="cfSaving" class="spin" :size="14" /><Save v-else :size="14" />{{ t('homesim.callFilter.title') }} · {{ t('homesim.services.save') }}</button><small v-if="cfSaved && !cfRuntimeReady">{{ t('homesim.callFilter.draftOnly') }}</small></div>
           <label>{{ t('homesim.services.provider') }}<SelectControl v-model="draft.spam.provider" :label="t('homesim.services.provider')" :options="[{ value: 'local', label: t('homesim.services.local') }, { value: 'juhe', label: t('homesim.services.juheSpam') }]" :disabled="busy || !loaded" /></label>
           <label v-if="draft.spam.provider === 'juhe'">{{ t('homesim.services.credential') }}<input v-model="draft.spam.credential_ref" spellcheck="false" autocomplete="off" /><small>{{ t('homesim.services.credentialHint') }}</small></label>
           <label>{{ t('homesim.services.threshold') }}<input v-model.number="draft.spam.min_reports" type="number" min="1" max="10000" /><small>{{ t('homesim.services.thresholdHint') }}</small></label>
@@ -89,7 +89,7 @@ onMounted(() => { load(); loadCallFilter() })
       </fieldset>
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       <p v-if="saved" class="homesim-draft-saved" role="status">{{ t('homesim.services.saved') }}</p>
-      <footer><button class="text-button" type="button" :disabled="busy" @click="load">{{ t('homesim.services.reload') }}</button><button class="primary-action" type="submit" :disabled="busy || !loaded"><LoaderCircle v-if="busy" class="spin" :size="16" /><Save v-else :size="16" />{{ t('homesim.services.save') }}</button></footer>
+      <footer><button class="text-button" type="button" :disabled="busy" @click="load">{{ t('homesim.services.reload') }}</button><button class="primary-button" type="submit" :disabled="busy || !loaded"><LoaderCircle v-if="busy" class="spin" :size="16" /><Save v-else :size="16" />{{ t('homesim.services.save') }}</button></footer>
     </form>
   </section>
 </template>

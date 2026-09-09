@@ -276,7 +276,7 @@ onBeforeUnmount(() => {
               :aria-label="t('homesim.nmobile.messagePlaceholder')"
               @keydown.enter.exact.prevent="send"
             />
-            <button class="primary-action nmobile__send" type="button" :disabled="state.sending || !state.draft.trim() || !state.peer.trim()" @click="send">
+            <button class="primary-button nmobile__send" type="button" :disabled="state.sending || !state.draft.trim() || !state.peer.trim()" @click="send">
               <Send :size="16" />
             </button>
           </div>

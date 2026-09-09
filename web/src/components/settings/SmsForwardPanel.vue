@@ -219,7 +219,7 @@ onMounted(load)
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     <p v-if="saved" class="sms-forward__saved" role="status">{{ t('homesim.forwarder.saved') }}</p>
     <footer class="sms-forward__footer">
-      <button class="primary-action" type="button" :disabled="saving || !loaded" @click="save">
+      <button class="primary-button" type="button" :disabled="saving || !loaded" @click="save">
         <LoaderCircle v-if="saving" class="spin" :size="16" />
         <Save v-else :size="16" />{{ t('homesim.forwarder.save') }}
       </button>

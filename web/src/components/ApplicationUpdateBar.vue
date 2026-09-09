@@ -36,7 +36,7 @@ const message = computed(() =>
       >
         <RefreshCw :size="19" aria-hidden="true" />
         <p>{{ message }}</p>
-        <button type="button" @click="refreshApplication()">
+        <button class="text-button" type="button" @click="refreshApplication()">
           {{ t('shell.refreshApplication') }}
         </button>
       </aside>

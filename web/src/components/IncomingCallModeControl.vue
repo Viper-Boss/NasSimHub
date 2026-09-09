@@ -227,7 +227,7 @@ onBeforeUnmount(() => {
         <p v-if="globalIncomingCallState.error" class="incoming-call-mode__error" role="alert">
           <AlertCircle :size="15" />
           <span>{{ globalIncomingCallState.error }}</span>
-          <button type="button" @click="loadGlobalIncomingCallSettings(true)">
+          <button class="text-button" type="button" @click="loadGlobalIncomingCallSettings(true)">
             {{ t('incomingCallMode.reload') }}
           </button>
         </p>

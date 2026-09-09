@@ -1246,7 +1246,7 @@ onBeforeUnmount(() => {
               <small>{{ recoveryDetail(line) }}</small>
             </span>
             <button
-              class="primary-action recovery-action__button"
+              class="primary-button recovery-action__button"
               type="button"
               :disabled="recoveryPending(line) || !recoveryAvailable(line)"
               @click="applyUSBReset(line)"

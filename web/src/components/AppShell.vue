@@ -587,7 +587,7 @@ onBeforeUnmount(() => {
         role="alert"
       >
         <span>{{ bootstrapResource.error }}</span>
-        <button v-if="bootstrapResource.status === 'error'" type="button" @click="bootstrap">
+        <button class="text-button" v-if="bootstrapResource.status === 'error'" type="button" @click="bootstrap">
           {{ t('common.retry') }}
         </button>
       </div>

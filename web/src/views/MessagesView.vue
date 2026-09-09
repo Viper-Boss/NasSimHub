@@ -1299,7 +1299,7 @@ onBeforeUnmount(() => {
         >
           <p v-if="selectedReadError" class="message-read-error" role="alert">
             <span>{{ selectedReadError }}</span>
-            <button type="button" @click="retryThreadRead">
+            <button class="text-button" type="button" @click="retryThreadRead">
               {{ t('common.retry') }}
             </button>
           </p>

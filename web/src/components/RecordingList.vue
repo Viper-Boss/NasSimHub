@@ -118,7 +118,7 @@ watch(
         role="alert"
       >
         <span>{{ current.error }}</span>
-        <button
+        <button class="text-button"
           v-if="current.status === 'error'"
           type="button"
           :title="t('common.retry')"

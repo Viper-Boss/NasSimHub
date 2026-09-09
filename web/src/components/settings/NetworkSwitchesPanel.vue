@@ -130,7 +130,7 @@ onMounted(load)
 
     <p v-else class="field-error" role="alert">
       {{ loadError }}
-      <button type="button" @click="load">{{ t('common.retry') }}</button>
+      <button class="text-button" type="button" @click="load">{{ t('common.retry') }}</button>
     </p>
   </section>
 </template>

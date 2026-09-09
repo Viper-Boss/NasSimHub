@@ -272,7 +272,7 @@ onMounted(() => { void load() })
               <input v-model="passwordBackedUp" class="ui-check" type="checkbox" />
               <span>{{ t('homesim.nknNode.walletBackupCheckbox') }}</span>
             </label>
-            <button class="primary-action" type="button" :disabled="walletBusy" @click="createWallet">
+            <button class="primary-button" type="button" :disabled="walletBusy" @click="createWallet">
               <LoaderCircle v-if="walletBusy" class="spin" :size="16" />
               <KeyRound v-else :size="16" />{{ t('homesim.nknNode.walletCreate') }}
             </button>
@@ -287,7 +287,7 @@ onMounted(() => { void load() })
               <span>{{ t('homesim.nknNode.walletImportPassword') }}</span>
               <input v-model="importPassword" type="password" autocomplete="off" :disabled="walletBusy" />
             </label>
-            <button class="primary-action" type="button" :disabled="walletBusy" @click="importWallet">
+            <button class="primary-button" type="button" :disabled="walletBusy" @click="importWallet">
               <LoaderCircle v-if="walletBusy" class="spin" :size="16" />
               <KeyRound v-else :size="16" />{{ t('homesim.nknNode.walletImport') }}
             </button>
@@ -359,7 +359,7 @@ onMounted(() => { void load() })
     <p v-if="walletActionDone" class="nkn-node__saved" role="status">{{ t(`homesim.nknNode.${walletActionDone}`) }}</p>
     <p v-else-if="saved" class="nkn-node__saved" role="status">{{ t('homesim.nknNode.saved') }}</p>
     <footer class="nkn-node__footer">
-      <button class="primary-action" type="button" :disabled="saving || !loaded" @click="save">
+      <button class="primary-button" type="button" :disabled="saving || !loaded" @click="save">
         <LoaderCircle v-if="saving" class="spin" :size="16" />
         <Save v-else :size="16" />{{ t('homesim.nknNode.save') }}
       </button>

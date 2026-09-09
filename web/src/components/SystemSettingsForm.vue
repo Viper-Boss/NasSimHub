@@ -164,7 +164,7 @@ onMounted(() => {
     <template v-if="loadError || saveMutation.error.value" #feedback>
       <p class="system-settings__feedback is-error" role="alert">
         {{ loadError || saveMutation.error.value }}
-        <button v-if="!settings" type="button" @click="load">
+        <button class="text-button" v-if="!settings" type="button" @click="load">
           {{ t('common.retry') }}
         </button>
       </p>

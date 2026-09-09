@@ -79,7 +79,7 @@ onMounted(() => {
         role="alert"
       >
         <span>{{ recordingSettingsState.error }}</span>
-        <button
+        <button class="text-button"
           v-if="recordingSettingsState.status === 'error'"
           type="button"
           @click="loadRecordingSettings(true)"

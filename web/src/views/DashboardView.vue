@@ -791,7 +791,7 @@ onBeforeUnmount(() => {
         <div v-if="activityErrors.length > 0" class="dashboard-inline-error" role="alert">
           <AlertCircle :size="15" />
           <span>{{ activityErrors.join('；') }}</span>
-          <button v-if="activityRetryable" type="button" @click="retryActivities">
+          <button class="text-button" v-if="activityRetryable" type="button" @click="retryActivities">
             {{ t('common.retry') }}
           </button>
         </div>
@@ -1063,7 +1063,7 @@ onBeforeUnmount(() => {
               >
               <AlertCircle :size="17" />
               <span>{{ contactsResource.error || t('contacts.loadFailed') }}</span>
-              <button
+              <button class="text-button"
                 v-if="contactsResource.status === 'error'"
                 type="button"
                 @click="loadContacts(true)"
@@ -1151,7 +1151,7 @@ onBeforeUnmount(() => {
               >
               <AlertCircle :size="17" />
               <span>{{ networkState.error || t('dashboard.loadTrafficFailed') }}</span>
-              <button
+              <button class="text-button"
                 v-if="networkState.status === 'error'"
                 type="button"
                 @click="loadNetwork(true)"
@@ -1212,7 +1212,7 @@ onBeforeUnmount(() => {
               >
               <AlertCircle :size="17" />
               <span>{{ bootstrapResource.error || t('dashboard.loadLinesFailed') }}</span>
-              <button
+              <button class="text-button"
                 v-if="bootstrapResource.status === 'error'"
                 type="button"
                 @click="loadBootstrap(true)"

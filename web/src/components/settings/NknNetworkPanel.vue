@@ -295,7 +295,7 @@ onBeforeUnmount(() => {
         <p>{{ t('homesim.advanced.text36') }}</p>
         <div class="nkn-network__intro-row">
           <a href="https://nkn.org/" target="_blank" rel="noopener noreferrer">{{ t('homesim.advanced.text37') }} <ExternalLink :size="14" /></a>
-          <button class="primary-action" type="button" @click="dismissIntro">{{ t('homesim.advanced.text38') }}</button>
+          <button class="primary-button" type="button" @click="dismissIntro">{{ t('homesim.advanced.text38') }}</button>
         </div>
       </div>
     </OverlayDialog>
