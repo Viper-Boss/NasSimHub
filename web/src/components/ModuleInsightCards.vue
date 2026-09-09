@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Activity, Gauge, Radio, RotateCcw, Signal, Usb } from '@lucide/vue'
+import { Activity, AlertCircle, CheckCircle2, Gauge, LoaderCircle, Radio, RotateCcw, Signal, Usb, Wrench } from '@lucide/vue'
 import {
   acquireSystemMetrics,
   modemInterface,
@@ -10,7 +10,7 @@ import {
   systemMetricsState,
   type SystemMetricsSample
 } from '../state/systemMetrics'
-import { restartModem } from '../state/deviceConfiguration'
+import { repairModule, restartModem } from '../state/deviceConfiguration'
 import type { LineSummary } from '../api/types'
 
 // Three insight cards rendered next to the module card on the dashboard:
@@ -102,6 +102,50 @@ async function onRestartModem(): Promise<void> {
     await restartModem(props.line.id)
   } finally {
     restartBusy.value = false
+  }
+}
+
+// One-click rescue: reset_usb -> re-enable radio -> reprobe voice. Covers the
+// wedged-module cases we hit in the field (voice route down, radio disabled
+// after re-enumeration) without needing host-level shell access.
+const repairBusy = ref(false)
+const repairStep = ref('')
+const repairResult = ref<'none' | 'ok' | 'failed'>('none')
+const repairError = ref('')
+
+const repairStepLabel = computed(() => {
+  switch (repairStep.value) {
+    case 'usb': return t('dashboard.repairStepUSB')
+    case 'radio': return t('dashboard.repairStepRadio')
+    case 'voice': return t('dashboard.repairStepVoice')
+    default: return ''
+  }
+})
+
+async function onRepair(): Promise<void> {
+  if (repairBusy.value) return
+  if (!window.confirm(t('dashboard.repairConfirm'))) return
+  repairBusy.value = true
+  repairResult.value = 'none'
+  repairError.value = ''
+  try {
+    const outcome = await repairModule(props.line.id, step => { repairStep.value = step })
+    repairResult.value = outcome === 'ok' ? 'ok' : 'failed'
+    if (outcome !== 'ok') {
+      repairError.value = t('dashboard.repairFailedStep', {
+        step: outcome === 'usb'
+          ? t('dashboard.repairStepUSB')
+          : outcome === 'radio'
+            ? t('dashboard.repairStepRadio')
+            : t('dashboard.repairStepVoice')
+      })
+    }
+  } catch (reason) {
+    repairResult.value = 'failed'
+    repairError.value = reason instanceof Error ? reason.message : String(reason)
+  } finally {
+    repairStep.value = ''
+    repairBusy.value = false
   }
 }
 
@@ -197,6 +241,14 @@ const radioFacts = computed<RadioFact[]>(() => {
         </p>
         <div class="insight-run__actions">
           <button
+            class="secondary-button insight-run__repair"
+            type="button"
+            :disabled="repairBusy"
+            @click="onRepair"
+          >
+            <Wrench :size="14" />{{ repairBusy ? t('dashboard.repairRunning') : t('dashboard.repairButton') }}
+          </button>
+          <button
             class="secondary-button"
             type="button"
             :disabled="restartBusy"
@@ -208,6 +260,18 @@ const radioFacts = computed<RadioFact[]>(() => {
             <Gauge :size="14" />{{ t('dashboard.openDiagnostics') }}
           </button>
         </div>
+        <p v-if="repairBusy || repairStepLabel" class="insight-run__repair-status" role="status">
+          <LoaderCircle :size="12" class="is-spinning" />
+          {{ repairStepLabel }}
+        </p>
+        <p v-else-if="repairResult === 'ok'" class="insight-run__repair-status is-ok" role="status">
+          <CheckCircle2 :size="12" />
+          {{ t('dashboard.repairDone') }}
+        </p>
+        <p v-else-if="repairError" class="insight-run__repair-status is-failed" role="alert">
+          <AlertCircle :size="12" />
+          {{ repairError }}
+        </p>
       </div>
     </article>
 
@@ -408,6 +472,7 @@ const radioFacts = computed<RadioFact[]>(() => {
 
 .insight-run__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: auto;
   padding-top: 4px;
@@ -421,6 +486,29 @@ const radioFacts = computed<RadioFact[]>(() => {
   min-height: 34px;
   padding: 6px 12px;
   font-size: 12px;
+}
+
+.insight-run__repair:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent-strong, var(--accent));
+}
+
+.insight-run__repair-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted-strong);
+}
+
+.insight-run__repair-status.is-ok { color: var(--success, #30a46c); }
+.insight-run__repair-status.is-failed { color: var(--danger, #f87171); }
+
+.is-spinning { animation: insight-spin 1s linear infinite; }
+
+@keyframes insight-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Radio card */

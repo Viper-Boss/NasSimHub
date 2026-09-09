@@ -46,6 +46,7 @@ type HardwareUpdateIntent =
   | { operation: 'disconnect_data' }
   | { operation: 'set_volte_policy'; volte_policy: 'enabled' | 'disabled' }
   | { operation: 'reprobe_voice' }
+  | { operation: 'reset_usb' }
   | { operation: 'restart_modem' }
 
 type DeviceUpdateIntent = IncomingPolicyUpdate | MessagePolicyUpdate | HardwareUpdateIntent
@@ -440,6 +441,38 @@ export function reprobeVoiceCapabilities(lineID: string): Promise<boolean> {
   return updateDevice(lineID, {
     operation: 'reprobe_voice'
   })
+}
+
+export function resetUSB(lineID: string): Promise<boolean> {
+  return updateDevice(lineID, {
+    operation: 'reset_usb'
+  })
+}
+
+function waitSeconds(seconds: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, seconds * 1000))
+}
+
+/**
+ * One-click rescue sequence for a wedged module (voice route down, radio
+ * disabled after re-enumeration, stale USB state). Reuses the agent's own
+ * device operations instead of host-level hacks:
+ *   1. reset_usb        — re-enumerate the module (cleans USB/ADB channel state)
+ *   2. set_radio_enabled— re-enable the radio (modems come back disabled)
+ *   3. reprobe_voice    — make the agent reconcile the voice route again
+ * Returns '' on success or a step label describing where it failed.
+ */
+export async function repairModule(lineID: string, onStep: (step: 'usb' | 'radio' | 'voice') => void): Promise<'ok' | 'usb' | 'radio' | 'voice'> {
+  onStep('usb')
+  if (!await updateDevice(lineID, { operation: 'reset_usb' })) return 'usb'
+  await waitSeconds(25)
+  onStep('radio')
+  if (!await setRadioEnabled(lineID, true)) return 'radio'
+  await waitSeconds(12)
+  onStep('voice')
+  if (!await reprobeVoiceCapabilities(lineID)) return 'voice'
+  await waitSeconds(12)
+  return 'ok'
 }
 
 export async function restartModem(lineID: string): Promise<boolean> {
