@@ -200,11 +200,13 @@ function vowifiDiscoveryRow(path: VowifiPathProbe): { text: string; level: strin
   if (!path.available) {
     return { text: path.error || t('homesim.strip.vowifiDiagUnknown'), level: 'muted' }
   }
-  if (path.answer_code === 'NOERROR' && (path.addresses?.length ?? 0) > 0) {
-    return { text: t('homesim.strip.vowifiDiagDiscoveryOk', { count: path.addresses?.length ?? 0 }), level: 'ok' }
-  }
-  if (path.answer_code === 'NXDOMAIN') {
+  if (path.answer_code === 'NXDOMAIN' || (path.answer_code === 'NOERROR' && (path.addresses?.length ?? 0) === 0)) {
+    // NXDOMAIN or an empty NOERROR (NODATA): the carrier publishes nothing
+    // under the standard 3GPP discovery name on this path.
     return { text: t('homesim.strip.vowifiDiagDiscoveryNone', { code: path.answer_code }), level: 'bad' }
+  }
+  if ((path.addresses?.length ?? 0) > 0) {
+    return { text: t('homesim.strip.vowifiDiagDiscoveryOk', { count: path.addresses?.length ?? 0 }), level: 'ok' }
   }
   return { text: t('homesim.strip.vowifiDiagDiscoveryTimeout', { code: path.answer_code || '-' }), level: 'warn' }
 }
