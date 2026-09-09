@@ -24,7 +24,6 @@ import {
   MessageCircleHeart
 } from '@lucide/vue'
 import { fixtureMode } from '../api/client'
-import { nknUnlockState } from '../state/nknUnlock'
 import {
   callState,
   initializeCallRuntime,
@@ -487,7 +486,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <nav class="rail__secondary">
-        <RouterLink v-if="nknUnlockState.unlocked" class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
+        <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
           <MessageCircleHeart :size="22" /><span>{{ t('homesim.nmobile.title') }}</span>
         </RouterLink>
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'sms-forward' }" :to="{ name: 'settings', params: { section: 'sms-forward' } }" :title="t('homesim.forward')">
