@@ -330,6 +330,14 @@ const flashUsedBytes = computed(() => {
           <span class="tm-stat__label">{{ t('dashboard.metricsCapacity') }}</span>
           <b class="tm-stat__value">{{ formatBytes(current.memory_total_bytes) }}</b>
         </div>
+        <div class="tm-stat tm-stat--orange">
+          <span class="tm-stat__label">{{ t('dashboard.metricsUsed') }}</span>
+          <b class="tm-stat__value">{{ formatBytes(usedBytes) }}</b>
+        </div>
+        <div class="tm-stat tm-stat--green">
+          <span class="tm-stat__label">{{ t('dashboard.metricsAvailable') }}</span>
+          <b class="tm-stat__value">{{ formatBytes(current.memory_available_bytes) }}</b>
+        </div>
       </div>
     </article>
 
