@@ -29,6 +29,7 @@ preview.cmd
 - 系统运维：模块管理、诊断、流量、录音库、NAS 预检
 
 交接文档见 [HANDOFF-CN.md](HANDOFF-CN.md)（含全部接口契约与待办）。
+![Uploading 6ea1a156a44a7a1bcf132855904ea4dc.png…]()
 
 ---
 
