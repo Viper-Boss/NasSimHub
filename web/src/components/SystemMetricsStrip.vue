@@ -272,8 +272,8 @@ const flashUsedBytes = computed(() => {
               </linearGradient>
             </defs>
             <polygon v-if="cpuArea" :points="cpuArea" fill="url(#tmGradCpu)" />
-            <polyline v-if="cpuLine" :points="cpuLine" fill="none" class="tm-chart__line" stroke-width="1.4" />
-            <polyline v-if="cpuTempLine" :points="cpuTempLine" fill="none" class="tm-chart__line tm-chart__line--temp" stroke-width="1.2" />
+            <polyline v-if="cpuLine" :points="cpuLine" fill="none" pathLength="1" class="tm-chart__line" stroke-width="1.4" />
+            <polyline v-if="cpuTempLine" :points="cpuTempLine" fill="none" pathLength="1" class="tm-chart__line tm-chart__line--temp" stroke-width="1.2" />
           </svg>
         </div>
       </div>
@@ -310,7 +310,7 @@ const flashUsedBytes = computed(() => {
               </linearGradient>
             </defs>
             <polygon v-if="memArea" :points="memArea" fill="url(#tmGradMem)" />
-            <polyline v-if="memLine" :points="memLine" fill="none" class="tm-chart__line" stroke-width="1.4" />
+            <polyline v-if="memLine" :points="memLine" fill="none" pathLength="1" class="tm-chart__line" stroke-width="1.4" />
           </svg>
         </div>
       </div>
@@ -410,8 +410,8 @@ const flashUsedBytes = computed(() => {
               fill="url(#tmGradRx)"
             />
             <polygon v-if="txArea" :points="txArea" fill="url(#tmGradTx)" />
-            <polyline v-if="rxLine" :points="rxLine" fill="none" class="tm-chart__line tm-chart__line--rx" stroke-width="1.4" />
-            <polyline v-if="txLine" :points="txLine" fill="none" class="tm-chart__line tm-chart__line--tx" stroke-width="1.2" />
+            <polyline v-if="rxLine" :points="rxLine" fill="none" pathLength="1" class="tm-chart__line tm-chart__line--rx" stroke-width="1.4" />
+            <polyline v-if="txLine" :points="txLine" fill="none" pathLength="1" class="tm-chart__line tm-chart__line--tx" stroke-width="1.2" />
           </svg>
         </div>
       </div>
@@ -555,6 +555,23 @@ const flashUsedBytes = computed(() => {
   stroke: var(--accent, #4f8cff);
   stroke-linejoin: round;
   stroke-linecap: round;
+  /* Draw-in: line sweeps left -> right when it first appears (pathLength=1). */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: tm-chart-draw 0.9s ease-out forwards;
+}
+
+@keyframes tm-chart-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.tm-chart__svg polygon {
+  animation: tm-chart-fade 0.9s ease-out;
+}
+
+@keyframes tm-chart-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .tm-chart__line--rx { stroke: var(--success, #34d399); }
