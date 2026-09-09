@@ -32,6 +32,7 @@ import CallHistoryListItem from '../components/CallHistoryListItem.vue'
 import ContactEditor from '../components/ContactEditor.vue'
 import MessageThreadListItem from '../components/MessageThreadListItem.vue'
 import ModuleCard from '../components/ModuleCard.vue'
+import ModuleInsightCards from '../components/ModuleInsightCards.vue'
 import ListSkeleton from '../components/ListSkeleton.vue'
 import ListSelectionToggle from '../components/ListSelectionToggle.vue'
 import SelectableListRow from '../components/SelectableListRow.vue'
@@ -1225,17 +1226,21 @@ onBeforeUnmount(() => {
                 {{ t('dashboard.noLines') }}
               </div>
               <div v-else class="dashboard-module-grid">
-              <ModuleCard
-                v-for="line in moduleLines"
-                :key="lineKey(line)"
-                :line="line"
-                :device="deviceFor(line)"
-                :runtime="networkRuntime(line)"
-                :radio="systemMetricsState.metrics?.cellular ?? null"
-                :selectable="!line.module_only"
-                :default-line="lineKey(line) === defaultLineID"
-                @select="openLineSettings(line)"
-              />
+              <template v-for="line in moduleLines" :key="lineKey(line)">
+                <ModuleCard
+                  :line="line"
+                  :device="deviceFor(line)"
+                  :runtime="networkRuntime(line)"
+                  :radio="systemMetricsState.metrics?.cellular ?? null"
+                  :selectable="!line.module_only"
+                  :default-line="lineKey(line) === defaultLineID"
+                  @select="openLineSettings(line)"
+                />
+                <ModuleInsightCards
+                  v-if="line === moduleLines[0]"
+                  :line="line"
+                />
+              </template>
               </div>
             </LoadingSkeletonBoundary>
           </section>

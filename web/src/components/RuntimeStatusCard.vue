@@ -41,13 +41,22 @@ const cpuPercent = computed(() => {
   return Math.min(100, Math.max(0, value))
 })
 
+function formatCompact(bytes: number): string {
+  // Module RAM is tens of MB — auto-scale so it never reads "0.0 GB".
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${Math.round(bytes)} B`
+}
+
 const memory = computed(() => {
   const snapshot = current.value
   if (!snapshot || !snapshot.memory_total_bytes) return null
   const used = Math.max(0, snapshot.memory_total_bytes - snapshot.memory_available_bytes)
   return {
     percent: Math.min(100, Math.max(0, (used / snapshot.memory_total_bytes) * 100)),
-    label: `${(used / 1024 ** 3).toFixed(1)} GB`
+    label: formatCompact(used),
+    detail: `${formatCompact(used)} / ${formatCompact(snapshot.memory_total_bytes)}`
   }
 })
 
@@ -71,10 +80,25 @@ const deviceLabel = computed(() => {
   return model || 'NasSimHub Gateway'
 })
 
+// Everything on this card comes from the module-side agent snapshot, not the
+// NAS host — spell that out so small numbers (42 MB RAM) read correctly.
+const sourceLabel = computed(() => {
+  const snap = current.value
+  if (!snap) return ''
+  const parts: string[] = []
+  if (snap.cores > 0) parts.push(`${snap.cores} cores`)
+  if (snap.cpu_current_mhz > 0) parts.push(`${Math.round(snap.cpu_current_mhz)} MHz`)
+  if (snap.process_count > 0) {
+    parts.push(`${snap.process_count} ${t('dashboard.processes', { count: snap.process_count })}`)
+  }
+  return parts.join(' · ')
+})
+
 interface Gauge {
   key: string
   label: string
   value: string
+  detail: string
   percent: number
   tone: 'ok' | 'warn' | 'danger'
 }
@@ -85,6 +109,7 @@ const gauges = computed<Gauge[]>(() => {
       key: 'cpu',
       label: 'CPU',
       value: `${Math.round(cpuPercent.value)}%`,
+      detail: t('runtimeStatus.cpuUsage'),
       percent: cpuPercent.value,
       tone: cpuPercent.value >= 90 ? 'danger' : cpuPercent.value >= 70 ? 'warn' : 'ok'
     }
@@ -94,6 +119,7 @@ const gauges = computed<Gauge[]>(() => {
       key: 'memory',
       label: t('runtimeStatus.memory'),
       value: memory.value.label,
+      detail: memory.value.detail,
       percent: memory.value.percent,
       tone: memory.value.percent >= 90 ? 'danger' : memory.value.percent >= 80 ? 'warn' : 'ok'
     })
@@ -102,6 +128,7 @@ const gauges = computed<Gauge[]>(() => {
     key: 'flash',
     label: t('runtimeStatus.storage'),
     value: `${Math.round(flashPercent.value)}%`,
+    detail: current.value?.flash_fs_type ? `${current.value.flash_fs_type} · ${current.value.flash_path}` : t('runtimeStatus.storage'),
     percent: flashPercent.value,
     tone: flashPercent.value >= 90 ? 'danger' : flashPercent.value >= 80 ? 'warn' : 'ok'
   })
@@ -110,6 +137,7 @@ const gauges = computed<Gauge[]>(() => {
       key: 'temp',
       label: t('runtimeStatus.temperature'),
       value: `${Math.round(temperature.value.celsius)}°C`,
+      detail: t('runtimeStatus.temperature'),
       percent: temperature.value.percent,
       tone: temperature.value.celsius >= 75 ? 'danger' : temperature.value.celsius >= 60 ? 'warn' : 'ok'
     })
@@ -136,6 +164,7 @@ function arcDash(percent: number): string {
         <span class="runtime-card__uptime-label">{{ t('runtimeStatus.uptime') }}</span>
         <strong class="runtime-card__uptime-value">{{ uptimeText }}</strong>
       </div>
+      <span v-if="sourceLabel" class="runtime-card__source">{{ sourceLabel }}</span>
     </div>
     <div class="runtime-card__gauges">
       <div v-for="gauge in gauges" :key="gauge.key" class="runtime-gauge">
@@ -148,8 +177,8 @@ function arcDash(percent: number): string {
             :stroke-dasharray="arcDash(gauge.percent)"
           />
         </svg>
+        <span class="runtime-gauge__value-text" :title="gauge.detail">{{ gauge.value }}</span>
         <span class="runtime-gauge__label">{{ gauge.label }}</span>
-        <span class="runtime-gauge__value-text">{{ gauge.value }}</span>
       </div>
     </div>
   </div>
@@ -215,18 +244,25 @@ function arcDash(percent: number): string {
   font-variant-numeric: tabular-nums;
 }
 
+.runtime-card__source {
+  font-size: 10px;
+  color: var(--faint, var(--muted));
+  font-variant-numeric: tabular-nums;
+}
+
 .runtime-card__gauges {
   display: grid;
   flex: 0 0 auto;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 12px;
+  gap: 12px 14px;
 }
 
 .runtime-gauge {
-  position: relative;
   display: grid;
   width: 64px;
   place-items: center;
+  grid-template-rows: auto auto;
+  row-gap: 3px;
 }
 
 .runtime-gauge__ring {
@@ -255,23 +291,22 @@ function arcDash(percent: number): string {
 .runtime-gauge__value--warn { stroke: var(--warning, #fbbf24); }
 .runtime-gauge__value--danger { stroke: var(--danger, #f87171); }
 
-.runtime-gauge__label,
 .runtime-gauge__value-text {
   grid-area: 1 / 1;
+  max-width: 44px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 
 .runtime-gauge__label {
-  margin-top: -34px;
-  font-size: 9px;
+  grid-area: 2 / 1;
+  font-size: 9.5px;
   color: var(--muted-strong);
-}
-
-.runtime-gauge__value-text {
-  margin-top: 12px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
 }
 </style>
