@@ -91,6 +91,10 @@ const cpuArea = computed(() => percentArea(history.value.map(sample => sample.cp
 const cpuLine = computed(() => percentPoints(history.value.map(sample => sample.cpuUsage)))
 // Temperature history overlays the utilization chart, mapped 0-100°C to 0-100%.
 const cpuTempLine = computed(() => percentPoints(history.value.map(sample => sample.cpuTemp)))
+const cpuTempArea = computed(() => {
+  const line = cpuTempLine.value
+  return line ? `${line} ${CHART_W},${CHART_H} 0,${CHART_H}` : ''
+})
 const memArea = computed(() => percentArea(history.value.map(sample => sample.mem)))
 const memLine = computed(() => percentPoints(history.value.map(sample => sample.mem)))
 const rxLine = computed(() => ratePoints(history.value.map(sample => sample.rxRate), rateMax.value))
@@ -270,7 +274,12 @@ const flashUsedBytes = computed(() => {
                 <stop offset="0" stop-color="#4f8cff" stop-opacity="0.45" />
                 <stop offset="1" stop-color="#4f8cff" stop-opacity="0.04" />
               </linearGradient>
+              <linearGradient id="tmGradTemp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f59e0b" stop-opacity="0.4" />
+                <stop offset="1" stop-color="#f59e0b" stop-opacity="0.04" />
+              </linearGradient>
             </defs>
+            <polygon v-if="cpuTempArea" :points="cpuTempArea" fill="url(#tmGradTemp)" />
             <polygon v-if="cpuArea" :points="cpuArea" fill="url(#tmGradCpu)" />
             <polyline v-if="cpuLine" :points="cpuLine" fill="none" pathLength="1" class="tm-chart__line" stroke-width="1.4" />
             <polyline v-if="cpuTempLine" :points="cpuTempLine" fill="none" pathLength="1" class="tm-chart__line tm-chart__line--temp" stroke-width="1.2" />
@@ -396,12 +405,12 @@ const flashUsedBytes = computed(() => {
           <svg class="tm-chart__svg" :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none">
             <defs>
               <linearGradient id="tmGradRx" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#34d399" stop-opacity="0.35" />
-                <stop offset="1" stop-color="#34d399" stop-opacity="0.03" />
+                <stop offset="0" stop-color="#34d399" stop-opacity="0.5" />
+                <stop offset="1" stop-color="#34d399" stop-opacity="0.04" />
               </linearGradient>
               <linearGradient id="tmGradTx" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#22d3ee" stop-opacity="0.3" />
-                <stop offset="1" stop-color="#22d3ee" stop-opacity="0.03" />
+                <stop offset="0" stop-color="#22d3ee" stop-opacity="0.45" />
+                <stop offset="1" stop-color="#22d3ee" stop-opacity="0.04" />
               </linearGradient>
             </defs>
             <polygon
