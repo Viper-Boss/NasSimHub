@@ -340,7 +340,7 @@ function parseSession(value: unknown): SessionResponse {
     typeof source.authenticated !== 'boolean' ||
     typeof source.setup_required !== 'boolean'
   ) {
-    throw new ApiError('ModemDeck 服务返回了无效的会话状态', 0, 'invalid_response')
+    throw new ApiError('NAS猫窝 服务返回了无效的会话状态', 0, 'invalid_response')
   }
 
   const language = source.language
@@ -356,11 +356,11 @@ function parseSession(value: unknown): SessionResponse {
     language !== 'fr-FR' &&
     language !== 'pt-BR'
   ) {
-    throw new ApiError('ModemDeck returned an unsupported system language', 0, 'invalid_response')
+    throw new ApiError('NasSimHub returned an unsupported system language', 0, 'invalid_response')
   }
   if (typeof source.ios_pairing_enabled !== 'boolean') {
     throw new ApiError(
-      'ModemDeck returned invalid iOS pairing access',
+      'NasSimHub returned invalid iOS pairing access',
       0,
       'invalid_response'
     )
@@ -376,19 +376,19 @@ function parseSession(value: unknown): SessionResponse {
   }
   const role = stringProperty(source, 'role')
   if (role && role !== 'admin' && role !== 'member') {
-    throw new ApiError('ModemDeck returned an unsupported user role', 0, 'invalid_response')
+    throw new ApiError('NasSimHub returned an unsupported user role', 0, 'invalid_response')
   }
   if (role) session.role = role as 'admin' | 'member'
   const profileContactID = stringProperty(source, 'profile_contact_id')
   if (profileContactID) session.profile_contact_id = profileContactID
   if (Array.isArray(source.allowed_line_ids)) {
     if (!source.allowed_line_ids.every(value => typeof value === 'string' && value.trim())) {
-      throw new ApiError('ModemDeck returned invalid line access', 0, 'invalid_response')
+      throw new ApiError('NasSimHub returned invalid line access', 0, 'invalid_response')
     }
     session.allowed_line_ids = source.allowed_line_ids.map(value => String(value).trim())
   }
   if (session.authenticated && (!session.username || !session.csrf_token)) {
-    throw new ApiError('ModemDeck 服务返回了不完整的会话状态', 0, 'invalid_response')
+    throw new ApiError('NAS猫窝 服务返回了不完整的会话状态', 0, 'invalid_response')
   }
   return session
 }
@@ -397,7 +397,7 @@ function parseAccountSessions(value: unknown): AccountSession[] {
   const source = recordValue(value)
   if (!source || !Array.isArray(source.sessions)) {
     throw new ApiError(
-      'ModemDeck returned an invalid signed-in device list',
+      'NasSimHub returned an invalid signed-in device list',
       0,
       'invalid_response'
     )
@@ -995,7 +995,7 @@ async function responseBody(response: Response): Promise<unknown> {
     return JSON.parse(text) as unknown
   } catch {
     if (!response.ok) return text
-    throw new ApiError('ModemDeck 服务返回了无效的 JSON', response.status, 'invalid_response')
+    throw new ApiError('NAS猫窝 服务返回了无效的 JSON', response.status, 'invalid_response')
   }
 }
 
@@ -1040,9 +1040,9 @@ async function requestWithResponse(
   } catch (error) {
     if (init.signal?.aborted || authenticationSignal?.aborted) throw error
     if (timeoutSignal.aborted) {
-      throw new ApiError('ModemDeck 请求超时', 0, 'request_timeout')
+      throw new ApiError('NAS猫窝 请求超时', 0, 'request_timeout')
     }
-    throw new ApiError('无法连接 ModemDeck 服务')
+    throw new ApiError('无法连接 NAS猫窝 服务')
   }
 
   let body: unknown
@@ -1051,10 +1051,10 @@ async function requestWithResponse(
   } catch (error) {
     if (init.signal?.aborted || authenticationSignal?.aborted) throw error
     if (timeoutSignal.aborted) {
-      throw new ApiError('ModemDeck 请求超时', 0, 'request_timeout')
+      throw new ApiError('NAS猫窝 请求超时', 0, 'request_timeout')
     }
     if (error instanceof ApiError) throw error
-    throw new ApiError('无法读取 ModemDeck 服务响应', response.status, 'invalid_response')
+    throw new ApiError('无法读取 NAS猫窝 服务响应', response.status, 'invalid_response')
   }
 
   const expectedStatuses = Array.isArray(expectedStatus)
@@ -1078,7 +1078,7 @@ async function requestWithResponse(
   }
   if (!statusExpected) {
     throw new ApiError(
-      `ModemDeck 服务返回了意外状态（${response.status}，预期 ${expectedStatuses.join(' 或 ')}）`,
+      `NAS猫窝 服务返回了意外状态（${response.status}，预期 ${expectedStatuses.join(' 或 ')}）`,
       response.status,
       'unexpected_status'
     )

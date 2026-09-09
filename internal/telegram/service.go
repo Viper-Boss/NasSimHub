@@ -628,7 +628,7 @@ func requestID(botID, updateID int64, operation string) string {
 
 func helpText() string {
 	return strings.Join([]string{
-		"ModemDeck Telegram 命令",
+		"NAS猫窝 Telegram 命令",
 		"/list - 查看线路状态",
 		"/sms [线路ID] [1-20] - 查看最近短信",
 		"/call [1-20] - 查看最近通话",

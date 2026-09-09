@@ -345,8 +345,8 @@ func createCA(
 	template := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			CommonName:   "ModemDeck Local CA",
-			Organization: []string{"ModemDeck"},
+			CommonName:   "NasSimHub Local CA",
+			Organization: []string{"NasSimHub"},
 		},
 		NotBefore:             now.Add(-certificateBackdate),
 		NotAfter:              now.Add(validity),
@@ -447,8 +447,8 @@ func createAutomaticServer(
 	template := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			CommonName:   "ModemDeck Local Server",
-			Organization: []string{"ModemDeck"},
+			CommonName:   "NasSimHub Local Server",
+			Organization: []string{"NasSimHub"},
 		},
 		NotBefore:   now.Add(-certificateBackdate),
 		NotAfter:    notAfter,

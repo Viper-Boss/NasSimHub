@@ -85,7 +85,7 @@ async function submit(): Promise<void> {
 
 <template>
   <main class="login-page">
-    <header class="login-brand" aria-label="HomeSIM">
+    <header class="login-brand" aria-label="NasSimHub">
       <span><img src="/favicon.svg" width="54" height="54" alt="" /></span>
       <strong>{{ t('homesim.brand') }}</strong>
     </header>

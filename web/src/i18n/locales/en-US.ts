@@ -95,8 +95,8 @@ export default {
     notificationsDisable: 'Disable message and call notifications',
     notificationsDenied: 'Notifications are blocked. Allow them in browser settings.',
     notificationsEnable: 'Enable message and call notifications',
-    applicationUpdateReady: 'ModemDeck {version} ready',
-    applicationUpdateReadyDuringCall: 'ModemDeck {version} ready · In call',
+    applicationUpdateReady: 'NasSimHub {version} ready',
+    applicationUpdateReadyDuringCall: 'NasSimHub {version} ready · In call',
     refreshApplication: 'Refresh'
   },
   nativeIOS: {
@@ -117,7 +117,7 @@ export default {
     notificationPermissionFailed: 'Unable to read or change iOS notification permission',
     sendTestSMSNotification: 'Send test SMS alert',
     testSMSNotificationTitle: 'Test SMS',
-    testSMSNotificationBody: 'This is a ModemDeck iOS notification test.',
+    testSMSNotificationBody: 'This is a NasSimHub iOS notification test.',
     testNotificationScheduled: 'Test notification scheduled',
     testNotificationFailed: 'Unable to deliver the test iOS notification'
   },
@@ -236,7 +236,7 @@ export default {
   auth: {
     title: 'Sign in',
     quickStart: 'Quick Start',
-    quickStartDescription: 'Create the administrator account for this ModemDeck',
+    quickStartDescription: 'Create the administrator account for this NasSimHub',
     username: 'Username',
     password: 'Password',
     confirmPassword: 'Confirm password',
@@ -284,10 +284,10 @@ export default {
     f50: "F50 Device",
     f50Description: "ZTE F50 MiFi: SMS, traffic and live status over HTTP",
     netSwitches: "Supply switches",
-    netSwitchesDescription: "Debug cellular sharing and HomeSIM-only supply switches",
+    netSwitchesDescription: "Debug cellular sharing and NasSimHub-only supply switches",
     nknNode: 'NKN node',
     nknNodeDescription: 'Embedded NKN relay node (off by default); rewards are yours',
-    nknNetwork: 'ModemDeck network',
+    nknNetwork: 'NasSimHub network',
     nknNetworkDescription: 'Public directory enabled by default; can be disabled. Registration does not prove real-time availability.',
     iosApp: 'Pairing',
     iosAppDescription: 'Pair this account with an iPhone',
@@ -298,7 +298,7 @@ export default {
     about: 'About',
     aboutDescription: 'Version, update checks, and licenses',
     systemLanguage: 'System language',
-    systemLanguageDescription: 'Used on the login page and throughout ModemDeck',
+    systemLanguageDescription: 'Used on the login page and throughout NasSimHub',
     languageSaved: 'System language updated',
     languageSaveFailed: 'Unable to save the system language',
     loadingSystem: 'Loading system settings',
@@ -313,7 +313,7 @@ export default {
   contactSync: {
     title: 'Contacts & sync',
     description:
-      'Bring external address books into ModemDeck without exposing account passwords.',
+      'Bring external address books into NasSimHub without exposing account passwords.',
     googleTitle: 'Google Contacts',
     googleDescription: 'Connect with read-only access and import contacts on demand',
     connected: 'Connected',
@@ -324,7 +324,7 @@ export default {
     googleOriginHelp: 'Add this value to Authorized JavaScript origins:',
     openGoogleConsole: 'Open Google Cloud Console',
     syncDirection: 'Sync direction',
-    googleToModemDeck: 'Google → ModemDeck',
+    googleToModemDeck: 'Google → NasSimHub',
     manualSyncOnly: 'Runs only when you click sync; Google remains unchanged.',
     connectAndSync: 'Connect and sync',
     syncNow: 'Sync now',
@@ -387,9 +387,9 @@ export default {
     hardwareUpdateWarning:
       'Updating Hardware restarts ModemManager and the device Agent. Cellular hardware may go offline and, in rare cases, require manual replugging. Continue?',
     confirmUpdate: 'Confirm update',
-    updateSucceeded: 'ModemDeck update completed',
-    updateFailed: 'ModemDeck update failed; automatic operation has stopped',
-    updateStartFailed: 'Unable to start the ModemDeck update',
+    updateSucceeded: 'NasSimHub update completed',
+    updateFailed: 'NasSimHub update failed; automatic operation has stopped',
+    updateStartFailed: 'Unable to start the NasSimHub update',
     legalTitle: 'Licenses & notices',
     legalDescription: 'Project license and notices for bundled third-party components',
     projectLicense: 'Project license',
@@ -579,16 +579,16 @@ export default {
     invalidPayload: 'The server returned invalid pairing data',
     createFailed: 'Unable to generate the pairing QR code',
     copyFailed: 'Unable to copy the pairing data',
-    scanTitle: 'Scan with the ModemDeck iOS app',
+    scanTitle: 'Scan with the NasSimHub iOS app',
     scanDescription: 'Open pairing in the iOS app and scan this QR code.',
     scanWaiting:
       'This window closes automatically after the Apple device confirms the pairing.',
-    qrAlt: 'ModemDeck iOS pairing QR code',
+    qrAlt: 'NasSimHub iOS pairing QR code',
     showOnce:
       'This QR code contains a secret and is shown only now. Do not share it.',
     pairingCode: 'Pairing code',
     sameDeviceHint:
-      'On this phone, copy the code and paste it into the ModemDeck app.',
+      'On this phone, copy the code and paste it into the NasSimHub app.',
     copied: 'Copied',
     copyPairingData: 'Copy pairing code',
     testCall: 'Test incoming call',
@@ -625,7 +625,7 @@ export default {
     importFromIPhone: 'Import from iPhone',
     importConfirmTitle: 'Import iPhone contacts?',
     importConfirmMessage:
-      'Import {count} contacts with phone numbers into ModemDeck? Existing phone numbers will be skipped.',
+      'Import {count} contacts with phone numbers into NasSimHub? Existing phone numbers will be skipped.',
     importEmpty: 'No iPhone contacts with phone numbers are available to import.',
     importSummary:
       'Import finished: {imported} added, {skipped} already existed, {failed} failed.',

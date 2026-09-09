@@ -645,8 +645,8 @@ func (runtime *Runtime) SendTestCall(
 	payload.Call.Event = string(callevents.KindIncoming)
 	payload.Call.CallID = "test-" + testID
 	payload.Call.UUID = testID
-	payload.Call.RemoteNumber = "ModemDeck Test"
-	payload.Call.DisplayName = "ModemDeck Test Call"
+	payload.Call.RemoteNumber = "NasSimHub Test"
+	payload.Call.DisplayName = "NasSimHub Test Call"
 	payload.Call.TestCall = true
 
 	notification := Notification{

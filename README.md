@@ -1,11 +1,13 @@
 # NAS猫窝 NasSimHub
 
-> 家庭 4G/5G SIM 卡网关：网页收发短信、打电话（需 EG25-G 类模组）、流量监控、Bark/Telegram 推送与多设备接入。
-> 已支持：EG25-G（USB/AT，主线路）+ 中兴 F50 随身WiFi（HTTP，短信/流量/状态）。
+> NAS猫窝（NasSimHub）——部署在飞牛 NAS 上的家庭 SIM 卡窝：把手机 SIM 卡放进模组，
+> 网页收发短信、打电话（WebRTC）、看流量与套餐余量、Bark/Telegram/iOS 推送、
+> NKN 去中心化消息、AI 接听草稿、任务管理器式系统面板，多设备接入。
+> 已支持：百旺 QDC507（USB/AT + ADB 语音与模组监控，主线路）+ 中兴 F50 随身WiFi（HTTP，短信/流量/状态）。
 
 **许可证（双轨）**：本仓库是 [ModemDeck](https://github.com/human-agent65535/ModemDeck) 的非商业衍生作品——
 ModemDeck 衍生部分沿用上游 **PolyForm Noncommercial 1.0.0**（[LICENSE](LICENSE)，仅限非商业用途）；
-NasSimHub 原创新增部分（设备适配、家卡功能，清单见 [NOTICE.md](NOTICE.md)）以
+NAS猫窝 原创新增部分（设备适配、家卡功能，清单见 [NOTICE.md](NOTICE.md)）以
 **GNU AGPL-3.0**（[LICENSE-AGPL.txt](LICENSE-AGPL.txt)）授权——以网络服务形式使用时必须开源对应源码。
 保留 [NOTICE.md](NOTICE.md)、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与上游署名（[UPSTREAM.md](UPSTREAM.md)）。
 

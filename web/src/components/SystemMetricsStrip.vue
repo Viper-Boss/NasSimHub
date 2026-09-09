@@ -135,24 +135,6 @@ const loadLabel = computed(() => {
 
     <article class="tm-box">
       <header class="tm-box__head">
-        <span class="tm-box__title">{{ t('dashboard.metricsThermal') }}</span>
-        <span class="tm-box__big" :class="modemTempLevel">{{ formatTemp(modemTempValue) }}</span>
-      </header>
-      <svg class="tm-box__chart" :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none">
-        <polyline v-if="modemTempSpark" :points="modemTempSpark" fill="none" class="tm-chart-line tm-chart-line--temp" stroke-width="1.6" />
-        <polyline v-if="cpuTempSpark" :points="cpuTempSpark" fill="none" class="tm-chart-line tm-chart-line--cpu" stroke-width="1.2" stroke-dasharray="3 2" />
-      </svg>
-      <div class="tm-box__rows">
-        <div class="tm-row"><span>{{ t('dashboard.metricsTemp') }}</span><b :class="modemTempLevel">{{ formatTemp(modemTempValue) }}</b></div>
-        <div class="tm-row"><span>{{ t('dashboard.metricsCpuTemp') }}</span><b :class="cpuTempLevel">{{ formatTemp(cpuTempValue) }}</b></div>
-        <div class="tm-row"><span>{{ t('dashboard.metricsData') }}</span><b>{{ formatRate(rxRateValue) }}</b></div>
-        <div class="tm-row"><span>{{ t('dashboard.metricsLoad') }}</span><b>{{ loadLabel }}</b></div>
-      </div>
-    </article>
-
-    
-    <article class="tm-box">
-      <header class="tm-box__head">
         <span class="tm-box__title">{{ t('dashboard.metricsCpu') }}</span>
         <span class="tm-box__big" :class="levelOf(cpuValue ?? 0)">{{ formatPercent(cpuValue) }}</span>
       </header>
@@ -204,6 +186,23 @@ const loadLabel = computed(() => {
         <div class="tm-row"><span>{{ t('dashboard.metricsCapacity') }}</span><b>{{ formatBytes(current.flash_total_bytes) }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsFree') }}</span><b>{{ formatBytes(current.flash_free_bytes) }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsMount') }}</span><b class="tm-row__wrap">{{ current.flash_path || '—' }}</b></div>
+      </div>
+    </article>
+
+    <article class="tm-box">
+      <header class="tm-box__head">
+        <span class="tm-box__title">{{ t('dashboard.metricsThermal') }}</span>
+        <span class="tm-box__big" :class="modemTempLevel">{{ formatTemp(modemTempValue) }}</span>
+      </header>
+      <svg class="tm-box__chart" :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none">
+        <polyline v-if="modemTempSpark" :points="modemTempSpark" fill="none" class="tm-chart-line tm-chart-line--temp" stroke-width="1.6" />
+        <polyline v-if="cpuTempSpark" :points="cpuTempSpark" fill="none" class="tm-chart-line tm-chart-line--cpu" stroke-width="1.2" stroke-dasharray="3 2" />
+      </svg>
+      <div class="tm-box__rows">
+        <div class="tm-row"><span>{{ t('dashboard.metricsTemp') }}</span><b :class="modemTempLevel">{{ formatTemp(modemTempValue) }}</b></div>
+        <div class="tm-row"><span>{{ t('dashboard.metricsCpuTemp') }}</span><b :class="cpuTempLevel">{{ formatTemp(cpuTempValue) }}</b></div>
+        <div class="tm-row"><span>{{ t('dashboard.metricsData') }}</span><b>{{ formatRate(rxRateValue) }}</b></div>
+        <div class="tm-row"><span>{{ t('dashboard.metricsLoad') }}</span><b>{{ loadLabel }}</b></div>
       </div>
     </article>
   </div>

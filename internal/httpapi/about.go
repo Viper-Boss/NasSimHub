@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	applicationName = "ModemDeck"
-	repositoryURL   = "https://github.com/human-agent65535/ModemDeck"
-	licenseName     = "PolyForm Noncommercial 1.0.0"
-	licenseURL      = repositoryURL + "/blob/modemdeck/LICENSE"
-	noticesURL      = repositoryURL + "/blob/modemdeck/THIRD_PARTY_NOTICES.md"
+	applicationName = "NAS猫窝 NasSimHub"
+	repositoryURL   = "https://github.com/Viper-Boss/NasSimHub"
+	licenseName     = "PolyForm Noncommercial 1.0.0 / AGPL-3.0"
+	licenseURL      = repositoryURL + "/blob/main/LICENSE"
+	noticesURL      = repositoryURL + "/blob/main/THIRD_PARTY_NOTICES.md"
 )
 
 type aboutResponse struct {
