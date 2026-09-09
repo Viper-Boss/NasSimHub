@@ -45,10 +45,15 @@ const { t } = useI18n()
 </template>
 
 <style scoped>
-/* The picker's own avatar button and copy are hidden: the preview lives in
-   the row's icon slot and the actions act as the row's control. */
-.account-avatar-setting__picker :deep(.contact-avatar-picker__target),
-.account-avatar-setting__picker :deep(.contact-avatar-picker__copy) {
+/* The picker's own avatar button and copy text are hidden: the preview
+   lives in the row's icon slot. The upload/remove buttons live INSIDE
+   the copy block, so only its direct text children are hidden. */
+.account-avatar-setting__picker :deep(.contact-avatar-picker__target) {
+  display: none;
+}
+
+.account-avatar-setting__picker :deep(.contact-avatar-picker__copy) > strong,
+.account-avatar-setting__picker :deep(.contact-avatar-picker__copy) > span {
   display: none;
 }
 
