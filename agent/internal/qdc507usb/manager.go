@@ -132,6 +132,21 @@ func New(options Options) (*Manager, error) {
 // one controlled module reboot, a second exact readback, and fresh QADBKEY
 // authorization. An already-correct live composition is never rebooted.
 func (m *Manager) Ensure(ctx context.Context, line domain.Line) (changed bool, err error) {
+	return m.ensure(ctx, line, false)
+}
+
+// EnsureForce re-runs the complete provisioning flow — including the QADBKEY
+// authorization and the controlled reboot — even when the USB descriptors and
+// the saved USBCFG already look correct. Descriptor-level checks cannot see
+// inside the module's Linux system: after a wedged internal boot adbd stays
+// down while the composition still reads ADB+UAC, and only a fresh QADBKEY
+// unlock plus reboot brings it back. This is exactly the recovery path for
+// that state, and must remain available on demand.
+func (m *Manager) EnsureForce(ctx context.Context, line domain.Line) (changed bool, err error) {
+	return m.ensure(ctx, line, true)
+}
+
+func (m *Manager) ensure(ctx context.Context, line domain.Line, force bool) (changed bool, err error) {
 	if ctx == nil {
 		return false, fmt.Errorf("QDC507 USB provisioning context is required")
 	}
@@ -146,7 +161,7 @@ func (m *Manager) Ensure(ctx context.Context, line domain.Line) (changed bool, e
 	if err != nil {
 		return false, fmt.Errorf("inspect QDC507 USB interfaces: %w", err)
 	}
-	if interfaces.voiceReady() {
+	if !force && interfaces.voiceReady() {
 		return false, nil
 	}
 	port, err := m.devices.ATPort(line)
@@ -182,14 +197,14 @@ func (m *Manager) Ensure(ctx context.Context, line domain.Line) (changed bool, e
 	if err != nil {
 		return false, err
 	}
-	if original.equal(target) {
+	if original.equal(target) && !force {
 		return false, fmt.Errorf(
 			"QDC507 saved USBCFG already enables ADB and UAC, but the live descriptors are incomplete; automatic provisioning will not reboot an unchanged configuration",
 		)
 	}
 
 	authorized := false
-	if !original.hasADB() {
+	if force || !original.hasADB() {
 		if err := m.authorizeADB(ctx, port.Device); err != nil {
 			return false, err
 		}

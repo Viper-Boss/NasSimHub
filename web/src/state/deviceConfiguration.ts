@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { gateway } from '../api/client'
+import { gateway, repairQDC507VoiceUSB } from '../api/client'
 import type {
   DeviceConfiguration,
   DeviceHardwareConfiguration,
@@ -455,17 +455,30 @@ function waitSeconds(seconds: number): Promise<void> {
 
 /**
  * One-click rescue sequence for a wedged module (voice route down, radio
- * disabled after re-enumeration, stale USB state). Reuses the agent's own
- * device operations instead of host-level hacks:
- *   1. reset_usb        — re-enumerate the module (cleans USB/ADB channel state)
- *   2. set_radio_enabled— re-enable the radio (modems come back disabled)
- *   3. reprobe_voice    — make the agent reconcile the voice route again
+ * disabled after re-enumeration, stale USB state, internal adbd wedged):
+ *   1. reset_usb          — re-enumerate the module (cleans USB channel state)
+ *   2. repair_voice_usb   — force fresh QADBKEY authorization + controlled
+ *                           reboot so the module's internal adbd comes back
+ *   3. set_radio_enabled  — re-enable the radio (modems come back disabled)
+ *   4. reprobe_voice      — make the agent reconcile the voice route again
  * Returns '' on success or a step label describing where it failed.
  */
-export async function repairModule(lineID: string, onStep: (step: 'usb' | 'radio' | 'voice') => void): Promise<'ok' | 'usb' | 'radio' | 'voice'> {
+export type ModuleRepairStep = 'usb' | 'auth' | 'radio' | 'voice'
+
+export async function repairModule(
+  lineID: string,
+  onStep: (step: ModuleRepairStep) => void
+): Promise<'ok' | ModuleRepairStep> {
   onStep('usb')
-  if (!await updateDevice(lineID, { operation: 'reset_usb' })) return 'usb'
+  if (!await resetUSB(lineID)) return 'usb'
   await waitSeconds(25)
+  onStep('auth')
+  try {
+    await repairQDC507VoiceUSB(lineID)
+  } catch {
+    return 'auth'
+  }
+  await waitSeconds(20)
   onStep('radio')
   if (!await setRadioEnabled(lineID, true)) return 'radio'
   await waitSeconds(12)

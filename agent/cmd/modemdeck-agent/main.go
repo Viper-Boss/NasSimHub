@@ -322,6 +322,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 type qdc507VoiceLineProvider interface {
 	QDC507VoiceLines(context.Context) ([]domain.Line, error)
 	EnsureQDC507VoiceUSB(context.Context, []domain.Line) (bool, error)
+	ForceQDC507VoiceUSB(context.Context, []domain.Line) (bool, error)
 	QDC507VoiceRuntimeChanged()
 	SubscribeModemLifecycle(context.Context) (<-chan struct{}, error)
 }
@@ -336,6 +337,16 @@ func runQDC507VoiceReconciler(
 	runtime qdc507VoiceReconciler,
 ) {
 	const attemptTimeout = 3 * time.Minute
+	// Self-healing: when the module's internal adbd wedges, the ordinary
+	// Ensure short-circuits on the (still correct) USB descriptors and the
+	// voice reconcile keeps failing with the same error forever. After three
+	// consecutive reconcile failures, force one full QADBKEY re-authorization
+	// plus controlled reboot — with a cooldown so a genuinely dead module
+	// cannot be reboot-looped.
+	const forceAfterFailures = 3
+	const forceCooldown = 10 * time.Minute
+	consecutiveFailures := 0
+	lastForceAttempt := time.Time{}
 	events, err := provider.SubscribeModemLifecycle(ctx)
 	if err != nil {
 		slog.Error("subscribe QDC507 modem lifecycle", "error", err)
@@ -365,8 +376,28 @@ func runQDC507VoiceReconciler(
 		if changed {
 			provider.QDC507VoiceRuntimeChanged()
 		}
-		if reconcileErr != nil && !errors.Is(reconcileErr, context.Canceled) {
-			slog.Warn("reconcile QDC507 module voice route", "error", reconcileErr)
+		if reconcileErr == nil || errors.Is(reconcileErr, context.Canceled) {
+			consecutiveFailures = 0
+			return
+		}
+		slog.Warn("reconcile QDC507 module voice route", "error", reconcileErr)
+		consecutiveFailures++
+		if consecutiveFailures < forceAfterFailures {
+			return
+		}
+		if !lastForceAttempt.IsZero() && time.Since(lastForceAttempt) < forceCooldown {
+			return
+		}
+		slog.Warn("QDC507 voice route keeps failing; forcing QADBKEY re-authorization and reboot",
+			"consecutive_failures", consecutiveFailures)
+		lastForceAttempt = time.Now()
+		consecutiveFailures = 0
+		forcedChanged, forceErr := provider.ForceQDC507VoiceUSB(attemptContext, lines)
+		if forcedChanged {
+			provider.QDC507VoiceRuntimeChanged()
+		}
+		if forceErr != nil && !errors.Is(forceErr, context.Canceled) {
+			slog.Warn("force QDC507 ADB/UAC re-provisioning", "error", forceErr)
 		}
 	}
 

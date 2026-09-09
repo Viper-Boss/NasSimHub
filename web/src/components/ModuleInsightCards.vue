@@ -105,9 +105,9 @@ async function onRestartModem(): Promise<void> {
   }
 }
 
-// One-click rescue: reset_usb -> re-enable radio -> reprobe voice. Covers the
-// wedged-module cases we hit in the field (voice route down, radio disabled
-// after re-enumeration) without needing host-level shell access.
+// One-click rescue: reset_usb -> forced QADBKEY re-auth -> re-enable radio ->
+// reprobe voice. Covers the wedged-module cases we hit in the field (voice
+// route down, radio disabled after re-enumeration, internal adbd wedged).
 const repairBusy = ref(false)
 const repairStep = ref('')
 const repairResult = ref<'none' | 'ok' | 'failed'>('none')
@@ -116,6 +116,7 @@ const repairError = ref('')
 const repairStepLabel = computed(() => {
   switch (repairStep.value) {
     case 'usb': return t('dashboard.repairStepUSB')
+    case 'auth': return t('dashboard.repairStepAuth')
     case 'radio': return t('dashboard.repairStepRadio')
     case 'voice': return t('dashboard.repairStepVoice')
     default: return ''
@@ -132,13 +133,13 @@ async function onRepair(): Promise<void> {
     const outcome = await repairModule(props.line.id, step => { repairStep.value = step })
     repairResult.value = outcome === 'ok' ? 'ok' : 'failed'
     if (outcome !== 'ok') {
-      repairError.value = t('dashboard.repairFailedStep', {
-        step: outcome === 'usb'
-          ? t('dashboard.repairStepUSB')
-          : outcome === 'radio'
-            ? t('dashboard.repairStepRadio')
-            : t('dashboard.repairStepVoice')
-      })
+      const stepLabels: Record<string, string> = {
+        usb: t('dashboard.repairStepUSB'),
+        auth: t('dashboard.repairStepAuth'),
+        radio: t('dashboard.repairStepRadio'),
+        voice: t('dashboard.repairStepVoice')
+      }
+      repairError.value = t('dashboard.repairFailedStep', { step: stepLabels[outcome] ?? outcome })
     }
   } catch (reason) {
     repairResult.value = 'failed'

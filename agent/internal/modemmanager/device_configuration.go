@@ -314,6 +314,25 @@ func (p *Provider) ApplyGenericDeviceConfiguration(
 			return domain.DeviceConfiguration{}, mapUSBRecoveryError(operation, err)
 		}
 		return current, nil
+	case domain.DeviceConfigurationRepairVoiceUSB:
+		// Manual recovery for a wedged QDC507 internal system: re-run the
+		// QADBKEY authorization and the controlled reboot even when the USB
+		// composition looks correct. Only meaningful on QDC507 lines.
+		parsed := ParseManagedObjects(objects, p.ids)
+		line, found := findLine(parsed.Lines, request.LineID)
+		if !found {
+			return domain.DeviceConfiguration{}, domain.NotFound(operation, "line was not found")
+		}
+		if !isQDC507Line(line) {
+			return domain.DeviceConfiguration{}, domain.NotSupported(
+				operation,
+				"repair_voice_usb applies only to QDC507 lines",
+			)
+		}
+		if _, err := p.ForceQDC507VoiceUSB(bounded, []domain.Line{line}); err != nil {
+			return domain.DeviceConfiguration{}, err
+		}
+		return current, nil
 	case domain.DeviceConfigurationSetVoLTEPolicy:
 		return domain.DeviceConfiguration{}, domain.NotSupported(
 			operation,
@@ -826,6 +845,10 @@ func validateConfigurationRequest(request domain.ApplyDeviceConfigurationRequest
 	case domain.DeviceConfigurationResetUSB:
 		if request.RadioEnabled != nil || request.APN != "" || request.IPFamily != "" || request.VoLTEPolicy != "" {
 			return domain.InvalidArgument(operation, "reset_usb does not accept operation parameters")
+		}
+	case domain.DeviceConfigurationRepairVoiceUSB:
+		if request.RadioEnabled != nil || request.APN != "" || request.IPFamily != "" || request.VoLTEPolicy != "" {
+			return domain.InvalidArgument(operation, "repair_voice_usb does not accept operation parameters")
 		}
 	case domain.DeviceConfigurationSetVoLTEPolicy:
 		if request.RadioEnabled != nil || request.APN != "" || request.IPFamily != "" {

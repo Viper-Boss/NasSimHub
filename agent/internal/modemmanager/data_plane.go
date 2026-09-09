@@ -34,6 +34,7 @@ type ModuleShellRunner interface {
 
 type QDC507USBProvisioner interface {
 	Ensure(context.Context, domain.Line) (bool, error)
+	EnsureForce(context.Context, domain.Line) (bool, error)
 }
 
 type Options struct {

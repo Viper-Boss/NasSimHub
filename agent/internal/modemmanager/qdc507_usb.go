@@ -53,6 +53,26 @@ func (p *Provider) EnsureQDC507VoiceUSB(
 	ctx context.Context,
 	lines []domain.Line,
 ) (bool, error) {
+	return p.ensureQDC507VoiceUSB(ctx, lines, false)
+}
+
+// ForceQDC507VoiceUSB re-runs the full QADBKEY authorization and controlled
+// reboot even when the descriptors and saved USBCFG look correct. It is the
+// recovery path for a module whose internal adbd went down while the USB
+// composition still advertises ADB+UAC — the non-forced Ensure short-circuits
+// on exactly that state and can never recover it.
+func (p *Provider) ForceQDC507VoiceUSB(
+	ctx context.Context,
+	lines []domain.Line,
+) (bool, error) {
+	return p.ensureQDC507VoiceUSB(ctx, lines, true)
+}
+
+func (p *Provider) ensureQDC507VoiceUSB(
+	ctx context.Context,
+	lines []domain.Line,
+	force bool,
+) (bool, error) {
 	const operation = "provision_qdc507_usb"
 	if p == nil || p.qdc507USB == nil {
 		return false, nil
@@ -157,7 +177,13 @@ func (p *Provider) EnsureQDC507VoiceUSB(
 			failures = append(failures, fmt.Errorf("%s: QDC507 USB provisioning is blocked by a connected data bearer", line.ID))
 			continue
 		}
-		lineChanged, ensureErr := p.qdc507USB.Ensure(ctx, line)
+		var lineChanged bool
+		var ensureErr error
+		if force {
+			lineChanged, ensureErr = p.qdc507USB.EnsureForce(ctx, line)
+		} else {
+			lineChanged, ensureErr = p.qdc507USB.Ensure(ctx, line)
+		}
 		changed = changed || lineChanged
 		if ensureErr != nil {
 			// QADBKEY responses are deliberately excluded by the provisioner;

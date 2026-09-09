@@ -2968,6 +2968,24 @@ export async function clearNKNChatMessages(peer = ''): Promise<void> {
   await writeJSON(`${API_ROOT}/nkn/chat/clear`, 'POST', { peer }, 200)
 }
 
+/**
+ * Force a full QDC507 ADB re-authorization (QADBKEY challenge/response plus a
+ * controlled module reboot). The agent runs the whole flow synchronously and
+ * it can take 2-3 minutes, so this call uses a timeout far past the default
+ * write timeout — never wire it through the shared device-update helpers.
+ */
+export async function repairQDC507VoiceUSB(lineID: string): Promise<void> {
+  if (fixtureMode) throw new Error('当前为演示模式，修复未连接 NAS。')
+  await writeJSON(
+    `/api/v1/devices/${encodeURIComponent(lineID)}/configuration`,
+    'PATCH',
+    { operation: 'repair_voice_usb' },
+    200,
+    undefined,
+    200_000
+  )
+}
+
 export interface NKNNetworkNodeReport {
   address: string
   rtt_ms: number

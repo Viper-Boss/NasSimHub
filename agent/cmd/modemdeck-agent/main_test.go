@@ -94,6 +94,14 @@ func (p *testQDC507VoiceProvider) EnsureQDC507VoiceUSB(
 	return false, nil
 }
 
+func (p *testQDC507VoiceProvider) ForceQDC507VoiceUSB(
+	_ context.Context,
+	lines []domain.Line,
+) (bool, error) {
+	p.provisioned <- append([]domain.Line(nil), lines...)
+	return false, nil
+}
+
 func (p *testQDC507VoiceProvider) QDC507VoiceRuntimeChanged() {
 	p.changes <- struct{}{}
 }
