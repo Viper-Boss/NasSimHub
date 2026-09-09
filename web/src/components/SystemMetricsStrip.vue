@@ -87,9 +87,10 @@ const rateMax = computed(() => {
   return peak * 1.15
 })
 
-const cpuArea = computed(() => percentArea(history.value.map(sample => sample.cpuUsage ?? sample.cpu)))
-const cpuLine5 = computed(() => percentPoints(history.value.map(sample => sample.cpu5 ?? null)))
+const cpuArea = computed(() => percentArea(history.value.map(sample => sample.cpuUsage)))
+const cpuLine = computed(() => percentPoints(history.value.map(sample => sample.cpuUsage)))
 const memArea = computed(() => percentArea(history.value.map(sample => sample.mem)))
+const memLine = computed(() => percentPoints(history.value.map(sample => sample.mem)))
 const rxLine = computed(() => ratePoints(history.value.map(sample => sample.rxRate), rateMax.value))
 const txLine = computed(() => ratePoints(history.value.map(sample => sample.txRate ?? null), rateMax.value))
 
@@ -123,7 +124,7 @@ const cpuValue = computed(() => {
   const last = history.value.at(-1)
   const usage = last?.cpuUsage
   if (typeof usage === 'number' && Number.isFinite(usage)) return usage
-  return current.value ? current.value.cpu_usage_percent || current.value.load_percent_1 : null
+  return current.value ? current.value.cpu_usage_percent : null
 })
 const memValue = computed(() => current.value ? current.value.memory_used_percent : null)
 const flashValue = computed(() => current.value ? current.value.flash_used_percent : null)
@@ -141,6 +142,27 @@ const rxRateValue = computed(() => latestOf('rxRate') ?? 0)
 const txRateValue = computed(() => latestOf('txRate') ?? 0)
 const modemTempLevel = computed(() => tempLevelOf(modemTempValue.value))
 const cpuTempLevel = computed(() => tempLevelOf(cpuTempValue.value))
+
+// Load averages as mean real utilization over 1/5/15 minutes. The kernel's
+// loadavg overstates this single-core modem (it counts uninterruptible
+// tasks), so the panel rolls /proc/stat utilization samples instead.
+function windowAverageUtilization(windowMs: number): number | null {
+  const cutoff = Date.now() - windowMs
+  let total = 0
+  let count = 0
+  for (const sample of history.value) {
+    if ((sample.at ?? 0) < cutoff) continue
+    const usage = sample.cpuUsage
+    if (typeof usage !== 'number' || !Number.isFinite(usage)) continue
+    total += usage
+    count += 1
+  }
+  return count > 0 ? total / count : null
+}
+
+const loadAvg1 = computed(() => windowAverageUtilization(60_000))
+const loadAvg5 = computed(() => windowAverageUtilization(300_000))
+const loadAvg15 = computed(() => windowAverageUtilization(900_000))
 
 const rateMaxYLabel = computed(() => formatRate(rateMax.value))
 const rateMidYLabel = computed(() => formatRate(rateMax.value / 2))
@@ -244,8 +266,7 @@ const flashUsedBytes = computed(() => {
               </linearGradient>
             </defs>
             <polygon v-if="cpuArea" :points="cpuArea" fill="url(#tmGradCpu)" />
-            <polyline v-if="cpuArea" :points="cpuArea.split(' ').slice(0, -2).join(' ')" fill="none" class="tm-chart__line" stroke-width="1.4" />
-            <polyline v-if="cpuLine5" :points="cpuLine5" fill="none" class="tm-chart__line tm-chart__line--alt" stroke-width="1.1" />
+            <polyline v-if="cpuLine" :points="cpuLine" fill="none" class="tm-chart__line" stroke-width="1.4" />
           </svg>
         </div>
       </div>
@@ -260,7 +281,7 @@ const flashUsedBytes = computed(() => {
         </div>
         <div class="tm-stat tm-stat--purple tm-stat--wide">
           <span class="tm-stat__label">{{ t('dashboard.metricsLoad') }}</span>
-          <b class="tm-stat__value tm-stat__value--small">{{ current.load_raw_1?.toFixed(2) ?? '—' }} · {{ current.load_raw_5?.toFixed(2) ?? '—' }} · {{ current.load_raw_15?.toFixed(2) ?? '—' }}</b>
+          <b class="tm-stat__value tm-stat__value--small">{{ formatPercent(loadAvg1) }} · {{ formatPercent(loadAvg5) }} · {{ formatPercent(loadAvg15) }}</b>
         </div>
       </div>
     </article>
@@ -282,7 +303,7 @@ const flashUsedBytes = computed(() => {
               </linearGradient>
             </defs>
             <polygon v-if="memArea" :points="memArea" fill="url(#tmGradMem)" />
-            <polyline v-if="memArea" :points="memArea.split(' ').slice(0, -2).join(' ')" fill="none" class="tm-chart__line" stroke-width="1.4" />
+            <polyline v-if="memLine" :points="memLine" fill="none" class="tm-chart__line" stroke-width="1.4" />
           </svg>
         </div>
       </div>
@@ -516,7 +537,6 @@ const flashUsedBytes = computed(() => {
   stroke-linecap: round;
 }
 
-.tm-chart__line--alt { stroke: #f59e0b; }
 .tm-chart__line--rx { stroke: var(--success, #34d399); }
 .tm-chart__line--tx { stroke: #22d3ee; }
 
