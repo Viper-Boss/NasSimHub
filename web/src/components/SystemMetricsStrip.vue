@@ -89,10 +89,16 @@ const rateMax = computed(() => {
 
 const cpuArea = computed(() => percentArea(history.value.map(sample => sample.cpuUsage)))
 const cpuLine = computed(() => percentPoints(history.value.map(sample => sample.cpuUsage)))
+// Temperature history overlays the utilization chart, mapped 0-100°C to 0-100%.
+const cpuTempLine = computed(() => percentPoints(history.value.map(sample => sample.cpuTemp)))
 const memArea = computed(() => percentArea(history.value.map(sample => sample.mem)))
 const memLine = computed(() => percentPoints(history.value.map(sample => sample.mem)))
 const rxLine = computed(() => ratePoints(history.value.map(sample => sample.rxRate), rateMax.value))
 const txLine = computed(() => ratePoints(history.value.map(sample => sample.txRate ?? null), rateMax.value))
+const txArea = computed(() => {
+  const line = txLine.value
+  return line ? `${line} ${CHART_W},${CHART_H} 0,${CHART_H}` : ''
+})
 
 function formatTemp(value: number | null): string {
   return value === null || value === undefined ? '—' : `${value.toFixed(1)}°C`
@@ -267,6 +273,7 @@ const flashUsedBytes = computed(() => {
             </defs>
             <polygon v-if="cpuArea" :points="cpuArea" fill="url(#tmGradCpu)" />
             <polyline v-if="cpuLine" :points="cpuLine" fill="none" class="tm-chart__line" stroke-width="1.4" />
+            <polyline v-if="cpuTempLine" :points="cpuTempLine" fill="none" class="tm-chart__line tm-chart__line--temp" stroke-width="1.2" />
           </svg>
         </div>
       </div>
@@ -392,12 +399,17 @@ const flashUsedBytes = computed(() => {
                 <stop offset="0" stop-color="#34d399" stop-opacity="0.35" />
                 <stop offset="1" stop-color="#34d399" stop-opacity="0.03" />
               </linearGradient>
+              <linearGradient id="tmGradTx" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#22d3ee" stop-opacity="0.3" />
+                <stop offset="1" stop-color="#22d3ee" stop-opacity="0.03" />
+              </linearGradient>
             </defs>
             <polygon
               v-if="rxLine"
               :points="`${rxLine} ${CHART_W},${CHART_H} 0,${CHART_H}`"
               fill="url(#tmGradRx)"
             />
+            <polygon v-if="txArea" :points="txArea" fill="url(#tmGradTx)" />
             <polyline v-if="rxLine" :points="rxLine" fill="none" class="tm-chart__line tm-chart__line--rx" stroke-width="1.4" />
             <polyline v-if="txLine" :points="txLine" fill="none" class="tm-chart__line tm-chart__line--tx" stroke-width="1.2" />
           </svg>
@@ -547,6 +559,7 @@ const flashUsedBytes = computed(() => {
 
 .tm-chart__line--rx { stroke: var(--success, #34d399); }
 .tm-chart__line--tx { stroke: #22d3ee; }
+.tm-chart__line--temp { stroke: #f59e0b; }
 
 .tm-ring-wrap {
   position: relative;
