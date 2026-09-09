@@ -14,6 +14,7 @@ import {
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Device, LineSummary, NetworkLineStatus } from '../api/types'
+import type { SystemMetricsCellular } from '../api/client'
 import { lineIsOccupied } from '../state/call'
 import { lineHasCallControl, lineKey, lineLabel } from '../state/workspace'
 import {
@@ -40,6 +41,7 @@ const props = withDefaults(
     recovering?: boolean
     flightMode?: boolean
     runtime?: NetworkLineStatus
+    radio?: SystemMetricsCellular | null
   }>(),
   {
     device: undefined,
@@ -51,7 +53,8 @@ const props = withDefaults(
     deletePending: false,
     recovering: false,
     flightMode: undefined,
-    runtime: undefined
+    runtime: undefined,
+    radio: undefined
   }
 )
 
@@ -151,6 +154,44 @@ const accessTechnology = computed(() => {
   }
   return accessTechnologyLabel(props.line.access_technologies)
 })
+const radio = computed(() => (props.recovering || flightMode.value ? null : props.radio ?? null))
+const radioRows = computed(() => {
+  const cell = radio.value
+  if (!cell) return []
+  const rows: Array<{ label: string; value: string; code?: boolean }> = []
+  if (cell.frequency_mhz) {
+    rows.push({
+      label: t('device.radioFreq'),
+      value: `${Math.round(cell.frequency_mhz)} MHz${cell.earfcn ? ` · EARFCN ${cell.earfcn}` : ''}`
+    })
+  }
+  if (cell.band) {
+    rows.push({ label: t('device.radioBand'), value: `${(cell.rat || '').toUpperCase()} ${cell.band}`.trim() })
+  }
+  if (cell.downlink_bandwidth_mhz) {
+    const uplink = cell.uplink_bandwidth_mhz ? ` · ↑${cell.uplink_bandwidth_mhz}MHz` : ''
+    rows.push({ label: t('device.radioBandwidth'), value: `↓${cell.downlink_bandwidth_mhz}MHz${uplink}` })
+  }
+  if (cell.cell_id_hex) {
+    rows.push({ label: t('device.radioCellId'), value: cell.cell_id_hex, code: true })
+  }
+  if (cell.pci) {
+    rows.push({ label: 'PCI', value: String(cell.pci), code: true })
+  }
+  if (cell.tac_hex) {
+    rows.push({ label: 'TAC', value: cell.tac_hex, code: true })
+  }
+  if (cell.rsrp) {
+    rows.push({ label: 'RSRP', value: `${cell.rsrp} dBm`, code: true })
+  }
+  if (cell.rsrq) {
+    rows.push({ label: 'RSRQ', value: `${cell.rsrq} dB`, code: true })
+  }
+  if (cell.sinr) {
+    rows.push({ label: 'SINR', value: `${cell.sinr} dB`, code: true })
+  }
+  return rows
+})
 </script>
 
 <template>
@@ -238,6 +279,17 @@ const accessTechnology = computed(() => {
               label="IMEI"
             />
           </dd>
+        </div>
+      </dl>
+
+      <dl v-if="radioRows.length" class="module-card__facts module-card__facts--radio">
+        <div
+          v-for="row in radioRows"
+          :key="row.label"
+          :class="{ 'is-code': row.code }"
+        >
+          <dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd>
         </div>
       </dl>
 
@@ -530,6 +582,11 @@ const accessTechnology = computed(() => {
 
 .module-card__imei-fact {
   grid-area: 3 / 2;
+}
+
+.module-card__facts--radio {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: none;
 }
 
 .module-card dt {

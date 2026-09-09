@@ -2688,6 +2688,25 @@ export interface SystemMetricsInterfaceCounters {
   tx_bytes: number
 }
 
+export interface SystemMetricsCellular {
+  state: string
+  rat: string
+  duplex: string
+  plmn: string
+  band: string
+  earfcn: number
+  frequency_mhz: number
+  uplink_bandwidth_mhz: number
+  downlink_bandwidth_mhz: number
+  pci: number
+  cell_id_hex: string
+  tac_hex: string
+  rsrp: number
+  rsrq: number
+  rssi: number
+  sinr: number
+}
+
 export interface SystemMetricsSnapshot {
   observed_at: string
   load_raw_1: number
@@ -2700,11 +2719,27 @@ export interface SystemMetricsSnapshot {
   memory_total_bytes: number
   memory_available_bytes: number
   memory_used_percent: number
+  memory_cached_bytes: number
+  memory_buffers_bytes: number
   flash_path: string
   flash_total_bytes: number
   flash_free_bytes: number
   flash_used_percent: number
+  flash_fs_type: string
+  flash_device_model: string
+  flash_device_path: string
   modem_temp_celsius: number | null
+  cpu_model_name: string
+  cpu_current_mhz: number
+  cpu_max_mhz: number
+  cpu_l1_data_kb: number
+  cpu_l1_inst_kb: number
+  cpu_l2_kb: number
+  cpu_l3_kb: number
+  cpu_temp_celsius: number | null
+  process_count: number
+  thread_count: number
+  cellular: SystemMetricsCellular | null
   interfaces: SystemMetricsInterfaceCounters[]
   available: boolean
   error?: string
@@ -2726,11 +2761,27 @@ export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
     memory_total_bytes: Number(result.memory_total_bytes ?? 0),
     memory_available_bytes: Number(result.memory_available_bytes ?? 0),
     memory_used_percent: Number(result.memory_used_percent ?? 0),
+    memory_cached_bytes: Number(result.memory_cached_bytes ?? 0),
+    memory_buffers_bytes: Number(result.memory_buffers_bytes ?? 0),
     flash_path: typeof result.flash_path === 'string' ? result.flash_path : '',
     flash_total_bytes: Number(result.flash_total_bytes ?? 0),
     flash_free_bytes: Number(result.flash_free_bytes ?? 0),
     flash_used_percent: Number(result.flash_used_percent ?? 0),
+    flash_fs_type: typeof result.flash_fs_type === 'string' ? result.flash_fs_type : '',
+    flash_device_model: typeof result.flash_device_model === 'string' ? result.flash_device_model : '',
+    flash_device_path: typeof result.flash_device_path === 'string' ? result.flash_device_path : '',
     modem_temp_celsius: typeof result.modem_temp_celsius === 'number' ? result.modem_temp_celsius : null,
+    cpu_model_name: typeof result.cpu_model_name === 'string' ? result.cpu_model_name : '',
+    cpu_current_mhz: Number(result.cpu_current_mhz ?? 0),
+    cpu_max_mhz: Number(result.cpu_max_mhz ?? 0),
+    cpu_l1_data_kb: Number(result.cpu_l1_data_kb ?? 0),
+    cpu_l1_inst_kb: Number(result.cpu_l1_inst_kb ?? 0),
+    cpu_l2_kb: Number(result.cpu_l2_kb ?? 0),
+    cpu_l3_kb: Number(result.cpu_l3_kb ?? 0),
+    cpu_temp_celsius: typeof result.cpu_temp_celsius === 'number' ? result.cpu_temp_celsius : null,
+    process_count: Number(result.process_count ?? 0),
+    thread_count: Number(result.thread_count ?? 0),
+    cellular: result.cellular && typeof result.cellular === 'object' ? result.cellular as SystemMetricsCellular : null,
     interfaces: result.interfaces,
     available: result.available === true,
     error: typeof result.error === 'string' ? result.error : undefined

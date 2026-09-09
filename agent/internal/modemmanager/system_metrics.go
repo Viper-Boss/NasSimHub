@@ -42,8 +42,11 @@ func (p *Provider) SystemMetrics(ctx context.Context) (domain.SystemMetrics, err
 	p.collectLoad(&metrics)
 	p.collectMemory(&metrics)
 	collectFlash(&metrics)
+	collectFlashDetails(&metrics)
+	p.collectCPUDetails(&metrics)
 	metrics.Interfaces = collectNetworkCounters()
 	metrics.ModemTempCelsius = p.cachedModemTemperature(ctx)
+	metrics.Cellular = p.cachedCellular(ctx)
 	if metrics.Interfaces == nil {
 		metrics.Interfaces = []domain.NetworkInterfaceCounters{}
 	}
@@ -127,6 +130,8 @@ func (p *Provider) collectMemory(metrics *domain.SystemMetrics) {
 	metrics.MemoryTotalBytes = total
 	metrics.MemoryAvailableBytes = available
 	metrics.MemoryUsedPercent = float64(total-available) / float64(total) * 100
+	metrics.MemoryCachedBytes = values["Cached"]
+	metrics.MemoryBuffersBytes = values["Buffers"]
 }
 
 // collectFlash reports usage of the filesystem that holds the reviewed voice

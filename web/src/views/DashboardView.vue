@@ -39,6 +39,7 @@ import StatePanel from '../components/StatePanel.vue'
 import SwipeActionRow from '../components/SwipeActionRow.vue'
 import TrafficSummary from '../components/TrafficSummary.vue'
 import SystemMetricsStrip from '../components/SystemMetricsStrip.vue'
+import { acquireSystemMetrics, releaseSystemMetrics, systemMetricsState } from '../state/systemMetrics'
 import LoadingSkeletonBoundary from '../components/skeletons/LoadingSkeletonBoundary.vue'
 import SectionSkeleton from '../components/skeletons/SectionSkeleton.vue'
 import WorkspaceDetailSkeleton from '../components/skeletons/WorkspaceDetailSkeleton.vue'
@@ -116,6 +117,8 @@ import { lineTagFallback, lineTagLine } from '../utils/lineIdentity'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+onMounted(() => { acquireSystemMetrics() })
+onBeforeUnmount(() => { releaseSystemMetrics() })
 const composingMessage = ref(false)
 const messageComposeRecipient = ref('')
 const messageComposeRecipientName = ref('')
@@ -1228,6 +1231,7 @@ onBeforeUnmount(() => {
                 :line="line"
                 :device="deviceFor(line)"
                 :runtime="networkRuntime(line)"
+                :radio="systemMetricsState.metrics?.cellular ?? null"
                 :selectable="!line.module_only"
                 :default-line="lineKey(line) === defaultLineID"
                 @select="openLineSettings(line)"

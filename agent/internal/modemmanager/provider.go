@@ -62,6 +62,7 @@ type Provider struct {
 	servingRadioMu     sync.Mutex
 	servingRadioStates map[string]servingRadioState
 	modemTemp          modemTempCache
+	cellular           cellularCache
 
 	voiceProbeMu sync.Mutex
 	voiceProbes  map[string]voiceProbeResult
