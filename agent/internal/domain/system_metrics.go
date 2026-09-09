@@ -55,6 +55,12 @@ type SystemMetrics struct {
 	// the modem does not answer.
 	Cellular *CellularServingCell `json:"cellular"`
 
+	// ModuleChannel reports the health of the ADB channel into the module's
+	// own system: "ok" for fresh data, "stale" when the last known snapshot
+	// is served because a refresh failed, "unavailable" when no module data
+	// exists at all. Empty on platforms without a module shell.
+	ModuleChannel string `json:"module_channel,omitempty"`
+
 	Interfaces []NetworkInterfaceCounters `json:"interfaces"`
 }
 

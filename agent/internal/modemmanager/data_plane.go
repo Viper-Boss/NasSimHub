@@ -40,6 +40,7 @@ type Options struct {
 	DataPlane            DataPlane
 	BearerStateFile      string
 	RadioStateFile       string
+	TrafficStateFile     string
 	USBRecovery          USBRecovery
 	QDC507VoiceRuntime   QDC507VoiceRuntime
 	ModuleShell          ModuleShellRunner

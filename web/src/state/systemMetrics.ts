@@ -16,6 +16,8 @@ export interface SystemMetricsSample {
   mem: number
   flash: number
   rxRate: number
+  /** Epoch millis when the sample was taken; used to expire restored history. */
+  at?: number
 }
 
 export const systemMetricsState = reactive({
@@ -27,6 +29,38 @@ export const systemMetricsState = reactive({
 
 const POLL_MS = 10_000
 const HISTORY = 60
+const STORAGE_KEY = 'modemdeck.systemMetrics.history'
+const HISTORY_TTL_MS = HISTORY * POLL_MS + 5_000
+
+// The sparklines should survive a page reload: samples are timestamped and
+// mirrored to localStorage, then restored (minus expired entries) on startup.
+function restoreHistory(): SystemMetricsSample[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const cutoff = Date.now() - HISTORY_TTL_MS
+    return parsed
+      .filter((item): item is SystemMetricsSample => (
+        !!item && typeof item === 'object' && typeof (item as SystemMetricsSample).at === 'number'
+      ))
+      .filter(item => (item.at as number) >= cutoff)
+      .slice(-HISTORY)
+  } catch {
+    return []
+  }
+}
+
+function persistHistory(samples: SystemMetricsSample[]): void {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(samples.slice(-HISTORY)))
+  } catch {
+    // Quota or privacy-mode failures must never break polling.
+  }
+}
+
+systemMetricsState.history = restoreHistory()
 
 let timer: ReturnType<typeof setInterval> | undefined
 let previous: SystemMetricsSnapshot | null = null
@@ -81,9 +115,11 @@ async function poll(): Promise<void> {
         cpu: snapshot.load_percent_1,
         mem: snapshot.memory_used_percent,
         flash: snapshot.flash_used_percent,
-        rxRate
+        rxRate,
+        at: Date.now()
       }
     ].slice(-HISTORY)
+    persistHistory(systemMetricsState.history)
   } catch (error) {
     systemMetricsState.available = false
     systemMetricsState.error = error instanceof Error ? error.message : String(error)

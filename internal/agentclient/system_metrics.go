@@ -46,6 +46,10 @@ type SystemMetrics struct {
 
 	Cellular *CellularServingCell `json:"cellular"`
 
+	// Health of the ADB channel into the module's own system: ok/stale/
+	// unavailable (see the agent's domain.SystemMetrics).
+	ModuleChannel string `json:"module_channel,omitempty"`
+
 	Interfaces []NetworkInterfaceCounters `json:"interfaces"`
 }
 

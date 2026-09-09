@@ -19,6 +19,9 @@ services:
     # to the /tmp path below.
     environment:
       MODEMDECK_QDC507_VOICE_RUNTIME_DIR: /tmp/qdc507-voice
+      # 4G traffic counters are accumulated across interface resets and
+      # container restarts in this persisted state file.
+      MODEMDECK_TRAFFIC_STATE_FILE: /var/lib/modemdeck/state/traffic-counters.json
     volumes:
       - type: bind
         source: ${MODEMDECK_QDC507_VOICE_RUNTIME_DIR:?Set MODEMDECK_QDC507_VOICE_RUNTIME_DIR to a host directory holding the reviewed QDC507 voice runtime}
@@ -26,6 +29,9 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ${MODEMDECK_DATA_DIR:?Set an absolute dedicated NAS data directory}/agent-state
+        target: /var/lib/modemdeck/state
   api:
     container_name: nas-comm-api
     image: nas-comm-api:fnos-local-0.1

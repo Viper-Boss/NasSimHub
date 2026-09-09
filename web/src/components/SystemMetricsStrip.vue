@@ -22,6 +22,19 @@ function levelOf(percent: number): string {
   return 'is-ok'
 }
 
+function tempLevelOf(value: number | null | undefined): string {
+  if (value === null || value === undefined) return ''
+  if (value >= 85) return 'is-danger'
+  if (value >= 70) return 'is-warn'
+  return ''
+}
+
+const channelState = computed(() => current.value?.module_channel ?? '')
+const channelStale = computed(() => channelState.value === 'stale')
+const channelDown = computed(() => (
+  !!current.value && channelState.value === 'unavailable'
+))
+
 const CHART_W = 200
 const CHART_H = 56
 
@@ -91,6 +104,8 @@ function latestSeries(key: 'modemTemp' | 'cpuTemp' | 'rxRate'): number | null {
 const modemTempValue = computed(() => latestSeries('modemTemp'))
 const cpuTempValue = computed(() => latestSeries('cpuTemp'))
 const rxRateValue = computed(() => latestSeries('rxRate') ?? 0)
+const modemTempLevel = computed(() => tempLevelOf(modemTempValue.value))
+const cpuTempLevel = computed(() => tempLevelOf(cpuTempValue.value))
 
 function formatCache(kb: number): string {
   if (!kb) return ''
@@ -115,20 +130,21 @@ const loadLabel = computed(() => {
 </script>
 
 <template>
-  <div v-if="systemMetricsState.available && current" class="tm">
-    
+  <p v-if="channelStale" class="tm__channel tm__channel--stale">{{ t('dashboard.metricsChannelStale') }}</p>
+  <div v-if="systemMetricsState.available && current && !channelDown" class="tm">
+
     <article class="tm-box">
       <header class="tm-box__head">
         <span class="tm-box__title">{{ t('dashboard.metricsThermal') }}</span>
-        <span class="tm-box__big">{{ formatTemp(modemTempValue) }}</span>
+        <span class="tm-box__big" :class="modemTempLevel">{{ formatTemp(modemTempValue) }}</span>
       </header>
       <svg class="tm-box__chart" :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none">
         <polyline v-if="modemTempSpark" :points="modemTempSpark" fill="none" class="tm-chart-line tm-chart-line--temp" stroke-width="1.6" />
         <polyline v-if="cpuTempSpark" :points="cpuTempSpark" fill="none" class="tm-chart-line tm-chart-line--cpu" stroke-width="1.2" stroke-dasharray="3 2" />
       </svg>
       <div class="tm-box__rows">
-        <div class="tm-row"><span>{{ t('dashboard.metricsTemp') }}</span><b>{{ formatTemp(modemTempValue) }}</b></div>
-        <div class="tm-row"><span>{{ t('dashboard.metricsCpuTemp') }}</span><b>{{ formatTemp(cpuTempValue) }}</b></div>
+        <div class="tm-row"><span>{{ t('dashboard.metricsTemp') }}</span><b :class="modemTempLevel">{{ formatTemp(modemTempValue) }}</b></div>
+        <div class="tm-row"><span>{{ t('dashboard.metricsCpuTemp') }}</span><b :class="cpuTempLevel">{{ formatTemp(cpuTempValue) }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsData') }}</span><b>{{ formatRate(rxRateValue) }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsLoad') }}</span><b>{{ loadLabel }}</b></div>
       </div>
@@ -148,7 +164,7 @@ const loadLabel = computed(() => {
         <div class="tm-row"><span>{{ t('dashboard.metricsCores') }}</span><b>{{ current.cores || '—' }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsFreq') }}</span><b>{{ formatMHz(current.cpu_current_mhz) }} / {{ formatMHz(current.cpu_max_mhz) }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsCache') }}</span><b>{{ cpuCacheLabel }}</b></div>
-        <div class="tm-row"><span>{{ t('dashboard.metricsCpuTemp') }}</span><b>{{ formatTemp(current.cpu_temp_celsius) }}</b></div>
+        <div class="tm-row"><span>{{ t('dashboard.metricsCpuTemp') }}</span><b :class="cpuTempLevel">{{ formatTemp(current.cpu_temp_celsius) }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsProcesses') }}</span><b>{{ current.process_count || '—' }}</b></div>
         <div class="tm-row"><span>{{ t('dashboard.metricsThreads') }}</span><b>{{ current.thread_count || '—' }}</b></div>
       </div>
@@ -191,6 +207,7 @@ const loadLabel = computed(() => {
       </div>
     </article>
   </div>
+  <p v-else-if="channelDown" class="tm__loading">{{ t('dashboard.metricsChannelDown') }}</p>
   <p v-else-if="systemMetricsState.available" class="tm__loading">{{ t('dashboard.metricsUnavailable') }}</p>
   <p v-else class="tm__loading">{{ systemMetricsState.error || t('dashboard.metricsUnavailable') }}</p>
 </template>
@@ -208,6 +225,19 @@ const loadLabel = computed(() => {
   font-size: 12px;
   color: var(--muted);
 }
+
+.tm__channel {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tm__channel--stale {
+  color: var(--warning, #fbbf24);
+}
+
+.tm-row b.is-warn { color: var(--warning, #fbbf24); }
+.tm-row b.is-danger { color: var(--danger, #f87171); }
 
 .tm-box {
   display: flex;

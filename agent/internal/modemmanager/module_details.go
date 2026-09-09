@@ -76,10 +76,27 @@ type moduleSnapshotCache struct {
 	succeeded bool
 }
 
+// Module channel health as reported in SystemMetrics.ModuleChannel.
+const (
+	moduleChannelOK          = "ok"
+	moduleChannelStale       = "stale"
+	moduleChannelUnavailable = "unavailable"
+)
+
 func (p *Provider) collectModuleDetails(ctx context.Context, metrics *domain.SystemMetrics) {
-	snapshot := p.cachedModuleSnapshot(ctx)
-	if snapshot == nil {
+	if p.moduleShell == nil {
+		metrics.ModuleChannel = moduleChannelUnavailable
 		return
+	}
+	snapshot, stale := p.cachedModuleSnapshot(ctx)
+	if snapshot == nil {
+		metrics.ModuleChannel = moduleChannelUnavailable
+		return
+	}
+	if stale {
+		metrics.ModuleChannel = moduleChannelStale
+	} else {
+		metrics.ModuleChannel = moduleChannelOK
 	}
 	metrics.Cores = snapshot.Cores
 	metrics.LoadRaw1 = snapshot.LoadRaw1
@@ -109,16 +126,19 @@ func (p *Provider) collectModuleDetails(ctx context.Context, metrics *domain.Sys
 	metrics.FlashDeviceModel = snapshot.FlashDeviceModel
 }
 
-// cachedModuleSnapshot returns the cached module observation when fresh;
-// otherwise it runs the batched shell command once. A failed probe is retried
-// on the next call but never blocks longer than the shell timeout.
-func (p *Provider) cachedModuleSnapshot(ctx context.Context) *moduleSnapshot {
+// cachedModuleSnapshot returns the cached module observation plus whether it
+// is stale. A fresh TTL hit or a successful probe returns (snapshot, false).
+// When a refresh probe fails but a previous snapshot exists, the last known
+// values are served with stale=true so the dashboard keeps rendering instead
+// of dropping to empty boxes. Never blocks longer than the shell timeout.
+func (p *Provider) cachedModuleSnapshot(ctx context.Context) (*moduleSnapshot, bool) {
 	p.moduleSnapshot.mu.Lock()
 	if p.moduleSnapshot.inFlight ||
 		(p.moduleSnapshot.succeeded && time.Since(p.moduleSnapshot.readAt) < moduleMetricsTTL) {
 		value := p.moduleSnapshot.value
+		stale := p.moduleSnapshot.inFlight || time.Since(p.moduleSnapshot.readAt) >= moduleMetricsTTL
 		p.moduleSnapshot.mu.Unlock()
-		return value
+		return value, value != nil && stale
 	}
 	p.moduleSnapshot.inFlight = true
 	p.moduleSnapshot.mu.Unlock()
@@ -131,9 +151,16 @@ func (p *Provider) cachedModuleSnapshot(ctx context.Context) *moduleSnapshot {
 	if snapshot != nil {
 		p.moduleSnapshot.value = snapshot
 		p.moduleSnapshot.succeeded = true
+		p.moduleSnapshot.mu.Unlock()
+		return snapshot, false
+	}
+	// Refresh failed: keep serving the last known snapshot, marked stale.
+	if stale := p.moduleSnapshot.value; stale != nil {
+		p.moduleSnapshot.mu.Unlock()
+		return stale, true
 	}
 	p.moduleSnapshot.mu.Unlock()
-	return snapshot
+	return nil, false
 }
 
 func (p *Provider) queryModuleSnapshot(ctx context.Context) *moduleSnapshot {

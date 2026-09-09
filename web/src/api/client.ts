@@ -2740,6 +2740,7 @@ export interface SystemMetricsSnapshot {
   process_count: number
   thread_count: number
   cellular: SystemMetricsCellular | null
+  module_channel?: string
   interfaces: SystemMetricsInterfaceCounters[]
   available: boolean
   error?: string
@@ -2782,6 +2783,7 @@ export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
     process_count: Number(result.process_count ?? 0),
     thread_count: Number(result.thread_count ?? 0),
     cellular: result.cellular && typeof result.cellular === 'object' ? result.cellular as SystemMetricsCellular : null,
+    module_channel: typeof result.module_channel === 'string' ? result.module_channel : undefined,
     interfaces: result.interfaces,
     available: result.available === true,
     error: typeof result.error === 'string' ? result.error : undefined

@@ -64,6 +64,11 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 		envOrDefault("MODEMDECK_RADIO_STATE_FILE", "/run/modemdeck/radio-state.json"),
 		"persistent file recording user-disabled modem radios",
 	)
+	trafficStateFile := flag.String(
+		"traffic-state-file",
+		os.Getenv("MODEMDECK_TRAFFIC_STATE_FILE"),
+		"persistent file accumulating 4G traffic counters across interface resets",
+	)
 	qdc507VoiceRuntimeDirectory := flag.String(
 		"qdc507-voice-runtime-dir",
 		os.Getenv("MODEMDECK_QDC507_VOICE_RUNTIME_DIR"),
@@ -97,6 +102,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 		DataPlane:          dataPlane,
 		BearerStateFile:    *bearerStateFile,
 		RadioStateFile:     *radioStateFile,
+		TrafficStateFile:   *trafficStateFile,
 		QDC507VoiceRuntime: qdc507VoiceRuntime,
 		ModuleShell:        qdc507VoiceRuntime,
 	})

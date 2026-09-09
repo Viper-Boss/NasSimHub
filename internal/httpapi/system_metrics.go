@@ -40,10 +40,11 @@ type systemMetricsResponse struct {
 	ProcessCount   int      `json:"process_count"`
 	ThreadCount    int      `json:"thread_count"`
 
-	Cellular   *systemMetricsCellular   `json:"cellular"`
-	Interfaces []systemMetricsInterface `json:"interfaces"`
-	Available  bool                     `json:"available"`
-	Error      string                   `json:"error,omitempty"`
+	Cellular      *systemMetricsCellular   `json:"cellular"`
+	ModuleChannel string                   `json:"module_channel,omitempty"`
+	Interfaces    []systemMetricsInterface `json:"interfaces"`
+	Available     bool                     `json:"available"`
+	Error         string                   `json:"error,omitempty"`
 }
 
 type systemMetricsCellular struct {
@@ -145,6 +146,7 @@ func (api *API) systemMetrics(response http.ResponseWriter, request *http.Reques
 			TxBytes: item.TxBytes,
 		})
 	}
+	result.ModuleChannel = metrics.ModuleChannel
 	result.Available = true
 	writeJSON(response, http.StatusOK, result)
 }

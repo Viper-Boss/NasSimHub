@@ -870,7 +870,7 @@ export default {
     online: 'online',
     callReady: 'call ready',
     messageReady: 'message ready',
-    manageDevices: 'Manage devices', metricsTemp: 'Module temp', metricsCpu: 'CPU load', metricsMemory: 'Memory', metricsFlash: 'Flash', metricsData: '4G data', metricsLoad: 'Load 1/5/15min', metricsLoadHint: 'Load averages as percent of total CPU capacity', metricsUnavailable: 'System metrics unavailable',
+    manageDevices: 'Manage devices', metricsTemp: 'Module temp', metricsCpu: 'CPU load', metricsMemory: 'Memory', metricsFlash: 'Flash', metricsData: '4G data', metricsLoad: 'Load 1/5/15min', metricsLoadHint: 'Load averages as percent of total CPU capacity', metricsUnavailable: 'System metrics unavailable', metricsChannelStale: 'Module channel degraded, showing last known values', metricsChannelDown: 'Module channel unreachable',
     metricsThermal: 'Temperature', metricsCpuTemp: 'CPU temp', metricsModel: 'Model', metricsCores: 'Cores', metricsFreq: 'Frequency', metricsCache: 'Cache', metricsProcesses: 'Processes', metricsThreads: 'Threads', metricsCapacity: 'Capacity', metricsUsed: 'Used', metricsAvailable: 'Available', metricsCached: 'Cached', metricsBuffers: 'Buffers', metricsMemSpec: 'Type/Freq', metricsDevice: 'Device', metricsFs: 'Filesystem', metricsFree: 'Free', metricsMount: 'Mount point',
     loadingLines: 'Loading lines',
     loadLinesFailed: 'Unable to load lines',

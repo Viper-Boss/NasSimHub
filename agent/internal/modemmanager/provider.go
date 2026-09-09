@@ -65,6 +65,7 @@ type Provider struct {
 	modemTemp          modemTempCache
 	cellular           cellularCache
 	moduleSnapshot     moduleSnapshotCache
+	traffic            *trafficAccumulator
 
 	voiceProbeMu sync.Mutex
 	voiceProbes  map[string]voiceProbeResult
@@ -205,6 +206,7 @@ func newProviderWithOptions(
 		qdc507Voice:        options.QDC507VoiceRuntime,
 		qdc507USB:          options.QDC507USBProvisioner,
 		moduleShell:        options.ModuleShell,
+		traffic:            newTrafficAccumulator(options.TrafficStateFile),
 		terminalCalls:      make(map[string]terminalCallProjection),
 		networkOperations:  make(map[string]struct{}),
 		signalSetupStates:  make(map[string]signalSetupState),

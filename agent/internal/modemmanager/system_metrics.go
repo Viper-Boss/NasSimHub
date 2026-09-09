@@ -43,7 +43,7 @@ var numberPattern = regexp.MustCompile(`\d+(?:\.\d+)?`)
 func (p *Provider) SystemMetrics(ctx context.Context) (domain.SystemMetrics, error) {
 	metrics := domain.SystemMetrics{ObservedAt: time.Now().UTC()}
 	p.collectModuleDetails(ctx, &metrics)
-	metrics.Interfaces = collectNetworkCounters()
+	metrics.Interfaces = p.collectNetworkCounters()
 	metrics.ModemTempCelsius = p.cachedModemTemperature(ctx)
 	metrics.Cellular = p.cachedCellular(ctx)
 	if metrics.Interfaces == nil {
@@ -59,7 +59,7 @@ func percentOfCapacity(load float64, cores int) float64 {
 	return load / float64(cores) * 100
 }
 
-func collectNetworkCounters() []domain.NetworkInterfaceCounters {
+func (p *Provider) collectNetworkCounters() []domain.NetworkInterfaceCounters {
 	entries, err := os.ReadDir("/sys/class/net")
 	if err != nil {
 		return nil
@@ -75,10 +75,13 @@ func collectNetworkCounters() []domain.NetworkInterfaceCounters {
 		if rxErr != nil || txErr != nil {
 			continue
 		}
+		// Report cumulative totals that survive interface recreation instead
+		// of raw kernel counters (which reset on every mobile-data toggle).
+		rxTotal, txTotal := p.traffic.apply(name, rx, tx)
 		interfaces = append(interfaces, domain.NetworkInterfaceCounters{
 			Name:    name,
-			RxBytes: rx,
-			TxBytes: tx,
+			RxBytes: rxTotal,
+			TxBytes: txTotal,
 		})
 	}
 	sort.Slice(interfaces, func(left, right int) bool {
