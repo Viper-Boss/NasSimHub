@@ -320,7 +320,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="line" ref="root" class="line-status-wrap">
+  <div ref="root" class="line-status-wrap">
+    <template v-if="line">
     <LineSelector v-if="lines.length > 1" v-model="viewedLineID" :lines="lines" compact />
     <div
       class="line-status"
@@ -409,8 +410,9 @@ onBeforeUnmount(() => {
       </div>
       <span v-if="version" class="line-status__version">{{ version }}</span>
     </div>
+    </template>
 
-    <!-- NKN network: standalone box beside the status strip -->
+    <!-- NKN network: standalone box beside the status strip, independent of any line -->
     <button
       type="button"
       class="nkn-badge"
