@@ -25,6 +25,7 @@ export type SettingsVisibility = {
   isAdmin: boolean
   canPairIOS: boolean
   advancedNetwork?: boolean
+  nknUnlocked?: boolean
 }
 
 export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
@@ -85,6 +86,9 @@ export function visibleSettingsSectionIDs(
 ): SettingsSection[] {
   return SETTINGS_SECTION_ORDER.filter(section => {
     if (section === 'wireguard') return visibility.isAdmin && visibility.advancedNetwork === true
+    if (section === 'nkn' || section === 'nkn-node' || section === 'nkn-network') {
+      return visibility.isAdmin && visibility.nknUnlocked === true
+    }
     if (section === 'pairing') return visibility.canPairIOS
     if (ADMIN_ONLY_SECTIONS.has(section)) return visibility.isAdmin
     return true

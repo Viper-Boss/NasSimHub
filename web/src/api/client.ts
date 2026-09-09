@@ -2929,6 +2929,30 @@ export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
   }
 }
 
+export interface NKNChatMessage {
+  ts: number
+  dir: 'in' | 'out'
+  peer: string
+  text: string
+}
+
+export async function getNKNChatMessages(after = 0): Promise<NKNChatMessage[]> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
+  const result = await get(`${API_ROOT}/nkn/chat/messages?after=${encodeURIComponent(String(after))}`) as { messages?: unknown } | null
+  if (!result || !Array.isArray(result.messages)) throw new Error('NKN 聊天记录响应无效。')
+  return result.messages.filter((item): item is NKNChatMessage => (
+    !!item && typeof item === 'object' &&
+    typeof (item as NKNChatMessage).ts === 'number' &&
+    typeof (item as NKNChatMessage).text === 'string' &&
+    typeof (item as NKNChatMessage).peer === 'string'
+  ))
+}
+
+export async function sendNKNChatMessage(to: string, text: string): Promise<void> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
+  await writeJSON(`${API_ROOT}/nkn/chat/send`, 'POST', { to, text }, 200)
+}
+
 export interface NKNNetworkNodeReport {
   address: string
   rtt_ms: number

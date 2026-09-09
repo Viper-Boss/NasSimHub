@@ -288,7 +288,7 @@ export default {
     nknNode: 'NKN 節點',
     nknNodeDescription: '內建 NKN 中繼節點（預設關閉），開啟後獎勵歸自己',
     nknNetwork: 'NAS猫窝 網路',
-    nknNetworkDescription: '最近 24 小時在線過的 NAS猫窝 裝置目錄（滾動窗口，預設關閉，鏈上公開可查）',
+    nknNetworkDescription: '預設開啟的匿名去中心化網路接入；統計為聚合计数，非裝置列表',
     iosApp: '配對',
     iosAppDescription: '將目前賬戶與 iPhone 配對',
     tls: '接入',

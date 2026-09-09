@@ -288,7 +288,7 @@ export default {
     nknNode: 'NKN node',
     nknNodeDescription: 'Embedded NKN relay node (off by default); rewards are yours',
     nknNetwork: 'NasSimHub network',
-    nknNetworkDescription: 'Public directory enabled by default; can be disabled. Registration does not prove real-time availability.',
+    nknNetworkDescription: 'Anonymous decentralized network access, on by default; statistics are aggregate counts only.',
     iosApp: 'Pairing',
     iosAppDescription: 'Pair this account with an iPhone',
     tls: 'Access',

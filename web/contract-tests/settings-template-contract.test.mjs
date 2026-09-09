@@ -31,6 +31,7 @@ test('settings navigation groups personal and managed surfaces behind one visibi
     visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: true }),
     ['preferences', 'security', 'audio', 'pairing', 'contacts', 'devices', 'telegram']
   )
+  // NKN sections stay hidden until the dial-pad unlock ("nkn").
   assert.deepEqual(
     visibleSettingsSectionIDs({ isAdmin: true, canPairIOS: true }),
     [
@@ -46,13 +47,18 @@ test('settings navigation groups personal and managed surfaces behind one visibi
       'sms-forward',
       'f50',
       'net-switches',
-      'nkn',
-      'nkn-node',
-      'nkn-network',
       'connectivity',
       'diagnostics',
       'about'
     ]
+  )
+  assert.ok(
+    visibleSettingsSectionIDs({ isAdmin: true, canPairIOS: true, nknUnlocked: true })
+      .filter(section => ['nkn', 'nkn-node', 'nkn-network'].includes(section)).length === 3
+  )
+  assert.ok(
+    !visibleSettingsSectionIDs({ isAdmin: false, canPairIOS: true, nknUnlocked: true })
+      .includes('nkn')
   )
   for (const section of ['preferences', 'security']) {
     assert.equal(settingsSectionGroup(section), 'personal')

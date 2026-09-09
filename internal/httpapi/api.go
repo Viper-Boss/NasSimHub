@@ -592,6 +592,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.nknNetworkSettings(response, request)
 	case "/api/v1/settings/nkn-network/peers":
 		api.getOnly(response, request, api.nknNetworkPeers)
+	case "/api/v1/nkn/chat/messages":
+		api.getOnly(response, request, api.nknChatMessagesHandler)
+	case "/api/v1/nkn/chat/send":
+		api.postOnly(response, request, api.nknChatSendHandler)
 	case "/api/v1/settings/nkn-network/nodes":
 		api.getOnly(response, request, api.nknNetworkNodes)
 	case "/api/v1/settings/recording":

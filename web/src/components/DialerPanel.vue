@@ -39,6 +39,7 @@ import {
   resolveLine
 } from '../state/workspace'
 import { playDTMFTone } from '../state/dtmfAudio'
+import { unlockNknMenu, nknUnlockState } from '../state/nknUnlock'
 import { normalizeDialTarget } from '../utils/dialTarget'
 import { phoneDestination } from '../utils/format'
 import { phoneKeypad } from '../utils/phoneKeypad'
@@ -82,6 +83,19 @@ let callReturnFocus: HTMLElement | null = null
 let dialerReturnFocus: HTMLElement | null = null
 
 const zeroLongPressDelay = 500
+
+// Typing "nkn" on the dial pad reveals the hidden NKN settings sections.
+const nknHintVisible = ref(false)
+let nknHintTimer: number | undefined
+watch(number, value => {
+  if (nknUnlockState.unlocked && value.toLowerCase().includes('nkn')) return
+  if (value.toLowerCase().includes('nkn')) {
+    unlockNknMenu()
+    nknHintVisible.value = true
+    if (nknHintTimer) window.clearTimeout(nknHintTimer)
+    nknHintTimer = window.setTimeout(() => { nknHintVisible.value = false }, 4000)
+  }
+})
 
 const lines = computed(() => bootstrapResource.data?.lines || [])
 const voiceCallingAvailable = computed(
@@ -618,7 +632,14 @@ onBeforeUnmount(() => {
                   />
                   <span v-if="number" class="dialer-number-trailing">
                     <span
-                      v-if="validationVisible"
+                      v-if="nknHintVisible"
+                      class="dialer-inline-validation"
+                      role="status"
+                    >
+                      <span aria-hidden="true">{{ t('homesim.nknUnlocked') }}</span>
+                    </span>
+                    <span
+                      v-if="validationVisible && !nknHintVisible"
                       :id="validationMessageId"
                       class="dialer-inline-validation"
                       role="status"

@@ -54,6 +54,16 @@ const router = createRouter({
           component: () => import('../views/TrafficView.vue')
         },
         {
+          path: 'nmobile',
+          name: 'nmobile',
+          component: () => import('../views/NMobileChatView.vue')
+        },
+        {
+          path: 'sponsor',
+          name: 'sponsor',
+          component: () => import('../views/SponsorView.vue')
+        },
+        {
           path: 'settings/:section?',
           name: 'settings',
           component: () => import('../views/SettingsView.vue')

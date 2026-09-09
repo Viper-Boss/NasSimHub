@@ -32,6 +32,7 @@ import {
   settingsSectionGroup,
   visibleSettingsSectionIDs
 } from '../components/settings/settingsNavigation'
+import { nknUnlockState } from '../state/nknUnlock'
 import type {
   SettingsSection,
   SettingsSectionGroup
@@ -231,7 +232,8 @@ const sections = computed<SettingsSectionDefinition[]>(() => {
   return visibleSettingsSectionIDs({
     isAdmin: isAdmin.value,
     canPairIOS: canPairIOS.value,
-    advancedNetwork: advancedNetworkVisible.value
+    advancedNetwork: advancedNetworkVisible.value,
+    nknUnlocked: nknUnlockState.unlocked
   })
     .map(sectionID => catalog.get(sectionID))
     .filter((section): section is SettingsSectionDefinition => section !== undefined)
