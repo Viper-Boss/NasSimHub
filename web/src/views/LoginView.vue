@@ -97,6 +97,12 @@ async function submit(): Promise<void> {
         <p v-if="isSetup">{{ t('auth.quickStartDescription') }}</p>
       </header>
 
+      <aside v-if="isSetup" class="setup-guard-notice" role="note">
+        <strong>{{ t('homesim.fraudGuard.setupTitle') }}</strong>
+        <p>{{ t('homesim.fraudGuard.body') }}</p>
+        <p>{{ t('homesim.fraudGuard.detail') }}</p>
+      </aside>
+
       <form class="login-form" @submit.prevent="submit">
         <label class="field">
           <span>{{ t('auth.username') }}</span>

@@ -329,6 +329,8 @@ type API struct {
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
 	homeSIMNetworkSwitchesMu   sync.Mutex
+	callGuardOnce              sync.Once
+	callGuardInstance          *callGuard
 	simAutoUnlockMu            sync.Mutex
 	contactBackupDirectory     string
 	settingsSecrets            SecretBox
@@ -552,6 +554,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.callsBatch(response, request)
 	case "/api/v1/calls/active":
 		api.getOnly(response, request, api.activeCalls)
+	case "/api/v1/calls/guard":
+		api.callGuardResource(response, request)
 	case "/api/v1/recordings":
 		api.getOnly(response, request, api.recordingEntries)
 	case "/api/v1/recordings/batch":

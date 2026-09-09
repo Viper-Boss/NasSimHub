@@ -1084,16 +1084,19 @@ onBeforeUnmount(() => {
   background: var(--muted);
 }
 
-.nkn-badge.is-green .nkn-badge__dot {
+.nkn-badge.is-green .nkn-badge__dot,
+.nkn-badge__dot.is-green {
   background: var(--success, #34d399);
   box-shadow: 0 0 4px color-mix(in srgb, var(--success, #34d399) 60%, transparent);
 }
 
-.nkn-badge.is-amber .nkn-badge__dot {
+.nkn-badge.is-amber .nkn-badge__dot,
+.nkn-badge__dot.is-amber {
   background: var(--warning, #fbbf24);
 }
 
-.nkn-badge.is-red .nkn-badge__dot {
+.nkn-badge.is-red .nkn-badge__dot,
+.nkn-badge__dot.is-red {
   background: var(--danger, #f87171);
 }
 

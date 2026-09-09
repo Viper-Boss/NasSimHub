@@ -473,6 +473,18 @@ func (api *API) startCall(response http.ResponseWriter, request *http.Request) {
 	if !api.requireLineAccess(response, request, input.LineID) {
 		return
 	}
+	if guard, ok := api.callGuardStore(); ok {
+		if guard.Attempt(input.Number) {
+			writeError(
+				response,
+				http.StatusForbidden,
+				"fraud_guard",
+				"This software exists to receive verification codes and to help students abroad save roaming fees; it is not intended for harassing or fraudulent calls.",
+				"",
+			)
+			return
+		}
+	}
 	owner, err := api.callLeaseOwner(request.Context())
 	if err != nil {
 		api.writeCallLeaseError(response, request, "validate browser call owner", err)

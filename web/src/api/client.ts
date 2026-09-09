@@ -1150,6 +1150,11 @@ function getPublic(path: string): Promise<unknown> {
   )
 }
 
+/** Lifts the anti-fraud daily distinct-number dial limit (dial pad "unlock"). */
+export async function unlockCallGuard(): Promise<void> {
+  await writeJSON('/api/v1/calls/guard', 'POST', { action: 'unlock' }, 200)
+}
+
 function writeJSON(
   path: string,
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',

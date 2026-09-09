@@ -40,6 +40,7 @@ import {
 } from '../state/workspace'
 import { playDTMFTone } from '../state/dtmfAudio'
 import { unlockNknMenu, nknUnlockState } from '../state/nknUnlock'
+import { unlockCallGuard } from '../api/client'
 import { normalizeDialTarget } from '../utils/dialTarget'
 import { phoneDestination } from '../utils/format'
 import { phoneKeypad } from '../utils/phoneKeypad'
@@ -87,15 +88,34 @@ const zeroLongPressDelay = 500
 // Typing "nkn" on the dial pad reveals the hidden NKN settings sections.
 const nknHintVisible = ref(false)
 let nknHintTimer: number | undefined
+// Typing "unlock" lifts the anti-fraud daily distinct-number dial limit.
+const guardHintVisible = ref(false)
+let guardHintTimer: number | undefined
+let guardUnlockAttempted = false
 watch(number, value => {
-  if (nknUnlockState.unlocked && value.toLowerCase().includes('nkn')) return
-  if (value.toLowerCase().includes('nkn')) {
+  const lower = value.toLowerCase()
+  if (lower.includes('unlock') && !guardUnlockAttempted) {
+    guardUnlockAttempted = true
+    unlockCallGuard()
+      .then(() => {
+        guardHintVisible.value = true
+        if (guardHintTimer) window.clearTimeout(guardHintTimer)
+        guardHintTimer = window.setTimeout(() => { guardHintVisible.value = false }, 5000)
+      })
+      .catch(() => { guardUnlockAttempted = false })
+  }
+  if (nknUnlockState.unlocked && lower.includes('nkn')) return
+  if (lower.includes('nkn')) {
     unlockNknMenu()
     nknHintVisible.value = true
     if (nknHintTimer) window.clearTimeout(nknHintTimer)
     nknHintTimer = window.setTimeout(() => { nknHintVisible.value = false }, 4000)
   }
 })
+
+function dismissFraudGuard(): void {
+  callState.fraudGuard = false
+}
 
 const lines = computed(() => bootstrapResource.data?.lines || [])
 const voiceCallingAvailable = computed(
@@ -632,7 +652,14 @@ onBeforeUnmount(() => {
                   />
                   <span v-if="number" class="dialer-number-trailing">
                     <span
-                      v-if="nknHintVisible"
+                      v-if="guardHintVisible"
+                      class="dialer-inline-validation"
+                      role="status"
+                    >
+                      <span aria-hidden="true">{{ t('homesim.fraudGuard.unlocked') }}</span>
+                    </span>
+                    <span
+                      v-else-if="nknHintVisible"
                       class="dialer-inline-validation"
                       role="status"
                     >
@@ -676,7 +703,7 @@ onBeforeUnmount(() => {
               <p v-if="dialUnavailable || dialLines.length === 0" class="unavailable-note">
                 {{ dialUnavailable || t('dialer.noLines') }}
               </p>
-              <p v-if="callState.error" class="field-error">{{ callState.error }}</p>
+              <p v-if="callState.error && !callState.fraudGuard" class="field-error">{{ callState.error }}</p>
 
               <div class="dialer-keypad-stage">
                 <div class="keypad" role="group" :aria-label="t('dialer.keypad')">
@@ -735,6 +762,23 @@ onBeforeUnmount(() => {
         </aside>
       </div>
     </Transition>
+
+    <div
+      v-if="callState.fraudGuard"
+      class="guard-overlay"
+      role="alertdialog"
+      aria-modal="true"
+      :aria-label="t('homesim.fraudGuard.title')"
+    >
+      <div class="guard-overlay__card">
+        <h2>{{ t('homesim.fraudGuard.title') }}</h2>
+        <p class="guard-overlay__body">{{ t('homesim.fraudGuard.body') }}</p>
+        <p class="guard-overlay__detail">{{ t('homesim.fraudGuard.detail') }}</p>
+        <button class="guard-overlay__ack" type="button" @click="dismissFraudGuard">
+          {{ t('homesim.fraudGuard.ack') }}
+        </button>
+      </div>
+    </div>
   </Teleport>
 </template>
 
@@ -1231,6 +1275,60 @@ onBeforeUnmount(() => {
   .dialer-surface-leave-to .dialer-panel {
     transform: none;
   }
+}
+
+.guard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-modal, 60);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.guard-overlay__card {
+  display: grid;
+  gap: 10px;
+  width: min(440px, 100%);
+  padding: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.guard-overlay__card h2 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--danger, #f87171);
+}
+
+.guard-overlay__body {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.guard-overlay__detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.guard-overlay__ack {
+  justify-self: end;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--text);
+  font-weight: 650;
+  cursor: pointer;
 }
 
 </style>

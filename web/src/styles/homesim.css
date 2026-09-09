@@ -165,6 +165,11 @@ body .dialer-panel .dialer-number { font-variant-numeric: tabular-nums; letter-s
 .login-panel > header p { font-size: .875rem; line-height: 1.7; }
 .login-form { gap: 22px; }
 .login-submit { min-height: 50px; font-size: 1rem; background: linear-gradient(120deg, var(--hs-gradient-start), var(--accent)); }
+.setup-guard-notice { display: grid; gap: 6px; margin-top: 14px; padding: 14px 16px; border: 1px solid var(--warning-border, #cfaf65); border-radius: 14px; background: var(--warning-soft, #fff3d6); }
+html:not([data-theme='light']) .setup-guard-notice { background: color-mix(in srgb, #fbbf24 8%, var(--surface)); }
+.setup-guard-notice strong { font-size: .9rem; color: var(--text); }
+.setup-guard-notice p { margin: 0; font-size: .8rem; line-height: 1.7; color: var(--muted-strong); }
+.setup-guard-notice p:first-of-type { color: var(--text); font-weight: 600; }
 
 @media (max-width: 1479px) { .shell-location > span { display: none; } }
 @media (max-width: 1100px) { .shell-location { display: none; } .shell-header .global-search { flex: 1; width: auto; } }

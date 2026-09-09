@@ -61,6 +61,7 @@ export const callState = reactive<{
   pendingAction: PendingCallAction
   error: string
   errorStatus: number
+  fraudGuard: boolean
   syncStatus: ResourceStatus
   syncError: string
 }>({
@@ -74,6 +75,7 @@ export const callState = reactive<{
   pendingAction: '',
   error: '',
   errorStatus: 0,
+  fraudGuard: false,
   syncStatus: 'idle',
   syncError: ''
 })
@@ -474,6 +476,7 @@ export function shutdownCallRuntime(): void {
   callState.pendingAction = ''
   callState.error = ''
   callState.errorStatus = 0
+  callState.fraudGuard = false
   callState.syncStatus = 'idle'
   callState.syncError = ''
 }
@@ -510,12 +513,20 @@ export async function dial(
   callState.pendingAction = 'dial'
   callState.error = ''
   callState.errorStatus = 0
+  callState.fraudGuard = false
   try {
     const session = await gateway.startCall(lineKey, number, recordingEnabled)
     acceptSession(session)
     closeDialer()
     return true
   } catch (error) {
+    if (error instanceof ApiError && error.code === 'fraud_guard') {
+      callState.fraudGuard = true
+      callState.error = ''
+      callState.errorStatus = 403
+      await requestActiveCallRefresh()
+      return false
+    }
     const failure = requestError(error, translate('runtime.dialFailed'))
     callState.error = failure.message
     callState.errorStatus = failure.status

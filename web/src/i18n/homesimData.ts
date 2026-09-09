@@ -94,6 +94,14 @@ export const homesimEN = {
     replaceHint: 'Drop your QR image at web/public/sponsor/ (wechat.png / alipay.png).',
     thanks: 'Thank you for supporting independent development!',
   },
+  fraudGuard: {
+    title: 'Why was this call blocked?',
+    body: 'Our software was built to receive verification codes and to help students abroad save roaming fees. If you mean to harass people or run phone scams — sorry, this software is not for you.',
+    detail: 'To keep the gateway safe, outgoing calls are limited to 5 different numbers per day. Calling the same number again is never restricted. If you truly need more, put the SIM into a phone and dial there — this software will not support that.',
+    ack: 'I understand',
+    unlocked: 'Daily limit of 5 different numbers has been lifted.',
+    setupTitle: 'Before you start',
+  },
 
 
   settingsSearch: 'Search settings and features', settingsNoResults: 'No matching settings. Try another keyword.', settingsExperimental: 'Advanced integrations · some features are configuration-only',
@@ -232,6 +240,14 @@ export const homesimZH = {
     wechat: '微信支付', alipay: '支付宝',
     replaceHint: '把收款码图片放到 web/public/sponsor/（wechat.png / alipay.png）。',
     thanks: '感谢支持独立开发！',
+  },
+  fraudGuard: {
+    title: '这次呼叫为什么被拦下？',
+    body: '我们的软件是为了接收验证码和留学生在国外节省漫游费开发的，如果你要打电话骚扰别人或者搞诈骗，那么不好意思，这个软件不是给你准备的。',
+    detail: '为防止骚扰和诈骗，每天最多外拨 5 个不同号码；同一号码重复拨打不受限制，正常人谁会每天打 5 个陌生号码呢。确实有需要的话，请把卡插到手机里去打，我们的软件不支持这个。',
+    ack: '我知道了',
+    unlocked: '已解除每天 5 个不同号码的外拨限制。',
+    setupTitle: '使用前请读我',
   },
 
   settingsSearch: '搜索设置或功能', settingsNoResults: '没有匹配的设置，请换个关键词。', settingsExperimental: '高级集成 · 部分功能仅支持保存配置，尚未接入执行',
