@@ -53,7 +53,7 @@ const iconSize = computed(() => {
   return 20
 })
 const fallbackClass = computed(() =>
-  props.src ? '' : `avatar--fallback-${props.fallback}`
+  props.src ? 'avatar--image' : `avatar--fallback-${props.fallback}`
 )
 </script>
 

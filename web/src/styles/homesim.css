@@ -234,6 +234,9 @@ body .brand-mark > span, .login-brand > span { color: #ffffff; }
 .brand-mark > strong { display: block; max-width: 100%; overflow: hidden; font-size: .75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .brand-mark__avatar { display: grid; place-items: center; overflow: hidden; }
 .brand-mark__avatar .avatar { width: 34px; height: 34px; border-radius: 50%; }
+/* Image avatars fill the whole tile: no palette tile, no inset ring, always round. */
+.app-shell .avatar--image { background: none; box-shadow: none; }
+.app-shell .brand-mark__avatar .avatar { border-radius: 50%; }
 /* Rail avatar: clickable, opens the runtime status popover. */
 button.brand-mark {
   border: 0; background: none; padding: 0; font: inherit; color: inherit;
