@@ -26,6 +26,7 @@ export default {
     selectedCount: '已选 {count}',
     selectAll: '全选',
     clearAll: '取消全选',
+    refresh: '刷新',
     edit: '编辑',
     add: '添加',
     remove: '移除',

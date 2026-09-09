@@ -26,6 +26,7 @@ export default {
     selectedCount: '{count} selected',
     selectAll: 'Select all',
     clearAll: 'Clear all',
+    refresh: 'Refresh',
     edit: 'Edit',
     add: 'Add',
     remove: 'Remove',

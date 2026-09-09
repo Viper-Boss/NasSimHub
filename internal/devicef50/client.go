@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -190,6 +191,34 @@ func (c *Client) goformGet(cmds string) (map[string]string, error) {
 	return body, nil
 }
 
+// decodeStringMap tolerates firmware fields that arrive as JSON numbers or
+// booleans (e.g. wifi_access_sta_num, monthly_rx_bytes) by coercing every
+// scalar to its string form. UseNumber keeps large byte counters exact.
+func decodeStringMap(data io.Reader) (map[string]string, error) {
+	var payload map[string]any
+	decoder := json.NewDecoder(data)
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(payload))
+	for key, value := range payload {
+		switch typed := value.(type) {
+		case string:
+			result[key] = typed
+		case json.Number:
+			result[key] = typed.String()
+		case bool:
+			result[key] = strconv.FormatBool(typed)
+		case nil:
+			result[key] = ""
+		default:
+			result[key] = fmt.Sprint(value)
+		}
+	}
+	return result, nil
+}
+
 func (c *Client) getRaw(path string) (map[string]string, error) {
 	request, err := http.NewRequest(http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
@@ -201,9 +230,9 @@ func (c *Client) getRaw(path string) (map[string]string, error) {
 		return nil, err
 	}
 	defer response.Body.Close()
-	var payload map[string]string
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("F50: cannot decode response: %w", err)
+	payload, decodeErr := decodeStringMap(response.Body)
+	if decodeErr != nil {
+		return nil, fmt.Errorf("F50: cannot decode response: %w", decodeErr)
 	}
 	return payload, nil
 }
@@ -225,9 +254,9 @@ func (c *Client) getWithCookie(path string) (map[string]string, error) {
 	if response.StatusCode == http.StatusFound || response.StatusCode == http.StatusMovedPermanently {
 		return nil, errUnauthorized
 	}
-	var payload map[string]string
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("F50: cannot decode response: %w", err)
+	payload, decodeErr := decodeStringMap(response.Body)
+	if decodeErr != nil {
+		return nil, fmt.Errorf("F50: cannot decode response: %w", decodeErr)
 	}
 	return payload, nil
 }

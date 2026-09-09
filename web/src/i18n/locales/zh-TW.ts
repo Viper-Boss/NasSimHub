@@ -27,6 +27,7 @@ export default {
     selectedCount: '已選 {count}',
     selectAll: '全選',
     clearAll: '取消全選',
+    refresh: '重新整理',
     edit: '編輯',
     add: '新增',
     remove: '移除',
