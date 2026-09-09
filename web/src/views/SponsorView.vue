@@ -17,12 +17,10 @@ function markFailed(key: string): void {
 // 收款二维码（可选）：把图片放到 web/public/sponsor/<key>.png，
 // 例如 web/public/sponsor/btc.png，有图会显示二维码，没图只显示地址。
 const CRYPTO = [
-  { key: 'usdt', name: 'USDT', network: 'TRC-20 · Tron', address: '' },
-  { key: 'btc', name: 'BTC', network: 'Bitcoin', address: '' },
-  { key: 'eth', name: 'ETH / USDT', network: 'ERC-20 · Ethereum', address: '' },
-  { key: 'sol', name: 'SOL', network: 'Solana', address: '' },
-  { key: 'ltc', name: 'LTC', network: 'Litecoin', address: '' },
-  { key: 'xmr', name: 'XMR', network: 'Monero', address: '' }
+  { key: 'usdt', name: 'USDT', network: 'TRC-20 · Tron', address: 'TSMJioeUHKYspry51dysyLbFzPwB6ENJAH' },
+  { key: 'btc', name: 'BTC', network: 'Bitcoin', address: 'bc1qwv5ftmhyzesgwvdkt2ey9ejd54rq2t6q6zjjqs' },
+  { key: 'eth', name: 'ETH / USDT', network: 'ERC-20 · Ethereum', address: '0x15E64405C8dEacE7E802729d03aC9672a017584a' },
+  { key: 'sol', name: 'SOL', network: 'Solana', address: '4NoBgWFNo8qqYJ6LUzxV71MerFJxQ9aNnTXoURNBV1jf' }
 ]
 
 const copiedKey = reactive<Record<string, boolean>>({})
@@ -154,9 +152,9 @@ async function copyAddress(entry: (typeof CRYPTO)[number]): Promise<void> {
 }
 .sponsor__card figcaption { font-size: 11px; color: var(--muted); text-align: center; }
 
-.sponsor__crypto { width: 100%; display: grid; gap: 12px; }
+.sponsor__crypto { width: 100%; max-width: 760px; margin: 0 auto; display: grid; gap: 12px; }
 .sponsor__crypto > h2 { font-size: 15px; color: var(--text); text-align: center; }
-.sponsor__crypto-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.sponsor__crypto-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .sponsor__crypto-card {
   display: grid;
   gap: 8px;
@@ -212,9 +210,6 @@ async function copyAddress(entry: (typeof CRYPTO)[number]): Promise<void> {
 .sponsor__copy:hover { background: var(--border); }
 
 .sponsor__thanks { color: var(--muted); font-size: 12.5px; }
-@media (max-width: 980px) {
-  .sponsor__crypto-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 560px) {
   .sponsor__grid, .sponsor__crypto-grid { grid-template-columns: 1fr; }
 }
