@@ -154,9 +154,9 @@ async function copyAddress(entry: (typeof CRYPTO)[number]): Promise<void> {
 }
 .sponsor__card figcaption { font-size: 11px; color: var(--muted); text-align: center; }
 
-.sponsor__crypto { width: 100%; max-width: 640px; display: grid; gap: 12px; }
+.sponsor__crypto { width: 100%; display: grid; gap: 12px; }
 .sponsor__crypto > h2 { font-size: 15px; color: var(--text); text-align: center; }
-.sponsor__crypto-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sponsor__crypto-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .sponsor__crypto-card {
   display: grid;
   gap: 8px;
@@ -212,6 +212,9 @@ async function copyAddress(entry: (typeof CRYPTO)[number]): Promise<void> {
 .sponsor__copy:hover { background: var(--border); }
 
 .sponsor__thanks { color: var(--muted); font-size: 12.5px; }
+@media (max-width: 980px) {
+  .sponsor__crypto-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 560px) {
   .sponsor__grid, .sponsor__crypto-grid { grid-template-columns: 1fr; }
 }
