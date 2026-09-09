@@ -41,6 +41,7 @@ var forwarderTypes = map[string]bool{
 type homeSIMForwarderConfig struct {
 	WebhookURL    string `json:"webhook_url,omitempty"`
 	Secret        string `json:"secret,omitempty"`
+	SecretSet     bool   `json:"secret_set,omitempty"`
 	CredentialRef string `json:"credential_ref,omitempty"`
 	NKNTopic      string `json:"nkn_topic,omitempty"`
 	NKNAddresses  string `json:"nkn_addresses,omitempty"`
@@ -207,15 +208,44 @@ func (api *API) homeSIMForwarders(response http.ResponseWriter, request *http.Re
 		if next.Forwarders == nil {
 			next.Forwarders = []homeSIMForwarder{}
 		}
+		// The browser receives channels with the secret blanked out (only
+		// secret_set). Keep the stored secret when the client sends it back
+		// empty, otherwise every save would silently wipe it.
+		previousSecret := make(map[string]string, len(current.Forwarders))
+		for _, existing := range current.Forwarders {
+			if existing.Config.Secret != "" {
+				previousSecret[existing.ID] = existing.Config.Secret
+			}
+		}
+		for index := range next.Forwarders {
+			if next.Forwarders[index].Config.Secret == "" {
+				if kept, ok := previousSecret[next.Forwarders[index].ID]; ok {
+					next.Forwarders[index].Config.Secret = kept
+				}
+			}
+			next.Forwarders[index].Config.SecretSet = next.Forwarders[index].Config.Secret != ""
+		}
 		if err := writeHomeSIMJSON(path, next); err != nil {
 			api.writeInternalError(response, request, "save SMS forwarding channels", err)
 			return
 		}
 		current = next
 	}
+	// Never hand stored secrets back to the browser: the 钉钉 signing secret is
+	// enough to forge webhook signatures. GET only reports whether one is set.
+	sanitized := current
+	if len(sanitized.Forwarders) > 0 {
+		sanitized.Forwarders = append([]homeSIMForwarder(nil), sanitized.Forwarders...)
+		for index := range sanitized.Forwarders {
+			if sanitized.Forwarders[index].Config.Secret != "" {
+				sanitized.Forwarders[index].Config.Secret = ""
+				sanitized.Forwarders[index].Config.SecretSet = true
+			}
+		}
+	}
 	response.Header().Set("Cache-Control", "no-store")
 	writeJSON(response, 200, map[string]any{
-		"settings":      current,
+		"settings":      sanitized,
 		"max_channels":  maxForwarderChannels,
 		"runtime_ready": true,
 	})

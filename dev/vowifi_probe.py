@@ -19,7 +19,7 @@ import paramiko
 
 NAS_HOST = os.environ.get("NAS_HOST", "192.168.120.190")
 NAS_USER = os.environ.get("NAS_USER", "***REMOVED***")
-NAS_PASS = os.environ.get("NAS_PASS", "***REMOVED***")
+NAS_PASS = os.environ.get("NAS_PASS", "")
 CONTAINER = "nas-comm-hardware"
 SOCKET_PATH = "/run/modemdeck/agent.sock"
 ECM_IF = "enx3209127b07e1"

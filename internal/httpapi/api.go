@@ -580,6 +580,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.getOnly(response, request, api.diagnosticLogStream)
 	case "/api/v1/diagnostics/logs/download":
 		api.getOnly(response, request, api.downloadDiagnosticLogs)
+	case "/api/v1/vowifi-diagnostics":
+		api.getOnly(response, request, api.vowifiDiagnostics)
 	case "/api/v1/system-metrics":
 		api.getOnly(response, request, api.systemMetrics)
 	case "/api/v1/settings/telegram":
