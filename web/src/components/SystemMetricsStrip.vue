@@ -509,6 +509,9 @@ const flashUsedBytes = computed(() => {
 .tm-chart {
   display: flex;
   gap: 6px;
+  /* Stretch to fill the space between header and bottom-pinned stats. */
+  flex: 1 1 auto;
+  min-height: 96px;
 }
 
 .tm-chart__y {
@@ -536,7 +539,6 @@ const flashUsedBytes = computed(() => {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  height: 96px;
 }
 
 .tm-chart__grid {
@@ -592,12 +594,13 @@ const flashUsedBytes = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 96px;
+  flex: 1 1 auto;
+  min-height: 96px;
 }
 
 .tm-ring {
-  width: 86px;
-  height: 86px;
+  width: 92px;
+  height: 92px;
   transform: rotate(-90deg);
 }
 
@@ -683,6 +686,8 @@ const flashUsedBytes = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  flex: 0 0 auto;
+  padding-top: 8px;
 }
 
 .tm-bar__track {
