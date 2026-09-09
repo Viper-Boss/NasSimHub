@@ -127,7 +127,8 @@ export const homesimEN = {
   },
   f50: {
       connection: 'Connection', baseUrl: 'Device address', username: 'Username',
-      credentialRef: 'Password environment variable', credentialRefHint: 'Only the variable name is stored; set HOMESIM_F50_PASSWORD on the NAS.',
+      password: 'Admin password', passwordPlaceholder: 'Enter the F50 admin password',
+      passwordSetPlaceholder: 'Configured — leave blank to keep', passwordHint: 'Stored encrypted on the NAS; never shown again.',
       save: 'Save connection', settingsSaved: 'F50 connection saved',
       statusTitle: 'Live status', network: 'Network', carrier: 'Carrier', signal: 'Signal', band: 'Band',
       monthlyTraffic: 'Monthly traffic', billingDay: 'Billing day', temperature: 'Temp', wifiClients: 'Wi-Fi clients',
@@ -273,7 +274,8 @@ export const homesimZH = {
   },
   f50: {
       connection: '连接配置', baseUrl: '设备地址', username: '用户名',
-      credentialRef: '密码环境变量', credentialRefHint: '服务器只保存变量名；在 NAS 上设置 HOMESIM_F50_PASSWORD。',
+      password: '管理密码', passwordPlaceholder: '输入 F50 管理密码',
+      passwordSetPlaceholder: '已配置——留空保持不变', passwordHint: '加密存储在 NAS 上，不会再次显示。',
       save: '保存连接', settingsSaved: 'F50 连接已保存',
       statusTitle: '运行状态', network: '网络制式', carrier: '运营商', signal: '信号', band: '频段',
       monthlyTraffic: '本月流量', billingDay: '账单日', temperature: '温度', wifiClients: 'Wi-Fi 客户端',

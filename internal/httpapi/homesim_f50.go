@@ -19,22 +19,39 @@ var (
 
 // The F50 (ZTE 5G MiFi) is the second supported device type. It connects
 // over HTTP to the stock ZTE web backend instead of the local USB modem,
-// so its settings live in the HomeSIM data directory and its password is
-// resolved from an environment variable at request time (never stored).
+// so its settings live in the HomeSIM data directory. The admin password
+// is entered in the UI and sealed at rest with the server settings key
+// (SecretBox, never returned by the API). As a legacy fallback the
+// password is still resolved from HOMESIM_F50_PASSWORD when no sealed
+// password has been saved.
 
 type homeSIMF50Settings struct {
-	Revision      int64  `json:"revision"`
-	BaseURL       string `json:"base_url"`
-	Username      string `json:"username"`
-	CredentialRef string `json:"credential_ref"`
+	Revision int64  `json:"revision"`
+	BaseURL  string `json:"base_url"`
+	Username string `json:"username"`
 }
+
+type homeSIMF50Secret struct {
+	Nonce      []byte `json:"nonce"`
+	Ciphertext []byte `json:"ciphertext"`
+}
+
+type homeSIMF50Store struct {
+	homeSIMF50Settings
+	Password *homeSIMF50Secret `json:"password_secret,omitempty"`
+}
+
+const (
+	homeSIMF50SecretAD    = "homesim-f50"
+	homeSIMF50EnvPassword = "HOMESIM_F50_PASSWORD"
+	homeSIMF50MaxPassword = 128
+)
 
 func defaultHomeSIMF50Settings() homeSIMF50Settings {
 	return homeSIMF50Settings{
-		Revision:      1,
-		BaseURL:       "http://192.168.0.1",
-		Username:      "admin",
-		CredentialRef: "HOMESIM_F50_PASSWORD",
+		Revision: 1,
+		BaseURL:  "http://192.168.0.1",
+		Username: "admin",
 	}
 }
 
@@ -48,9 +65,6 @@ func validHomeSIMF50Settings(settings homeSIMF50Settings) bool {
 	if settings.Username == "" || len(settings.Username) > 64 {
 		return false
 	}
-	if settings.CredentialRef == "" || len(settings.CredentialRef) > 128 || strings.ContainsAny(settings.CredentialRef, " \t\r\n=") {
-		return false
-	}
 	return true
 }
 
@@ -62,22 +76,25 @@ func (api *API) homeSIMF50Path() (string, bool) {
 	return filepath.Join(directory, "f50.json"), true
 }
 
-func (api *API) loadHomeSIMF50Settings() homeSIMF50Settings {
-	current := defaultHomeSIMF50Settings()
+func (api *API) loadHomeSIMF50Store() homeSIMF50Store {
+	store := homeSIMF50Store{homeSIMF50Settings: defaultHomeSIMF50Settings()}
 	path, ok := api.homeSIMF50Path()
 	if !ok {
-		return current
+		return store
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return current
+		return store
 	}
-	var loaded homeSIMF50Settings
+	var loaded homeSIMF50Store
 	if err := json.Unmarshal(data, &loaded); err != nil || loaded.BaseURL == "" {
-		return defaultHomeSIMF50Settings()
+		return homeSIMF50Store{homeSIMF50Settings: defaultHomeSIMF50Settings()}
 	}
 	if loaded.Revision < 1 {
 		loaded.Revision = 1
+	}
+	if loaded.Username == "" {
+		loaded.Username = "admin"
 	}
 	return loaded
 }
@@ -95,56 +112,89 @@ func (api *API) homeSIMF50(response http.ResponseWriter, request *http.Request) 
 	}
 	api.homeSIMF50Mu.Lock()
 	defer api.homeSIMF50Mu.Unlock()
-	current := api.loadHomeSIMF50Settings()
+	current := api.loadHomeSIMF50Store()
 	if request.Method == http.MethodPut {
-		var next homeSIMF50Settings
-		if !decodeJSONBody(response, request, &next) {
+		var payload struct {
+			Revision int64  `json:"revision"`
+			BaseURL  string `json:"base_url"`
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if !decodeJSONBody(response, request, &payload) {
 			return
 		}
+		next := homeSIMF50Settings{Revision: payload.Revision, BaseURL: payload.BaseURL, Username: payload.Username}
 		if !validHomeSIMF50Settings(next) {
-			writeError(response, 400, "invalid_argument", "Invalid F50 settings; base_url must be an http(s) origin and credential_ref must be an environment variable name", "settings")
+			writeError(response, 400, "invalid_argument", "Invalid F50 settings; base_url must be an http(s) origin and username must not be empty", "settings")
 			return
 		}
 		if next.Revision != current.Revision {
 			writeError(response, 409, "revision_conflict", "F50 settings changed; reload before saving", "revision")
 			return
 		}
+		store := homeSIMF50Store{homeSIMF50Settings: next, Password: current.Password}
+		if strings.TrimSpace(payload.Password) != "" {
+			if api.settingsSecrets == nil {
+				writeError(response, 503, "integration_unavailable", "Settings encryption is unavailable", "")
+				return
+			}
+			if len(payload.Password) > homeSIMF50MaxPassword {
+				writeError(response, 400, "invalid_argument", "F50 password is too long", "password")
+				return
+			}
+			nonce, ciphertext, err := api.settingsSecrets.Seal([]byte(payload.Password), []byte(homeSIMF50SecretAD))
+			if err != nil {
+				api.writeInternalError(response, request, "seal F50 password", err)
+				return
+			}
+			store.Password = &homeSIMF50Secret{Nonce: nonce, Ciphertext: ciphertext}
+		}
 		next.Revision++
-		if err := writeHomeSIMJSON(path, next); err != nil {
+		if err := writeHomeSIMJSON(path, store); err != nil {
 			api.writeInternalError(response, request, "save F50 settings", err)
 			return
 		}
-		current = next
+		current = store
 	}
+	passwordSet := current.Password != nil || os.Getenv(homeSIMF50EnvPassword) != ""
 	response.Header().Set("Cache-Control", "no-store")
 	writeJSON(response, 200, map[string]any{
-		"settings":     current,
-		"password_set": os.Getenv(current.CredentialRef) != "",
+		"settings":     current.homeSIMF50Settings,
+		"password_set": passwordSet,
 		"device_kind":  "zte_f50",
 		"capabilities": map[string]bool{"sms": true, "voice": false, "traffic": true},
 	})
 }
 
 func (api *API) f50Client() (*devicef50.Client, error) {
-	settings := api.loadHomeSIMF50Settings()
-	password := strings.TrimSpace(os.Getenv(settings.CredentialRef))
+	store := api.loadHomeSIMF50Store()
+	password := ""
+	if store.Password != nil && api.settingsSecrets != nil {
+		plaintext, err := api.settingsSecrets.Open(store.Password.Nonce, store.Password.Ciphertext, []byte(homeSIMF50SecretAD))
+		if err == nil {
+			password = strings.TrimSpace(string(plaintext))
+		}
+	}
+	if password == "" {
+		password = strings.TrimSpace(os.Getenv(homeSIMF50EnvPassword))
+	}
 	if password == "" {
 		return nil, errF50NotConfigured
 	}
 	if _, ok := api.homeSIMF50Path(); !ok {
 		return nil, errF50NotConfigured
 	}
-	username := settings.Username
+	username := store.Username
 	if username == "" {
 		username = "admin"
 	}
-	return devicef50.New(settings.BaseURL, username, password), nil
+	return devicef50.New(store.BaseURL, username, password), nil
 }
 
 func (api *API) writeF50Error(response http.ResponseWriter, request *http.Request, err error) {
 	switch {
 	case err == errF50NotConfigured:
-		writeError(response, 400, "f50_not_configured", "Environment variable "+api.loadHomeSIMF50Settings().CredentialRef+" is not set on the server", "credential_ref")
+		writeError(response, 400, "f50_not_configured", "F50 admin password is not configured; set it in the connection settings", "password")
 	case err == errF50StorageMissing:
 		writeError(response, 503, "integration_unavailable", "NasSimHub server storage is unavailable", "")
 	default:

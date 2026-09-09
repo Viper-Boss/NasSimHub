@@ -138,13 +138,13 @@ func TestF50SettingsPersistAndValidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := `{"revision":1,"base_url":"http://192.168.0.1/","username":"admin","credential_ref":"HOMESIM_F50_PASSWORD"}`
+	bad := `{"revision":1,"base_url":"http://192.168.0.1/","username":"admin"}`
 	save := httptest.NewRecorder()
 	api.homeSIMF50(save, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/f50", bytes.NewReader([]byte(bad))))
 	if save.Code != 400 {
 		t.Fatalf("trailing slash base_url accepted: %d", save.Code)
 	}
-	good := `{"revision":1,"base_url":"http://192.168.0.1","username":"admin","credential_ref":"HOMESIM_F50_PASSWORD"}`
+	good := `{"revision":1,"base_url":"http://192.168.0.1","username":"admin"}`
 	save = httptest.NewRecorder()
 	api.homeSIMF50(save, newHomeSIMJSONRequest(http.MethodPut, "/api/v1/settings/homesim/f50", bytes.NewReader([]byte(good))))
 	if save.Code != 200 {

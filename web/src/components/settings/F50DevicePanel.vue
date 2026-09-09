@@ -22,6 +22,8 @@ const settingsLoading = ref(true)
 const saving = ref(false)
 const settingsError = ref('')
 const settingsSaved = ref(false)
+const password = ref('')
+const passwordSet = ref(false)
 
 // Live status
 const status = ref<HomeSIMF50Status | null>(null)
@@ -41,7 +43,9 @@ async function loadSettings(): Promise<void> {
   settingsLoading.value = true
   settingsError.value = ''
   try {
-    settings.value = await getHomeSIMF50Settings()
+    const result = await getHomeSIMF50Settings()
+    settings.value = result.settings
+    passwordSet.value = result.passwordSet
   } catch (error) {
     settingsError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -55,7 +59,14 @@ async function saveSettings(): Promise<void> {
   settingsError.value = ''
   settingsSaved.value = false
   try {
-    settings.value = await saveHomeSIMF50Settings(settings.value)
+    const payload: HomeSIMF50Settings = { ...settings.value }
+    if (password.value.trim()) payload.password = password.value
+    const result = await saveHomeSIMF50Settings(payload)
+    settings.value = result.settings
+    if (password.value.trim()) {
+      passwordSet.value = true
+      password.value = ''
+    }
     settingsSaved.value = true
     await refreshStatus()
   } catch (error) {
@@ -171,9 +182,15 @@ onBeforeUnmount(() => {
             <input v-model="settings.username" type="text" autocomplete="off" :disabled="saving" />
           </label>
           <label class="field">
-            <span>{{ t('homesim.f50.credentialRef') }}</span>
-            <input v-model="settings.credential_ref" type="text" autocomplete="off" :disabled="saving" />
-            <small class="field-status">{{ t('homesim.f50.credentialRefHint') }}</small>
+            <span>{{ t('homesim.f50.password') }}</span>
+            <input
+              v-model="password"
+              type="password"
+              autocomplete="new-password"
+              :disabled="saving"
+              :placeholder="passwordSet ? t('homesim.f50.passwordSetPlaceholder') : t('homesim.f50.passwordPlaceholder')"
+            />
+            <small class="field-status">{{ t('homesim.f50.passwordHint') }}</small>
           </label>
         </div>
         <p v-if="settingsError" class="field-error" role="alert">{{ settingsError }}</p>

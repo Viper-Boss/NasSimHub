@@ -3072,7 +3072,13 @@ export type HomeSIMF50Settings = {
   revision: number
   base_url: string
   username: string
-  credential_ref: string
+  /** Write-only: the F50 admin password. Never returned by the API. */
+  password?: string
+}
+
+export type HomeSIMF50SettingsResult = {
+  settings: HomeSIMF50Settings
+  passwordSet: boolean
 }
 
 export type HomeSIMF50Status = {
@@ -3103,22 +3109,22 @@ export type HomeSIMF50Message = {
   Tag: string
 }
 
-export async function getHomeSIMF50Settings(): Promise<HomeSIMF50Settings> {
+export async function getHomeSIMF50Settings(): Promise<HomeSIMF50SettingsResult> {
   if (fixtureMode) {
-    return { revision: 1, base_url: 'http://192.168.0.1', username: 'admin', credential_ref: 'HOMESIM_F50_PASSWORD' }
+    return { settings: { revision: 1, base_url: 'http://192.168.0.1', username: 'admin' }, passwordSet: true }
   }
-  const result = await get(`${API_ROOT}/settings/homesim/f50`) as { settings: HomeSIMF50Settings }
+  const result = await get(`${API_ROOT}/settings/homesim/f50`) as { settings: HomeSIMF50Settings, password_set?: boolean }
   if (!result?.settings || !Number.isInteger(result.settings.revision) || typeof result.settings.base_url !== 'string') {
     throw new Error('F50 设置响应无效。')
   }
-  return result.settings
+  return { settings: result.settings, passwordSet: !!result.password_set }
 }
 
-export async function saveHomeSIMF50Settings(settings: HomeSIMF50Settings): Promise<HomeSIMF50Settings> {
+export async function saveHomeSIMF50Settings(settings: HomeSIMF50Settings): Promise<HomeSIMF50SettingsResult> {
   if (fixtureMode) throw new Error('当前为演示模式，F50 设置未保存到 NAS。')
-  const result = await writeJSON(`${API_ROOT}/settings/homesim/f50`, 'PUT', settings, 200) as { settings: HomeSIMF50Settings }
+  const result = await writeJSON(`${API_ROOT}/settings/homesim/f50`, 'PUT', settings, 200) as { settings: HomeSIMF50Settings, password_set?: boolean }
   if (!result?.settings || !Number.isInteger(result.settings.revision)) throw new Error('保存响应无效，请重新加载确认结果。')
-  return result.settings
+  return { settings: result.settings, passwordSet: !!result.password_set }
 }
 
 const f50MockStatus = (): HomeSIMF50Status => ({
