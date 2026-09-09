@@ -524,6 +524,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.homeSIMNetworkSwitches(response, request)
 	case "/api/v1/settings/homesim/call-filter":
 		api.homeSIMCallFilter(response, request)
+	case "/api/v1/settings/homesim/forwarders":
+		api.homeSIMForwarders(response, request)
+	case "/api/v1/settings/homesim/forwarders/test":
+		api.postOnly(response, request, api.homeSIMForwarderTest)
 	case "/api/v1/homesim/f50/status":
 		api.getOnly(response, request, api.f50Status)
 	case "/api/v1/homesim/f50/sms":
