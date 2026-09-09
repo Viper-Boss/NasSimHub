@@ -2,6 +2,7 @@ package modemmanager
 
 import (
 	"context"
+	"time"
 
 	"github.com/human-agent65535/modemdeck/agent/internal/domain"
 )
@@ -24,6 +25,13 @@ type QDC507VoiceRuntime interface {
 	Status(domain.Line) domain.QDC507VoiceRuntimeStatus
 }
 
+// ModuleShellRunner is an optional extension of the QDC507 voice runtime that
+// runs shell commands on the module's own Linux system. System metrics use it
+// to observe the module's CPU, memory and flash instead of the host's.
+type ModuleShellRunner interface {
+	ModuleShell(ctx context.Context, command string, timeout time.Duration) (string, error)
+}
+
 type QDC507USBProvisioner interface {
 	Ensure(context.Context, domain.Line) (bool, error)
 }
@@ -34,6 +42,7 @@ type Options struct {
 	RadioStateFile       string
 	USBRecovery          USBRecovery
 	QDC507VoiceRuntime   QDC507VoiceRuntime
+	ModuleShell          ModuleShellRunner
 	QDC507USBProvisioner QDC507USBProvisioner
 }
 

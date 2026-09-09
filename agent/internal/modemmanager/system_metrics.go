@@ -14,12 +14,15 @@ import (
 	"github.com/human-agent65535/modemdeck/agent/internal/domain"
 )
 
-// SystemMetrics observes NAS host health (CPU load, memory, flash usage, the
-// 4G data-port counters) plus the module temperature over the ModemManager AT
-// passthrough. Everything is best-effort: individual collectors that fail are
-// simply omitted from the result so the dashboard can render what is known.
+// SystemMetrics observes the QDC507 module's own health (CPU load, memory,
+// flash usage, temperatures, process counts) over the module ADB shell, plus
+// the 4G data-port counters on the host and the serving cell over the
+// ModemManager AT passthrough. Everything is best-effort: individual
+// collectors that fail are simply omitted from the result so the dashboard
+// can render what is known.
 //
-// The temperature query costs a modem round-trip, so it is cached briefly.
+// The temperature query and the module shell probe each cost a round trip,
+// so both are cached briefly.
 
 const (
 	systemMetricsTempTTL = 30 * time.Second
@@ -39,11 +42,7 @@ var numberPattern = regexp.MustCompile(`\d+(?:\.\d+)?`)
 
 func (p *Provider) SystemMetrics(ctx context.Context) (domain.SystemMetrics, error) {
 	metrics := domain.SystemMetrics{ObservedAt: time.Now().UTC()}
-	p.collectLoad(&metrics)
-	p.collectMemory(&metrics)
-	collectFlash(&metrics)
-	collectFlashDetails(&metrics)
-	p.collectCPUDetails(&metrics)
+	p.collectModuleDetails(ctx, &metrics)
 	metrics.Interfaces = collectNetworkCounters()
 	metrics.ModemTempCelsius = p.cachedModemTemperature(ctx)
 	metrics.Cellular = p.cachedCellular(ctx)
@@ -53,109 +52,11 @@ func (p *Provider) SystemMetrics(ctx context.Context) (domain.SystemMetrics, err
 	return metrics, nil
 }
 
-func (p *Provider) collectLoad(metrics *domain.SystemMetrics) {
-	data, err := os.ReadFile("/proc/loadavg")
-	if err != nil {
-		return
-	}
-	fields := strings.Fields(string(data))
-	if len(fields) < 3 {
-		return
-	}
-	load1, err1 := strconv.ParseFloat(fields[0], 64)
-	load5, err5 := strconv.ParseFloat(fields[1], 64)
-	load15, err15 := strconv.ParseFloat(fields[2], 64)
-	if err1 != nil || err5 != nil || err15 != nil {
-		return
-	}
-	cores := systemCPUCount()
-	metrics.LoadRaw1 = load1
-	metrics.LoadRaw5 = load5
-	metrics.LoadRaw15 = load15
-	metrics.Cores = cores
-	if cores > 0 {
-		metrics.LoadPercent1 = percentOfCapacity(load1, cores)
-		metrics.LoadPercent5 = percentOfCapacity(load5, cores)
-		metrics.LoadPercent = percentOfCapacity(load15, cores)
-	}
-}
-
 func percentOfCapacity(load float64, cores int) float64 {
 	if cores <= 0 {
 		return 0
 	}
 	return load / float64(cores) * 100
-}
-
-func systemCPUCount() int {
-	data, err := os.ReadFile("/proc/cpuinfo")
-	if err != nil {
-		return 0
-	}
-	cores := 0
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "processor") {
-			cores++
-		}
-	}
-	return cores
-}
-
-func (p *Provider) collectMemory(metrics *domain.SystemMetrics) {
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		return
-	}
-	values := make(map[string]uint64)
-	for _, line := range strings.Split(string(data), "\n") {
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		fields := strings.Fields(parts[1])
-		if len(fields) == 0 {
-			continue
-		}
-		value, err := strconv.ParseUint(fields[0], 10, 64)
-		if err != nil {
-			continue
-		}
-		values[parts[0]] = value * 1024
-	}
-	total := values["MemTotal"]
-	available := values["MemAvailable"]
-	if total == 0 {
-		return
-	}
-	metrics.MemoryTotalBytes = total
-	metrics.MemoryAvailableBytes = available
-	metrics.MemoryUsedPercent = float64(total-available) / float64(total) * 100
-	metrics.MemoryCachedBytes = values["Cached"]
-	metrics.MemoryBuffersBytes = values["Buffers"]
-}
-
-// collectFlash reports usage of the filesystem that holds the reviewed voice
-// runtime bind mount, which is the host SSD data volume. When the mount is
-// unavailable the container /tmp is reported as a degraded fallback.
-func collectFlash(metrics *domain.SystemMetrics) {
-	path := strings.TrimSpace(os.Getenv("MODEMDECK_QDC507_VOICE_RUNTIME_DIR"))
-	if path == "" {
-		path = "/tmp"
-	}
-	total, free, err := statfsBytes(path)
-	if err != nil {
-		path = "/tmp"
-		total, free, err = statfsBytes(path)
-		if err != nil {
-			return
-		}
-	}
-	metrics.FlashPath = path
-	metrics.FlashTotalBytes = total
-	metrics.FlashFreeBytes = free
-	if total > 0 {
-		metrics.FlashUsedPercent = float64(total-free) / float64(total) * 100
-	}
 }
 
 func collectNetworkCounters() []domain.NetworkInterfaceCounters {

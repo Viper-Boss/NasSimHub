@@ -98,6 +98,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 		BearerStateFile:    *bearerStateFile,
 		RadioStateFile:     *radioStateFile,
 		QDC507VoiceRuntime: qdc507VoiceRuntime,
+		ModuleShell:        qdc507VoiceRuntime,
 	})
 	if err != nil {
 		return err

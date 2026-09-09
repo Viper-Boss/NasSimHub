@@ -182,6 +182,35 @@ func New(options Options) (*Manager, error) {
 	return manager, nil
 }
 
+// ModuleShell runs one shell command on the first online QDC507 ADB
+// transport. It reuses the voice runtime's ADB server socket, so metric
+// probes never spawn a second server or fight over the serial ports. The
+// returned output is the raw remote output; a nonzero remote status is not
+// an error because callers parse tagged lines and tolerate missing ones.
+func (m *Manager) ModuleShell(ctx context.Context, command string, timeout time.Duration) (string, error) {
+	if !m.Enabled() {
+		return "", fmt.Errorf("QDC507 voice runtime is not configured")
+	}
+	if ctx == nil {
+		return "", fmt.Errorf("QDC507 module shell context is required")
+	}
+	devices, err := m.client.Devices(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list QDC507 ADB devices: %w", err)
+	}
+	for _, device := range devices {
+		if device.State != "device" || device.Selector == "" {
+			continue
+		}
+		result, err := m.client.Shell(ctx, device.Selector, command, timeout)
+		if err != nil {
+			return result.Output, fmt.Errorf("run QDC507 module shell command: %w", err)
+		}
+		return result.Output, nil
+	}
+	return "", fmt.Errorf("no QDC507 ADB device is online")
+}
+
 func (m *Manager) Enabled() bool {
 	return m != nil && m.runtimeDirectory != ""
 }

@@ -48,6 +48,7 @@ type Provider struct {
 	usbRecovery   USBRecovery
 	qdc507Voice   QDC507VoiceRuntime
 	qdc507USB     QDC507USBProvisioner
+	moduleShell   ModuleShellRunner
 
 	callMu        sync.Mutex
 	configMu      sync.Mutex
@@ -63,6 +64,7 @@ type Provider struct {
 	servingRadioStates map[string]servingRadioState
 	modemTemp          modemTempCache
 	cellular           cellularCache
+	moduleSnapshot     moduleSnapshotCache
 
 	voiceProbeMu sync.Mutex
 	voiceProbes  map[string]voiceProbeResult
@@ -202,6 +204,7 @@ func newProviderWithOptions(
 		usbRecovery:        options.USBRecovery,
 		qdc507Voice:        options.QDC507VoiceRuntime,
 		qdc507USB:          options.QDC507USBProvisioner,
+		moduleShell:        options.ModuleShell,
 		terminalCalls:      make(map[string]terminalCallProjection),
 		networkOperations:  make(map[string]struct{}),
 		signalSetupStates:  make(map[string]signalSetupState),
