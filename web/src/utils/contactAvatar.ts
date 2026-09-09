@@ -6,16 +6,19 @@ const OUTPUT_SIZES = [384, 320, 256, 192]
 const OUTPUT_QUALITIES = [0.86, 0.8, 0.74, 0.68]
 
 function loadImage(file: File): Promise<{ image: HTMLImageElement; release: () => void }> {
-  const url = URL.createObjectURL(file)
-  const image = new Image()
-  image.decoding = 'async'
+  // Decode from a data URL instead of a blob: URL — the app's CSP allows
+  // img-src data: but not blob:, which made every upload fail to decode.
   return new Promise((resolve, reject) => {
-    image.onload = () => resolve({ image, release: () => URL.revokeObjectURL(url) })
-    image.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error(translate('runtime.imageReadFailed')))
+    const image = new Image()
+    image.decoding = 'async'
+    const reader = new FileReader()
+    reader.onload = () => {
+      image.src = String(reader.result || '')
     }
-    image.src = url
+    reader.onerror = () => reject(new Error(translate('runtime.imageReadFailed')))
+    image.onload = () => resolve({ image, release: () => undefined })
+    image.onerror = () => reject(new Error(translate('runtime.imageReadFailed')))
+    reader.readAsDataURL(file)
   })
 }
 
