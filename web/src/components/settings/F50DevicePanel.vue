@@ -326,7 +326,7 @@ onBeforeUnmount(() => {
     <!-- Live status hero -->
     <div class="f50-section">
       <header class="f50-section__heading">
-        <Signal :size="17" />
+        <Signal :size="18" />
         <h3>{{ t('homesim.f50.statusTitle') }}</h3>
         <button class="f50-refresh" type="button" :disabled="statusLoading" @click="refreshStatus">
           <RefreshCw class="f50-refresh__icon" :class="{ spin: statusLoading }" :size="14" />
@@ -346,7 +346,7 @@ onBeforeUnmount(() => {
         <!-- Realtime rates with sparklines -->
         <div class="f50-rates">
           <div class="f50-ratecard f50-ratecard--down">
-            <header><ArrowDown :size="13" /> <span>{{ t('homesim.f50.realtimeDown') }}</span></header>
+            <header><ArrowDown :size="14" /> <span>{{ t('homesim.f50.realtimeDown') }}</span></header>
             <strong>{{ rxRate }}</strong>
             <svg class="f50-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
               <polygon v-if="rxArea" class="f50-spark__area" :points="rxArea"></polygon>
@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
             </svg>
           </div>
           <div class="f50-ratecard f50-ratecard--up">
-            <header><ArrowUp :size="13" /> <span>{{ t('homesim.f50.realtimeUp') }}</span></header>
+            <header><ArrowUp :size="14" /> <span>{{ t('homesim.f50.realtimeUp') }}</span></header>
             <strong>{{ txRate }}</strong>
             <svg class="f50-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
               <polygon v-if="txArea" class="f50-spark__area" :points="txArea"></polygon>
@@ -366,7 +366,7 @@ onBeforeUnmount(() => {
         <!-- Cellular signal quality -->
         <div class="f50-card">
           <header class="f50-card__head">
-            <Signal :size="15" />
+            <Signal :size="16" />
             <h4>{{ t('homesim.f50.signalTitle') }}</h4>
             <div class="f50-signalbars f50-signalbars--sm" aria-hidden="true">
               <span
@@ -400,7 +400,7 @@ onBeforeUnmount(() => {
         <!-- Plan traffic -->
         <div class="f50-card">
           <header class="f50-card__head">
-            <Gauge :size="15" />
+            <Gauge :size="16" />
             <h4>{{ t('homesim.f50.planTitle') }}</h4>
           </header>
           <div class="f50-plan__row">
@@ -411,9 +411,9 @@ onBeforeUnmount(() => {
             <div class="f50-traffic__bar-fill" :style="{ width: (dataLimit?.percent ?? 0) + '%' }"></div>
           </div>
           <div class="f50-plan__split">
-            <div><small><ArrowDown :size="11" /> {{ t('homesim.f50.monthlyDown') }}</small><strong>{{ planTraffic?.down ?? '--' }}</strong></div>
+            <div><small><ArrowDown :size="14" /> {{ t('homesim.f50.monthlyDown') }}</small><strong>{{ planTraffic?.down ?? '--' }}</strong></div>
             <div class="f50-plan__divider" aria-hidden="true"></div>
-            <div><small><ArrowUp :size="11" /> {{ t('homesim.f50.monthlyUp') }}</small><strong>{{ planTraffic?.up ?? '--' }}</strong></div>
+            <div><small><ArrowUp :size="14" /> {{ t('homesim.f50.monthlyUp') }}</small><strong>{{ planTraffic?.up ?? '--' }}</strong></div>
             <span v-if="resetCountdown !== null" class="f50-plan__reset">{{ t('homesim.f50.resetIn', { days: resetCountdown ?? 0 }) }}</span>
           </div>
         </div>
@@ -421,9 +421,9 @@ onBeforeUnmount(() => {
         <!-- Hardware & connection -->
         <div class="f50-card">
           <header class="f50-card__head">
-            <Zap :size="15" />
+            <Zap :size="16" />
             <h4>{{ t('homesim.f50.hwTitle') }}</h4>
-            <span class="f50-card__tag"><Wifi :size="12" /> Wi-Fi: {{ status.WifiStaNum || '0' }} {{ t('homesim.f50.units') }}</span>
+            <span class="f50-card__tag"><Wifi :size="14" /> Wi-Fi: {{ status.WifiStaNum || '0' }} {{ t('homesim.f50.units') }}</span>
           </header>
           <div class="f50-hwgrid">
             <div class="f50-hw"><span>CPU</span><strong>{{ status.CPUUtility || '--' }}%</strong></div>
@@ -432,7 +432,7 @@ onBeforeUnmount(() => {
             <div class="f50-hw"><span>{{ t('homesim.f50.temperature') }}</span><strong>{{ status.Temperature || '--' }}°C</strong></div>
           </div>
           <p v-if="firmware" class="f50-card__meta f50-card__meta--fw">
-            <BatteryCharging :size="11" /> {{ firmware }}
+            <BatteryCharging :size="14" /> {{ firmware }}
           </p>
         </div>
 
@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
     <!-- Messages -->
     <div class="f50-section">
       <header class="f50-section__heading">
-        <Phone :size="17" />
+        <Phone :size="18" />
         <h3>{{ t('homesim.f50.smsTitle') }}</h3>
         <span v-if="status?.SMSUnread && Number(status.SMSUnread) > 0" class="f50-unread-badge">{{ status.SMSUnread }}</span>
         <button class="f50-refresh" type="button" :disabled="smsLoading" @click="refreshSMS">
@@ -510,8 +510,8 @@ onBeforeUnmount(() => {
               class="f50-chip"
               @click="copyCode(message)"
             >
-              <Check v-if="copiedMessageId === message.ID" :size="12" />
-              <Copy v-else :size="12" />
+              <Check v-if="copiedMessageId === message.ID" :size="14" />
+              <Copy v-else :size="14" />
               {{ copiedMessageId === message.ID ? t('homesim.f50.codeCopied') : t('homesim.f50.copyCode') }}
             </button>
             <button

@@ -529,8 +529,8 @@ onBeforeUnmount(() => {
           @click="toggleRecording"
         >
           <span class="call-footer-action__icon" aria-hidden="true">
-            <Square v-if="callRecordingState.enabled" :size="18" fill="currentColor" />
-            <Circle v-else :size="20" fill="currentColor" />
+            <Square v-if="callRecordingState.enabled" :size="24" fill="currentColor" />
+            <Circle v-else :size="24" fill="currentColor" />
           </span>
           <small>{{ t('calls.record') }}</small>
         </button>
