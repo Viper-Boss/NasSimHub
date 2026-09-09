@@ -256,8 +256,18 @@ const flashUsedBytes = computed(() => {
 </script>
 
 <template>
-  <p v-if="channelStale" class="tm__channel tm__channel--stale">{{ t('dashboard.metricsChannelStale') }}</p>
-  <div v-if="systemMetricsState.available && current && !channelDown" class="tm">
+  <!-- Keep the four tiles mounted whenever we hold any snapshot: a wedged
+       module channel must not collapse the dashboard layout. Values freeze at
+       the last good sample and the banner explains why they stopped moving. -->
+  <p
+    v-if="channelDown || channelStale || !systemMetricsState.available"
+    class="tm__channel tm__channel--stale"
+  >{{ channelDown
+    ? t('dashboard.metricsChannelDown')
+    : channelStale
+      ? t('dashboard.metricsChannelStale')
+      : (systemMetricsState.error || t('dashboard.metricsUnavailable')) }}</p>
+  <div v-if="current" class="tm">
 
     <article class="tm-box">
       <header class="tm-box__head">
