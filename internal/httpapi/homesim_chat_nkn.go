@@ -3,6 +3,8 @@ package httpapi
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -23,6 +25,7 @@ import (
 
 const (
 	nknChatType        = "homesim.chat.v1"
+	nknChatAckType     = "homesim.chat.ack.v1"
 	nknChatMaxText     = 2000
 	nknChatMaxPayload  = 4096
 	nknChatHistoryRead = 500
@@ -30,14 +33,17 @@ const (
 
 type nknChatEnvelope struct {
 	Type string `json:"type"`
-	Text string `json:"text"`
+	Text string `json:"text,omitempty"`
+	ID   string `json:"id,omitempty"`
 }
 
 type nknChatMessage struct {
-	Ts   int64  `json:"ts"`
-	Dir  string `json:"dir"` // "in" or "out"
-	Peer string `json:"peer"`
-	Text string `json:"text"`
+	Ts     int64  `json:"ts"`
+	Dir    string `json:"dir"` // "in" or "out"
+	Peer   string `json:"peer"`
+	Text   string `json:"text"`
+	ID     string `json:"id,omitempty"`
+	Status string `json:"status,omitempty"` // out only: "sent" -> "delivered"
 }
 
 type nknChatStore struct {
@@ -125,15 +131,83 @@ func (api *API) receiveNKNChat(message *nkn.Message) bool {
 		return false
 	}
 	var envelope nknChatEnvelope
-	if json.Unmarshal(message.Data, &envelope) != nil || envelope.Type != nknChatType {
+	if json.Unmarshal(message.Data, &envelope) != nil {
+		return false
+	}
+	switch envelope.Type {
+	case nknChatAckType:
+		// Delivery receipts from a peer running NasSimHub: flip matching out
+		// messages to "delivered" so the UI can show the double check mark.
+		if len(envelope.ID) > 0 {
+			markNKNChatDelivered(envelope.ID)
+		}
+		return true
+	case nknChatType:
+	default:
 		return false
 	}
 	text := strings.TrimSpace(envelope.Text)
 	if text == "" || len(text) > nknChatMaxText {
 		return true
 	}
-	appendNKNChatMessage(nknChatMessage{Ts: time.Now().Unix(), Dir: "in", Peer: message.Src, Text: text})
+	id := envelope.ID
+	if id == "" {
+		id = nknChatNewID()
+	}
+	appendNKNChatMessage(nknChatMessage{Ts: time.Now().Unix(), Dir: "in", Peer: message.Src, Text: text, ID: id})
+	// Best-effort delivery receipt back to the sender so their check marks
+	// can turn double. Runs async; failure just means the peer keeps the
+	// single tick, which is honest.
+	go func(src, ackID string) {
+		seed, err := api.managedNKNSeed()
+		if err != nil {
+			return
+		}
+		entry, err := api.homeSIMNKNClient(seed)
+		if err != nil || entry.client == nil || entry.client.IsClosed() {
+			return
+		}
+		payload, _ := json.Marshal(nknChatEnvelope{Type: nknChatAckType, ID: ackID})
+		_, _ = entry.client.Send(nkn.NewStringArray(src), payload, &nkn.MessageConfig{NoReply: true, MaxHoldingSeconds: 600})
+	}(message.Src, id)
 	return true
+}
+
+// markNKNChatDelivered flips an out message to delivered in memory and on
+// disk (the JSONL file is small, so a full rewrite is fine).
+func markNKNChatDelivered(id string) {
+	nknChatMessages.mu.Lock()
+	found := false
+	for index := range nknChatMessages.mem {
+		if nknChatMessages.mem[index].ID == id && nknChatMessages.mem[index].Dir == "out" {
+			nknChatMessages.mem[index].Status = "delivered"
+			found = true
+		}
+	}
+	var snapshot []nknChatMessage
+	if found {
+		snapshot = append(snapshot, nknChatMessages.mem...)
+	}
+	nknChatMessages.mu.Unlock()
+	if !found {
+		return
+	}
+	if dir, ok := apiChatDir(); ok {
+		var builder strings.Builder
+		for _, message := range snapshot {
+			data, err := json.Marshal(message)
+			if err != nil {
+				continue
+			}
+			builder.Write(data)
+			builder.WriteByte('\n')
+		}
+		target := filepath.Join(dir, "messages.jsonl")
+		tmp := target + ".tmp"
+		if os.WriteFile(tmp, []byte(builder.String()), 0o600) == nil {
+			_ = os.Rename(tmp, target)
+		}
+	}
 }
 
 func (api *API) nknChatMessagesHandler(w http.ResponseWriter, r *http.Request) {
@@ -203,13 +277,24 @@ func (api *API) nknChatSendHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "nkn_unavailable", "NKN 连接不可用，请稍后重试", "")
 		return
 	}
-	payload, _ := json.Marshal(nknChatEnvelope{Type: nknChatType, Text: input.Text})
+	messageID := nknChatNewID()
+	payload, _ := json.Marshal(nknChatEnvelope{Type: nknChatType, Text: input.Text, ID: messageID})
 	if _, err := client.client.Send(nkn.NewStringArray(input.To), payload, &nkn.MessageConfig{NoReply: true, MaxHoldingSeconds: 3600}); err != nil {
 		writeError(w, 502, "nkn_send_failed", "NKN 发送失败，请稍后重试", "")
 		return
 	}
-	appendNKNChatMessage(nknChatMessage{Ts: time.Now().Unix(), Dir: "out", Peer: input.To, Text: input.Text})
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	ts := time.Now().Unix()
+	appendNKNChatMessage(nknChatMessage{Ts: ts, Dir: "out", Peer: input.To, Text: input.Text, ID: messageID, Status: "sent"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": messageID, "ts": ts})
+}
+
+// nknChatNewID generates a random 16-hex-char message id for delivery receipts.
+func nknChatNewID() string {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(buf)
 }
 
 var _ = context.Background

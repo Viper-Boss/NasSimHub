@@ -2941,6 +2941,8 @@ export interface NKNChatMessage {
   dir: 'in' | 'out'
   peer: string
   text: string
+  id?: string
+  status?: '' | 'sending' | 'sent' | 'delivered' // 'sending' is client-side only
 }
 
 export async function getNKNChatMessages(after = 0): Promise<NKNChatMessage[]> {
@@ -2955,9 +2957,10 @@ export async function getNKNChatMessages(after = 0): Promise<NKNChatMessage[]> {
   ))
 }
 
-export async function sendNKNChatMessage(to: string, text: string): Promise<void> {
+export async function sendNKNChatMessage(to: string, text: string): Promise<{ id?: string; ts?: number }> {
   if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
-  await writeJSON(`${API_ROOT}/nkn/chat/send`, 'POST', { to, text }, 200)
+  const result = await writeJSON(`${API_ROOT}/nkn/chat/send`, 'POST', { to, text }, 200) as { ok?: boolean; id?: string; ts?: number } | null
+  return { id: result?.id, ts: result?.ts }
 }
 
 export interface NKNNetworkNodeReport {
