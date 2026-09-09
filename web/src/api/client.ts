@@ -3089,16 +3089,27 @@ export type HomeSIMF50Status = {
   RSRQ: string
   SNR: string
   Bands: string
+  LTEBand: string
+  NRBand: string
   RealtimeRxThrpt: string
   RealtimeTxThrpt: string
   MonthlyRxBytes: string
   MonthlyTxBytes: string
+  TotalRxBytes: string
+  TotalTxBytes: string
   BillingDay: string
+  ClearDate: string
+  DataLimitSize: string
+  DataLimitUnit: string
   Temperature: string
   CPUTemp: string
+  ICTemp: string
+  CPUUtility: string
+  MemUtility: string
   WifiStaNum: string
   SMSUnread: string
   FirmwareWA: string
+  FirmwareCR: string
 }
 
 export type HomeSIMF50Message = {
@@ -3135,16 +3146,27 @@ const f50MockStatus = (): HomeSIMF50Status => ({
   RSRQ: '-10',
   SNR: '13',
   Bands: 'n78',
+  LTEBand: 'B3',
+  NRBand: 'n78',
   RealtimeRxThrpt: '12.5KB/s',
   RealtimeTxThrpt: '3.2KB/s',
   MonthlyRxBytes: '19964354560',
   MonthlyTxBytes: '2040109466',
+  TotalRxBytes: '88096413696',
+  TotalTxBytes: '9012345678',
   BillingDay: '1',
+  ClearDate: '',
+  DataLimitSize: '100',
+  DataLimitUnit: 'GB',
   Temperature: '41',
   CPUTemp: '44',
+  ICTemp: '43',
+  CPUUtility: '23',
+  MemUtility: '57',
   WifiStaNum: '2',
   SMSUnread: '1',
-  FirmwareWA: 'F50 2.3.2'
+  FirmwareWA: 'F50 2.3.2',
+  FirmwareCR: ''
 })
 
 const f50MockMessages = (): HomeSIMF50Message[] => [
