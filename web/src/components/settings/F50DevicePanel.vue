@@ -160,7 +160,7 @@ function formatSMSDate(raw: string): string {
 
 function extractCode(content: string): string {
   const match = content.match(/(?<![\d])(\d{4,8})(?![\d])/)
-  return match ? match[1] : ''
+  return match?.[1] ?? ''
 }
 
 function parseDb(raw: string): number {
