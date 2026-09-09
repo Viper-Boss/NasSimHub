@@ -34,6 +34,11 @@ services:
         target: /var/lib/modemdeck/state
   api:
     container_name: nas-comm-api
+    # fnOS trim-kernel storage sandbox: only fsuid 0 can access /mnt/docker-data
+    privileged: true
+    security_opt:
+      - label=disable
+
     image: nas-comm-api:fnos-local-0.1
     environment:
       MODEMDECK_RECORDINGS_PATH: /var/lib/modemdeck/recordings
@@ -61,6 +66,12 @@ services:
           create_host_path: false
   modemdeck:
     container_name: nas-comm-web
+    # fnOS trim-kernel storage sandbox: only fsuid 0 can access /mnt/docker-data
+    privileged: true
+    security_opt:
+      - label=disable
+    user: "0:0"
+
     image: nas-comm-web:fnos-local-0.1
     volumes:
       - type: bind
