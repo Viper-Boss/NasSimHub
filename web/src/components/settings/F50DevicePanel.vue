@@ -159,6 +159,7 @@ onBeforeUnmount(() => {
         <LoaderCircle class="spin" :size="18" />
         {{ t('common.loading') }}
       </div>
+      <p v-else-if="settingsError && !settings" class="field-error" role="alert">{{ settingsError }}</p>
       <template v-else-if="settings">
         <div class="settings-form-grid">
           <label class="field">
