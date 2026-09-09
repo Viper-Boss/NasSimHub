@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Check, CheckCheck, Clock, Copy, Send } from '@lucide/vue'
+import { Check, CheckCheck, Clock, Copy, Send, Trash2 } from '@lucide/vue'
 import {
   getNKNChatMessages,
   sendNKNChatMessage,
+  clearNKNChatMessages,
   type NKNChatMessage
 } from '../api/client'
 import PageContentFrame from '../components/PageContentFrame.vue'
@@ -181,6 +182,25 @@ async function copyPeer(addr: string): Promise<void> {
   }
 }
 
+const deleting = ref(false)
+
+async function clearConversation(): Promise<void> {
+  const addr = activeLabel.value
+  if (!addr || deleting.value) return
+  if (!window.confirm(t('homesim.nmobile.confirmDelete'))) return
+  deleting.value = true
+  state.error = ''
+  try {
+    await clearNKNChatMessages(addr)
+    state.messages = state.messages.filter(item => item.peer !== addr)
+    if (activePeer.value === addr) activePeer.value = ''
+  } catch (reason) {
+    state.error = reason instanceof Error ? reason.message : String(reason)
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(() => {
   void load().then(scrollToBottom)
   timer = setInterval(() => { void load() }, 8_000)
@@ -231,6 +251,17 @@ onBeforeUnmount(() => {
           >
             <Check v-if="copiedPeer === activeLabel" :size="14" />
             <Copy v-else :size="14" />
+          </button>
+          <button
+            v-if="activeLabel"
+            class="nmobile__copy nmobile__delete"
+            type="button"
+            :title="t('homesim.nmobile.deleteConversation')"
+            :aria-label="t('homesim.nmobile.deleteConversation')"
+            :disabled="deleting"
+            @click="clearConversation"
+          >
+            <Trash2 :size="14" />
           </button>
         </header>
 
@@ -362,6 +393,14 @@ onBeforeUnmount(() => {
 }
 
 .nmobile__copy:hover { color: var(--text); }
+
+.nmobile__delete:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: var(--danger-soft);
+}
+
+.nmobile__delete:disabled { opacity: 0.5; cursor: wait; }
 
 /* Avatars */
 .nmobile__avatar {

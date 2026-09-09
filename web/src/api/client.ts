@@ -2963,6 +2963,11 @@ export async function sendNKNChatMessage(to: string, text: string): Promise<{ id
   return { id: result?.id, ts: result?.ts }
 }
 
+export async function clearNKNChatMessages(peer = ''): Promise<void> {
+  if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
+  await writeJSON(`${API_ROOT}/nkn/chat/clear`, 'POST', { peer }, 200)
+}
+
 export interface NKNNetworkNodeReport {
   address: string
   rtt_ms: number

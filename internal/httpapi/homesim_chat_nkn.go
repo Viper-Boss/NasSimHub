@@ -173,8 +173,31 @@ func (api *API) receiveNKNChat(message *nkn.Message) bool {
 	return true
 }
 
+// rewriteNKNChatFile replaces the JSONL store with the given snapshot
+// (the file is small, so a full rewrite is fine).
+func rewriteNKNChatFile(snapshot []nknChatMessage) {
+	dir, ok := apiChatDir()
+	if !ok {
+		return
+	}
+	var builder strings.Builder
+	for _, message := range snapshot {
+		data, err := json.Marshal(message)
+		if err != nil {
+			continue
+		}
+		builder.Write(data)
+		builder.WriteByte('\n')
+	}
+	target := filepath.Join(dir, "messages.jsonl")
+	tmp := target + ".tmp"
+	if os.WriteFile(tmp, []byte(builder.String()), 0o600) == nil {
+		_ = os.Rename(tmp, target)
+	}
+}
+
 // markNKNChatDelivered flips an out message to delivered in memory and on
-// disk (the JSONL file is small, so a full rewrite is fine).
+// disk.
 func markNKNChatDelivered(id string) {
 	nknChatMessages.mu.Lock()
 	found := false
@@ -192,22 +215,7 @@ func markNKNChatDelivered(id string) {
 	if !found {
 		return
 	}
-	if dir, ok := apiChatDir(); ok {
-		var builder strings.Builder
-		for _, message := range snapshot {
-			data, err := json.Marshal(message)
-			if err != nil {
-				continue
-			}
-			builder.Write(data)
-			builder.WriteByte('\n')
-		}
-		target := filepath.Join(dir, "messages.jsonl")
-		tmp := target + ".tmp"
-		if os.WriteFile(tmp, []byte(builder.String()), 0o600) == nil {
-			_ = os.Rename(tmp, target)
-		}
-	}
+	rewriteNKNChatFile(snapshot)
 }
 
 func (api *API) nknChatMessagesHandler(w http.ResponseWriter, r *http.Request) {
@@ -295,6 +303,35 @@ func nknChatNewID() string {
 		return strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	return hex.EncodeToString(buf)
+}
+
+// nknChatClearHandler deletes chat history: with a "peer" body field only the
+// conversation with that address is removed, without it everything is cleared.
+func (api *API) nknChatClearHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Peer string `json:"peer"`
+	}
+	if r.ContentLength > 0 {
+		if !decodeJSONBody(w, r, &input) {
+			return
+		}
+	}
+	input.Peer = strings.TrimSpace(input.Peer)
+	nknChatMessages.mu.Lock()
+	kept := nknChatMessages.mem[:0]
+	removed := 0
+	for _, message := range nknChatMessages.mem {
+		if input.Peer == "" || message.Peer == input.Peer {
+			removed++
+			continue
+		}
+		kept = append(kept, message)
+	}
+	snapshot := append([]nknChatMessage(nil), kept...)
+	nknChatMessages.mem = kept
+	nknChatMessages.mu.Unlock()
+	rewriteNKNChatFile(snapshot)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": removed})
 }
 
 var _ = context.Background

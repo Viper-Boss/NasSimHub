@@ -89,6 +89,8 @@ export const homesimEN = {
     empty: 'No conversations yet. Send the first message to an NKN address above.',
     statusSending: 'Sending', statusSent: 'Sent to NKN network', statusDelivered: 'Delivered',
     copyAddress: 'Copy peer address', copied: 'Copied',
+    deleteConversation: 'Delete this conversation',
+    confirmDelete: 'Delete all messages with this peer? This cannot be undone.',
   },
   sponsor: {
     title: 'Sponsor', subtitle: 'This app is built with AI tokens — and tokens are bought with real money. If you feel like it, a little tip keeps the tokens (and the updates) flowing. Thank you!',
@@ -250,6 +252,8 @@ export const homesimZH = {
     empty: '还没有会话。在上方输入对方 NKN 地址发送第一条消息。',
     statusSending: '发送中', statusSent: '已发送到 NKN 网络', statusDelivered: '对方已收到',
     copyAddress: '复制对方地址', copied: '已复制',
+    deleteConversation: '删除此会话',
+    confirmDelete: '确定删除与该地址的全部聊天记录？此操作不可恢复。',
   },
   sponsor: {
     title: '赞助', subtitle: '软件是用 token 开发的，token 是用软妹币买的。如果可以，感谢打赏，让我有更多的 token 开发更新的版本。',
