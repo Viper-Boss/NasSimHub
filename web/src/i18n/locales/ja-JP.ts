@@ -1373,6 +1373,8 @@ export default {
     "hardwareVersion": "ハードウェアバージョン",
     "accessTechnology": "アクセステクノロジー",
     "currentBand": "現在のバンド",
+    "frequency": "周波数",
+    "channelBandwidth": "チャネル帯域幅",
     "primaryPort": "プライマリポート",
     "portDetails": "ポートの詳細",
     "capabilities": "能力",

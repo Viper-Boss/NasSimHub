@@ -1432,6 +1432,8 @@ export default {
     hardwareVersion: 'Hardware version',
     accessTechnology: 'Access technology',
     currentBand: 'Current band',
+    frequency: "Frequency",
+    channelBandwidth: "Channel bandwidth",
     primaryPort: 'Primary port',
     portDetails: 'Port details',
     capabilities: 'Capabilities',

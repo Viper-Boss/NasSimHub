@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
         <p>{{ t('homesim.advanced.text20') }}</p>
         <p class="nkn-network__hero-sub">{{ t('homesim.nknNetwork.subtitle') }}</p>
       </div>
-      <button class="secondary-action" type="button" @click="intro = true"><Info :size="16" />{{ t('homesim.advanced.text21') }}</button>
+      <button class="secondary-button" type="button" @click="intro = true"><Info :size="16" />{{ t('homesim.advanced.text21') }}</button>
     </header>
     <p v-if="fixtureMode" class="homesim-sim-notice">{{ t('homesim.advanced.text22') }}</p>
 
@@ -249,7 +249,7 @@ onBeforeUnmount(() => {
       <div class="nkn-network__directory">
         <div class="nkn-network__directory-head">
           <h3>{{ t('homesim.nknNetwork.directoryTitle') }}</h3>
-          <button class="secondary-action" type="button" :disabled="peersLoading" @click="refreshPeers">
+          <button class="secondary-button" type="button" :disabled="peersLoading" @click="refreshPeers">
             <LoaderCircle v-if="peersLoading" class="spin" :size="14" />
             <RefreshCw v-else :size="14" />{{ peersLoading ? t('homesim.nknNetwork.refreshing') : t('homesim.nknNetwork.refresh') }}
           </button>

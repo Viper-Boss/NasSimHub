@@ -26,10 +26,15 @@ import {
   Trash2,
   X
 } from '@lucide/vue'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { gateway } from '../api/client'
+import {
+  acquireSystemMetrics,
+  releaseSystemMetrics,
+  systemMetricsState
+} from '../state/systemMetrics'
 import { simCommandProblem } from '../utils/simSafety'
 import { ApiError } from '../api/types'
 import { useInitialLoadBarrier } from '../composables/useInitialLoadBarrier'
@@ -1429,7 +1434,29 @@ async function loadInitialDeviceWorkspace(): Promise<void> {
 }
 
 onMounted(() => {
+  acquireSystemMetrics()
   void waitForInitialLoad([() => loadInitialDeviceWorkspace()])
+})
+
+onBeforeUnmount(() => {
+  releaseSystemMetrics()
+})
+
+// Live serving-cell radio facts from the shared 10s poller: the module reports
+// its actual downlink frequency and channel bandwidth via qnwinfo.
+const servingCell = computed(() => systemMetricsState.metrics?.cellular ?? null)
+const frequencyLabel = computed(() => (
+  servingCell.value && servingCell.value.frequency_mhz > 0
+    ? `${servingCell.value.frequency_mhz} MHz`
+    : '—'
+))
+const channelBandwidthLabel = computed(() => {
+  const cell = servingCell.value
+  if (!cell || cell.downlink_bandwidth_mhz <= 0) return '—'
+  if (cell.uplink_bandwidth_mhz > 0 && cell.uplink_bandwidth_mhz !== cell.downlink_bandwidth_mhz) {
+    return `${cell.downlink_bandwidth_mhz} / ${cell.uplink_bandwidth_mhz} MHz`
+  }
+  return `${cell.downlink_bandwidth_mhz} MHz`
 })
 </script>
 
@@ -1793,6 +1820,14 @@ onMounted(() => {
                 <dd>
                   {{ servingBandLabel(hardware.details.serving_radio) || t('device.notReported') }}
                 </dd>
+              </div>
+              <div>
+                <dt>{{ t('device.frequency') }}</dt>
+                <dd>{{ frequencyLabel }}</dd>
+              </div>
+              <div>
+                <dt>{{ t('device.channelBandwidth') }}</dt>
+                <dd>{{ channelBandwidthLabel }}</dd>
               </div>
               <div>
                 <dt>IMEI</dt>

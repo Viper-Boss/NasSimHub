@@ -1373,6 +1373,8 @@ export default {
     "hardwareVersion": "Phiên bản phần cứng",
     "accessTechnology": "Tiếp cận công nghệ",
     "currentBand": "Băng tần hiện tại",
+    "frequency": "Tần số",
+    "channelBandwidth": "Băng thông kênh",
     "primaryPort": "Cổng chính",
     "portDetails": "Chi tiết cổng",
     "capabilities": "Khả năng",

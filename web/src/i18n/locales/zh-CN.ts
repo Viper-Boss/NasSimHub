@@ -1397,6 +1397,8 @@ export default {
     hardwareVersion: '硬件版本',
     accessTechnology: '接入制式',
     currentBand: '当前频段',
+    frequency: "频率",
+    channelBandwidth: "信道带宽",
     primaryPort: '主端口',
     portDetails: '端口详情',
     capabilities: '能力',

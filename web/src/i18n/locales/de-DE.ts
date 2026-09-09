@@ -1373,6 +1373,8 @@ export default {
     "hardwareVersion": "Hardwareversion",
     "accessTechnology": "Zugangstechnologie",
     "currentBand": "Aktuelles Frequenzband",
+    "frequency": "Frequenz",
+    "channelBandwidth": "Kanalbandbreite",
     "primaryPort": "Primärer Port",
     "portDetails": "Portdetails",
     "capabilities": "Fähigkeiten",

@@ -266,9 +266,10 @@ body .feedback-toast, body .application-update-bar, body .batch-action-bar { bac
 body .skeleton-block::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 8%, transparent), transparent); }
 body .conversation-skeleton { background: var(--background); }
 body .call-button--dismiss:hover:not(:disabled) { background: var(--surface-selected); }
-.homesim-route-links { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-.homesim-route-links a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); font-size: .875rem; }
+.homesim-route-links { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.homesim-route-links a, .homesim-route-links .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 108px; min-height: 44px; padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); font-size: .875rem; box-sizing: border-box; }
 .homesim-route-links a:hover { color: var(--accent); border-color: var(--accent-border); }
+.homesim-route-links .homesim-route-links__refresh { margin-left: auto; }
 .homesim-integration-note { font-size: .875rem; line-height: 1.6; color: var(--muted); padding: 14px 16px; border: 1px solid var(--border); background: var(--surface-subtle); border-radius: var(--radius-surface); margin-bottom: 18px; }
 @media (max-width: 860px) {
   .app-shell .mobile-nav { background: var(--surface-subtle); box-shadow: 0 -8px 24px rgb(0 0 0 / 8%); }

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Activity,
   ArrowLeft,
+  AudioLines,
   ChartNoAxesCombined,
   ContactRound,
   Globe2,
@@ -17,6 +18,7 @@ import {
   RadioTower,
   BellRing,
   Network,
+  RefreshCw,
   Send,
   Wifi,
   ShieldCheck,
@@ -109,6 +111,12 @@ const NknNetworkPanel = defineAsyncComponent(loadNknNetworkPanel)
 const MobileEnrollmentPanel = defineAsyncComponent(() => import('../components/MobileEnrollmentPanel.vue'))
 
 const route = useRoute()
+// Manual refresh for the devices workspace: bumping the tick remounts the
+// panel so it reloads every module list and hardware snapshot from scratch.
+const devicesRefreshTick = ref(0)
+function refreshDevices(): void {
+  devicesRefreshTick.value += 1
+}
 const router = useRouter()
 const { t } = useI18n()
 const logoutPending = ref(false)
@@ -512,8 +520,18 @@ onMounted(() => {
           <nav class="homesim-route-links" :aria-label="t('homesim.system')">
             <RouterLink :class="{ 'is-current': selectedSection === 'devices' }" :to="{ name: 'settings', params: { section: 'devices' } }"><RadioTower :size="17" />{{ t('settings.devices') }}</RouterLink>
             <RouterLink :class="{ 'is-current': selectedSection === 'diagnostics' }" :to="{ name: 'settings', params: { section: 'diagnostics' } }"><Activity :size="17" />{{ t('settings.diagnostics') }}</RouterLink>
-            <RouterLink :to="{ name: 'recordings' }">{{ t('shell.recordings') }}</RouterLink>
-            <RouterLink :to="{ name: 'traffic' }">{{ t('shell.traffic') }}</RouterLink>
+            <RouterLink :to="{ name: 'recordings' }"><AudioLines :size="17" />{{ t('shell.recordings') }}</RouterLink>
+            <RouterLink :to="{ name: 'traffic' }"><ChartNoAxesCombined :size="17" />{{ t('shell.traffic') }}</RouterLink>
+            <button
+              v-if="selectedSection === 'devices'"
+              class="secondary-button homesim-route-links__refresh"
+              type="button"
+              :title="t('common.refresh')"
+              :aria-label="t('common.refresh')"
+              @click="refreshDevices"
+            >
+              <RefreshCw :size="15" />{{ t('common.refresh') }}
+            </button>
           </nav>
         </div>
         <p v-if="selectedSection === 'telegram'" class="homesim-integration-note homesim-integration-note--header">{{ t('homesim.forwardHint') }}</p>
@@ -560,7 +578,7 @@ onMounted(() => {
               v-else-if="selectedSection === 'devices'"
               class="settings-content settings-content--master-detail"
             >
-              <DeviceConfigurationPanel />
+              <DeviceConfigurationPanel :key="`devices-${devicesRefreshTick}`" />
             </div>
 
             <div
