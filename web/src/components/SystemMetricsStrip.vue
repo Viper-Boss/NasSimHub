@@ -629,6 +629,8 @@ const flashUsedBytes = computed(() => {
 .tm-ring__label.is-danger { color: var(--danger, #f87171); }
 
 .tm-stats {
+  /* Pin to the card bottom so stat rows align across the four boxes. */
+  margin-top: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
