@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 )
 
 // Traffic accounting that survives network interface recreation and agent
@@ -16,12 +15,6 @@ import (
 // observed value a reset is detected and the previous reading is folded into
 // the baseline. The returned value is baseline + raw, i.e. monotonic across
 // resets as long as the state file survives.
-//
-// The state file is written when a reset is detected and at most once per
-// persist interval otherwise, so an agent restart loses at most that
-// interval of accumulated traffic.
-
-const trafficPersistInterval = 5 * time.Minute
 
 type trafficCounters struct {
 	RX uint64 `json:"rx"`
@@ -34,11 +27,10 @@ type trafficState struct {
 }
 
 type trafficAccumulator struct {
-	mu          sync.Mutex
-	path        string
-	state       trafficState
-	loaded      bool
-	lastPersist time.Time
+	mu     sync.Mutex
+	path   string
+	state  trafficState
+	loaded bool
 }
 
 func newTrafficAccumulator(path string) *trafficAccumulator {
@@ -74,7 +66,10 @@ func (a *trafficAccumulator) load() {
 }
 
 // apply folds one raw observation into the cumulative counters and returns
-// the monotonic rx/tx totals for the interface.
+// the monotonic rx/tx totals for the interface. The state file is rewritten
+// on every observation: the poller runs on a 10s cadence and the file is a
+// few hundred bytes, and persisting the last-seen readings immediately is
+// what keeps restarts from double counting or losing the current interval.
 func (a *trafficAccumulator) apply(name string, rx, tx uint64) (uint64, uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -82,7 +77,6 @@ func (a *trafficAccumulator) apply(name string, rx, tx uint64) (uint64, uint64) 
 
 	baseline := a.state.Baselines[name]
 	last, seen := a.state.Last[name]
-	persist := false
 
 	if !seen {
 		// First observation of this interface in this state file: start the
@@ -94,6 +88,7 @@ func (a *trafficAccumulator) apply(name string, rx, tx uint64) (uint64, uint64) 
 		return rx, tx
 	}
 
+	persist := false
 	if rx < last.RX {
 		baseline.RX += last.RX
 		persist = true
@@ -107,9 +102,7 @@ func (a *trafficAccumulator) apply(name string, rx, tx uint64) (uint64, uint64) 
 	}
 	a.state.Last[name] = trafficCounters{RX: rx, TX: tx}
 
-	if persist || time.Since(a.lastPersist) >= trafficPersistInterval {
-		a.persistLocked()
-	}
+	a.persistLocked()
 	return baseline.RX + rx, baseline.TX + tx
 }
 
@@ -130,7 +123,5 @@ func (a *trafficAccumulator) persistLocked() {
 	}
 	if err := os.Rename(tmp, a.path); err != nil {
 		_ = os.Remove(tmp)
-		return
 	}
-	a.lastPersist = time.Now()
 }

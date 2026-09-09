@@ -56,9 +56,10 @@ func TestTrafficAccumulatorTracksInterfacesIndependently(t *testing.T) {
 	if rx != 1000 || tx != 500 {
 		t.Fatalf("enx1 after reset = %d/%d, want 1000/500", rx, tx)
 	}
+	// eth0 grows: the new reading already includes the old bytes.
 	rx, _ = acc.apply("eth0", 20, 0)
-	if rx != 30 {
-		t.Fatalf("eth0 growth = %d, want 30", rx)
+	if rx != 20 {
+		t.Fatalf("eth0 growth = %d, want 20", rx)
 	}
 }
 
