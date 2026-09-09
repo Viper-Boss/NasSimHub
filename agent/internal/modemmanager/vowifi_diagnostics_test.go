@@ -21,3 +21,22 @@ func TestEpdgFQDN(t *testing.T) {
 		}
 	}
 }
+
+func TestParseQNWINFOPlmn(t *testing.T) {
+	cases := []struct {
+		response string
+		want     string
+	}{
+		{`+QNWINFO: "FDD LTE","46001","LTE BAND 3",1650`, "46001"},
+		{`+QNWINFO: "FDD LTE","46011","LTE BAND 1",300`, "46011"},
+		{`+QNWINFO: "NO SERVICE"`, ""},
+		{`+QNWINFO: "FDD LTE","","BAND"`, ""},
+		{`+QNWINFO: "FDD LTE","CHN-CT","LTE BAND 3"`, ""},
+		{``, ""},
+	}
+	for _, testCase := range cases {
+		if got := parseQNWINFOPlmn(testCase.response); got != testCase.want {
+			t.Fatalf("parseQNWINFOPlmn(%q) = %q, want %q", testCase.response, got, testCase.want)
+		}
+	}
+}

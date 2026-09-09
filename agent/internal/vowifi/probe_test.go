@@ -24,11 +24,11 @@ func TestBuildQueryAndParseAnswer(t *testing.T) {
 	reply = append(reply, header...)
 	reply = append(reply, 1, 'a', 1, 'b', 0, 0, 1, 0, 1) // question a.b. A IN
 	answerStart := len(reply)
-	reply[answerStart-1] = 0                             // keep root label
-	reply = append(reply, 0xC0, 12)                      // pointer to question name
-	reply = append(reply, 0, 1, 0, 1)                    // type A, class IN
-	reply = append(reply, 0, 0, 0, 60)                   // TTL
-	reply = append(reply, 0, 4, 1, 2, 3, 4)              // RDLENGTH + A record
+	reply[answerStart-1] = 0                // keep root label
+	reply = append(reply, 0xC0, 12)         // pointer to question name
+	reply = append(reply, 0, 1, 0, 1)       // type A, class IN
+	reply = append(reply, 0, 0, 0, 60)      // TTL
+	reply = append(reply, 0, 4, 1, 2, 3, 4) // RDLENGTH + A record
 	parsed, err := parseAnswer(reply)
 	if err != nil {
 		t.Fatalf("parseAnswer failed: %v", err)

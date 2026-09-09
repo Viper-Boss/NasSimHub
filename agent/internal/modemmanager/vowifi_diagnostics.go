@@ -5,7 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/godbus/dbus/v5"
 	"github.com/human-agent65535/modemdeck/agent/internal/domain"
+	"github.com/human-agent65535/modemdeck/agent/internal/operator"
 	"github.com/human-agent65535/modemdeck/agent/internal/vowifi"
 )
 
@@ -36,7 +38,7 @@ func (p *Provider) VowifiDiagnostics(ctx context.Context) (domain.VowifiDiagnost
 		return domain.VowifiDiagnostics{}, domain.NotFound(operation, "no line is available for VoWiFi diagnostics")
 	}
 	line := parsed.Lines[0]
-	configuration, _, _, err := p.readDeviceConfiguration(bounded, line.ID, operation)
+	configuration, _, modemPath, err := p.readDeviceConfiguration(bounded, line.ID, operation)
 	if err != nil {
 		return domain.VowifiDiagnostics{}, err
 	}
@@ -52,6 +54,19 @@ func (p *Provider) VowifiDiagnostics(ctx context.Context) (domain.VowifiDiagnost
 	}
 	if result.OperatorName == "" {
 		result.OperatorName = strings.TrimSpace(line.HomeOperatorName)
+	}
+	// Many vendor modules (including the QDC507) never fill ModemManager's
+	// operator properties; ask the modem directly over the AT passthrough.
+	if result.PLMN == "" {
+		if plmn, name := p.servingPLMNViaAT(bounded, modemPath, operation); plmn != "" {
+			result.PLMN = plmn
+			if result.OperatorName == "" {
+				result.OperatorName = name
+			}
+		}
+	}
+	if details, found := operator.Lookup(result.PLMN); found && result.OperatorName == "" {
+		result.OperatorName = details.Name
 	}
 	result.EpdgFQDN = epdgFQDN(result.PLMN)
 
@@ -82,6 +97,85 @@ func (p *Provider) VowifiDiagnostics(ctx context.Context) (domain.VowifiDiagnost
 	result.BroadbandPath = outcome.Broadband
 	result.Egress = outcome.Egress
 	return result, nil
+}
+
+// servingPLMNViaAT asks the modem for the serving operator over the AT
+// passthrough and returns a numeric PLMN plus a readable name when possible.
+// Best-effort: any failure yields an empty PLMN.
+func (p *Provider) servingPLMNViaAT(
+	ctx context.Context,
+	modemPath dbus.ObjectPath,
+	operation string,
+) (string, string) {
+	// Quectel-style QNWINFO reports the numeric serving PLMN directly, which
+	// the QDC507 fills reliably (unlike ModemManager's operator properties).
+	if response, err := p.commandATPath(ctx, modemPath, operation, "AT+QNWINFO"); err == nil {
+		if plmn := parseQNWINFOPlmn(response); plmn != "" {
+			return plmn, ""
+		}
+	}
+	// Fallback: +COPS? with whatever report format the module was left in.
+	response, err := p.commandATPath(ctx, modemPath, operation, "AT+COPS?")
+	if err != nil {
+		return "", ""
+	}
+	// Expected shapes: +COPS: <mode>,<format>,"<oper>"[,<Act>]
+	// <format> 2 = numeric PLMN, 0 = long alphanumeric name.
+	start := strings.Index(response, "\"")
+	end := strings.LastIndex(response, "\"")
+	if start < 0 || end <= start {
+		return "", ""
+	}
+	oper := strings.TrimSpace(response[start+1 : end])
+	if oper == "" {
+		return "", ""
+	}
+	allDigits := true
+	for _, character := range oper {
+		if character < '0' || character > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits && len(oper) >= 5 && len(oper) <= 6 {
+		return oper, ""
+	}
+	if plmn, found := servingOperatorByLongName[oper]; found {
+		return plmn, oper
+	}
+	return "", ""
+}
+
+// parseQNWINFOPlmn extracts the numeric PLMN from a +QNWINFO response:
+// `+QNWINFO: "FDD LTE","46001","LTE BAND 3",1650` -> "46001".
+func parseQNWINFOPlmn(response string) string {
+	fields := strings.Split(response, ",")
+	if len(fields) < 2 {
+		return ""
+	}
+	plmn := strings.Trim(strings.TrimSpace(fields[1]), "\"")
+	if len(plmn) < 5 || len(plmn) > 6 {
+		return ""
+	}
+	for _, character := range plmn {
+		if character < '0' || character > '9' {
+			return ""
+		}
+	}
+	return plmn
+}
+
+// servingOperatorByLongName maps the long alphanumeric operator names the
+// Chinese carriers put in +COPS? onto their numeric PLMNs, for modules that
+// never report the numeric format.
+var servingOperatorByLongName = map[string]string{
+	"CHN-CT":        "46011",
+	"CHN-UNICOM":    "46001",
+	"CMCC":          "46000",
+	"CMCC+":         "46002",
+	"China Mobile":  "46000",
+	"China Unicom":  "46001",
+	"China Telecom": "46011",
 }
 
 // epdgFQDN derives the standard 3GPP ePDG discovery name from a PLMN like
