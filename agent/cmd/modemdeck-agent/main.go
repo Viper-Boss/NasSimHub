@@ -446,6 +446,13 @@ func runRadioReconciler(ctx context.Context, provider radioReconciler) {
 	}
 
 	reconcile()
+	// Same lesson as the voice reconciler: a module reboot can leave the
+	// radio in a settling state (initializing → disabled) where the one-shot
+	// InterfacesAdded event fires too early and ReconcileRadioState skips it
+	// as a no-op. Without a periodic pass, the modem then stays disabled
+	// (no signal) until someone runs mmcli --enable by hand.
+	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -454,6 +461,8 @@ func runRadioReconciler(ctx context.Context, provider radioReconciler) {
 			if !open {
 				return
 			}
+			reconcile()
+		case <-ticker.C:
 			reconcile()
 		}
 	}
