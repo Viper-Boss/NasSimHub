@@ -18,38 +18,38 @@ function markFailed(key: string): void {
     <div class="sponsor">
       <header class="sponsor__head">
         <HeartHandshake :size="28" />
-        <h1>{{ t('sponsor.title') }}</h1>
-        <p>{{ t('sponsor.subtitle') }}</p>
+        <h1>{{ t('homesim.sponsor.title') }}</h1>
+        <p>{{ t('homesim.sponsor.subtitle') }}</p>
       </header>
 
       <div class="sponsor__grid">
         <figure class="sponsor__card">
-          <h2>{{ t('sponsor.wechat') }}</h2>
+          <h2>{{ t('homesim.sponsor.wechat') }}</h2>
           <img
             v-if="!failed.wechat"
             src="/sponsor/wechat.png"
-            :alt="t('sponsor.wechat')"
+            :alt="t('homesim.sponsor.wechat')"
             loading="lazy"
             @error="markFailed('wechat')"
           >
-          <div v-else class="sponsor__placeholder">{{ t('sponsor.replaceHint') }}</div>
-          <figcaption>{{ t('sponsor.replaceHint') }}</figcaption>
+          <div v-else class="sponsor__placeholder">{{ t('homesim.sponsor.replaceHint') }}</div>
+          <figcaption>{{ t('homesim.sponsor.replaceHint') }}</figcaption>
         </figure>
         <figure class="sponsor__card">
-          <h2>{{ t('sponsor.alipay') }}</h2>
+          <h2>{{ t('homesim.sponsor.alipay') }}</h2>
           <img
             v-if="!failed.alipay"
             src="/sponsor/alipay.png"
-            :alt="t('sponsor.alipay')"
+            :alt="t('homesim.sponsor.alipay')"
             loading="lazy"
             @error="markFailed('alipay')"
           >
-          <div v-else class="sponsor__placeholder">{{ t('sponsor.replaceHint') }}</div>
-          <figcaption>{{ t('sponsor.replaceHint') }}</figcaption>
+          <div v-else class="sponsor__placeholder">{{ t('homesim.sponsor.replaceHint') }}</div>
+          <figcaption>{{ t('homesim.sponsor.replaceHint') }}</figcaption>
         </figure>
       </div>
 
-      <p class="sponsor__thanks">{{ t('sponsor.thanks') }}</p>
+      <p class="sponsor__thanks">{{ t('homesim.sponsor.thanks') }}</p>
     </div>
   </PageContentFrame>
 </template>

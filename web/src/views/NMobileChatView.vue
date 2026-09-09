@@ -106,8 +106,8 @@ onBeforeUnmount(() => {
   <PageContentFrame>
     <div class="nmobile">
       <header class="nmobile__head">
-        <h1>{{ t('nmobile.title') }}</h1>
-        <p>{{ t('nmobile.subtitle') }}</p>
+        <h1>{{ t('homesim.nmobile.title') }}</h1>
+        <p>{{ t('homesim.nmobile.subtitle') }}</p>
       </header>
 
       <div class="nmobile__compose">
@@ -115,8 +115,8 @@ onBeforeUnmount(() => {
           v-model="state.peer"
           class="ui-input"
           type="text"
-          :placeholder="t('nmobile.peerPlaceholder')"
-          :aria-label="t('nmobile.peerPlaceholder')"
+          :placeholder="t('homesim.nmobile.peerPlaceholder')"
+          :aria-label="t('homesim.nmobile.peerPlaceholder')"
           spellcheck="false"
         >
         <div class="nmobile__compose-row">
@@ -124,19 +124,19 @@ onBeforeUnmount(() => {
             v-model="state.draft"
             class="ui-input nmobile__draft"
             rows="2"
-            :placeholder="t('nmobile.messagePlaceholder')"
-            :aria-label="t('nmobile.messagePlaceholder')"
+            :placeholder="t('homesim.nmobile.messagePlaceholder')"
+            :aria-label="t('homesim.nmobile.messagePlaceholder')"
             @keydown.enter.exact.prevent="send"
           />
           <button class="primary-action" type="button" :disabled="state.sending || !state.draft.trim() || !state.peer.trim()" @click="send">
-            <Send :size="16" />{{ t('nmobile.send') }}
+            <Send :size="16" />{{ t('homesim.nmobile.send') }}
           </button>
         </div>
       </div>
 
       <p v-if="state.error" class="field-error" role="alert">{{ state.error }}</p>
 
-      <div v-if="state.loaded && grouped.length === 0" class="nmobile__empty">{{ t('nmobile.empty') }}</div>
+      <div v-if="state.loaded && grouped.length === 0" class="nmobile__empty">{{ t('homesim.nmobile.empty') }}</div>
       <div v-for="thread in grouped" :key="thread.addr" class="nmobile__thread">
         <button class="nmobile__peer" type="button" @click="activePeer = activePeer === thread.addr ? '' : thread.addr">{{ thread.addr }}</button>
         <template v-if="!activePeer || activePeer === thread.addr">

@@ -449,8 +449,8 @@ onBeforeUnmount(() => {
       </nav>
 
       <nav class="rail__secondary">
-        <RouterLink v-if="nknUnlockState.unlocked" class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('nmobile.title')">
-          <MessageCircleHeart :size="22" /><span>{{ t('nmobile.title') }}</span>
+        <RouterLink v-if="nknUnlockState.unlocked" class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
+          <MessageCircleHeart :size="22" /><span>{{ t('homesim.nmobile.title') }}</span>
         </RouterLink>
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'sms-forward' }" :to="{ name: 'settings', params: { section: 'sms-forward' } }" :title="t('homesim.forward')">
           <Forward :size="22" /><span>{{ t('homesim.forward') }}</span>
@@ -461,8 +461,8 @@ onBeforeUnmount(() => {
         <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'preferences' }" :to="{ name: 'settings', params: { section: 'preferences' } }" :title="t('homesim.profile')">
           <UserRound :size="22" /><span>{{ t('homesim.profile') }}</span>
         </RouterLink>
-        <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'sponsor' }" :to="{ name: 'sponsor' }" :title="t('sponsor.title')">
-          <HeartHandshake :size="22" /><span>{{ t('sponsor.title') }}</span>
+        <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'sponsor' }" :to="{ name: 'sponsor' }" :title="t('homesim.sponsor.title')">
+          <HeartHandshake :size="22" /><span>{{ t('homesim.sponsor.title') }}</span>
         </RouterLink>
         <RouterLink
           class="rail-link"
