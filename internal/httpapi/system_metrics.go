@@ -29,16 +29,17 @@ type systemMetricsResponse struct {
 	FlashDevicePath    string   `json:"flash_device_path"`
 	ModemTempCelsius   *float64 `json:"modem_temp_celsius"`
 
-	CPUModelName   string   `json:"cpu_model_name"`
-	CPUCurrentMHz  float64  `json:"cpu_current_mhz"`
-	CPUMaxMHz      float64  `json:"cpu_max_mhz"`
-	CPUL1DataKB    uint64   `json:"cpu_l1_data_kb"`
-	CPUL1InstKB    uint64   `json:"cpu_l1_inst_kb"`
-	CPUL2KB        uint64   `json:"cpu_l2_kb"`
-	CPUL3KB        uint64   `json:"cpu_l3_kb"`
-	CPUTempCelsius *float64 `json:"cpu_temp_celsius"`
-	ProcessCount   int      `json:"process_count"`
-	ThreadCount    int      `json:"thread_count"`
+	CPUModelName    string   `json:"cpu_model_name"`
+	CPUUsagePercent float64  `json:"cpu_usage_percent"`
+	CPUCurrentMHz   float64  `json:"cpu_current_mhz"`
+	CPUMaxMHz       float64  `json:"cpu_max_mhz"`
+	CPUL1DataKB     uint64   `json:"cpu_l1_data_kb"`
+	CPUL1InstKB     uint64   `json:"cpu_l1_inst_kb"`
+	CPUL2KB         uint64   `json:"cpu_l2_kb"`
+	CPUL3KB         uint64   `json:"cpu_l3_kb"`
+	CPUTempCelsius  *float64 `json:"cpu_temp_celsius"`
+	ProcessCount    int      `json:"process_count"`
+	ThreadCount     int      `json:"thread_count"`
 
 	Cellular      *systemMetricsCellular   `json:"cellular"`
 	ModuleChannel string                   `json:"module_channel,omitempty"`
@@ -110,6 +111,7 @@ func (api *API) systemMetrics(response http.ResponseWriter, request *http.Reques
 	result.FlashDevicePath = metrics.FlashDevicePath
 	result.ModemTempCelsius = metrics.ModemTempCelsius
 	result.CPUModelName = metrics.CPUModelName
+	result.CPUUsagePercent = metrics.CPUUsagePercent
 	result.CPUCurrentMHz = metrics.CPUCurrentMHz
 	result.CPUMaxMHz = metrics.CPUMaxMHz
 	result.CPUL1DataKB = metrics.CPUL1DataKB

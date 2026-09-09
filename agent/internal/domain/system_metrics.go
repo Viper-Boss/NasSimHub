@@ -51,6 +51,10 @@ type SystemMetrics struct {
 	ProcessCount   int      `json:"process_count"`
 	ThreadCount    int      `json:"thread_count"`
 
+	// Real CPU utilization from /proc/stat deltas (0-100). Load averages on a
+	// single-core module overstate usage, so the dashboard uses this.
+	CPUUsagePercent float64 `json:"cpu_usage_percent"`
+
 	// Serving-cell radio details parsed from AT+QENG="servingcell"; nil when
 	// the modem does not answer.
 	Cellular *CellularServingCell `json:"cellular"`

@@ -2730,6 +2730,7 @@ export interface SystemMetricsSnapshot {
   flash_device_path: string
   modem_temp_celsius: number | null
   cpu_model_name: string
+  cpu_usage_percent: number
   cpu_current_mhz: number
   cpu_max_mhz: number
   cpu_l1_data_kb: number
@@ -2773,6 +2774,7 @@ export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
     flash_device_path: typeof result.flash_device_path === 'string' ? result.flash_device_path : '',
     modem_temp_celsius: typeof result.modem_temp_celsius === 'number' ? result.modem_temp_celsius : null,
     cpu_model_name: typeof result.cpu_model_name === 'string' ? result.cpu_model_name : '',
+    cpu_usage_percent: Number(result.cpu_usage_percent ?? 0),
     cpu_current_mhz: Number(result.cpu_current_mhz ?? 0),
     cpu_max_mhz: Number(result.cpu_max_mhz ?? 0),
     cpu_l1_data_kb: Number(result.cpu_l1_data_kb ?? 0),

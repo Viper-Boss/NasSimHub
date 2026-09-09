@@ -33,6 +33,9 @@ const moduleDetailsCommand = "echo CORES:$(grep -c ^processor /proc/cpuinfo); " 
 	"echo CURF:$(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_cur_freq 2>/dev/null); " +
 	"echo MAXF:$(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null); " +
 	"echo LOAD:$(cat /proc/loadavg); " +
+	"echo STAT1:$(grep '^cpu ' /proc/stat); " +
+	"sleep 1; " +
+	"echo STAT2:$(grep '^cpu ' /proc/stat); " +
 	"grep -E '^(MemTotal|MemFree|MemAvailable|Cached|Buffers):' /proc/meminfo; " +
 	"echo PROCS:$(ls -d /proc/[0-9]* | wc -l); " +
 	"s=0; for v in $(cat /sys/class/mtd/mtd*/size); do s=$((s+v)); done; echo MTDSZ:$s; " +
@@ -46,6 +49,7 @@ type moduleSnapshot struct {
 	LoadRaw1             float64
 	LoadRaw5             float64
 	LoadRaw15            float64
+	CPUUsagePercent      float64
 	CPUModelName         string
 	CPUCurrentMHz        float64
 	CPUMaxMHz            float64
@@ -108,6 +112,7 @@ func (p *Provider) collectModuleDetails(ctx context.Context, metrics *domain.Sys
 		metrics.LoadPercent = percentOfCapacity(snapshot.LoadRaw15, snapshot.Cores)
 	}
 	metrics.CPUModelName = snapshot.CPUModelName
+	metrics.CPUUsagePercent = snapshot.CPUUsagePercent
 	metrics.CPUCurrentMHz = snapshot.CPUCurrentMHz
 	metrics.CPUMaxMHz = snapshot.CPUMaxMHz
 	metrics.CPUTempCelsius = snapshot.CPUTempCelsius
@@ -180,6 +185,9 @@ func parseModuleSnapshot(output string) *moduleSnapshot {
 	rootVolume := dfVolume{}
 	dataVolume := dfVolume{}
 	dataSeen := false
+	var statSample1, statSample2 procStatSample
+	stat1Seen := false
+	stat2Seen := false
 	for _, line := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -203,6 +211,12 @@ func parseModuleSnapshot(output string) *moduleSnapshot {
 			snapshot.CPUMaxMHz = float64(atoiTrimmed(strings.TrimPrefix(line, "MAXF:"))) / 1000
 		case strings.HasPrefix(line, "LOAD:"):
 			parseModuleLoadavg(strings.TrimPrefix(line, "LOAD:"), snapshot)
+		case strings.HasPrefix(line, "STAT1:"):
+			statSample1 = parseProcStatLine(strings.TrimPrefix(line, "STAT1:"))
+			stat1Seen = true
+		case strings.HasPrefix(line, "STAT2:"):
+			statSample2 = parseProcStatLine(strings.TrimPrefix(line, "STAT2:"))
+			stat2Seen = true
 		case isMeminfoLine(line):
 			key, value := parseMeminfoLine(line)
 			if key != "" {
@@ -234,7 +248,62 @@ func parseModuleSnapshot(output string) *moduleSnapshot {
 	if snapshot.CPUTempCelsius == nil {
 		snapshot.CPUTempCelsius = snapshot.fallbackTemp
 	}
+	if stat1Seen && stat2Seen {
+		snapshot.CPUUsagePercent = cpuUsageBetween(statSample1, statSample2)
+	}
 	return snapshot
+}
+
+// procStatSample holds the aggregate CPU jiffies from one /proc/stat line.
+type procStatSample struct {
+	idle   float64
+	iowait float64
+	total  float64
+}
+
+func parseProcStatLine(value string) procStatSample {
+	fields := strings.Fields(value)
+	if len(fields) < 5 {
+		return procStatSample{}
+	}
+	sample := procStatSample{}
+	for index, field := range fields[1:] {
+		jiffies, err := strconv.ParseFloat(field, 64)
+		if err != nil {
+			continue
+		}
+		sample.total += jiffies
+		switch index {
+		case 3: // idle
+			sample.idle = jiffies
+		case 4: // iowait
+			sample.iowait = jiffies
+		}
+	}
+	return sample
+}
+
+// cpuUsageBetween derives the busy percentage from two /proc/stat samples
+// taken one second apart. This is the real utilization; the load average
+// overstates a single-core module because it counts runnable plus
+// uninterruptible tasks rather than time spent busy.
+func cpuUsageBetween(before, after procStatSample) float64 {
+	totalDelta := after.total - before.total
+	if totalDelta <= 0 {
+		return 0
+	}
+	idleDelta := (after.idle + after.iowait) - (before.idle + before.iowait)
+	if idleDelta < 0 {
+		idleDelta = 0
+	}
+	usage := (totalDelta - idleDelta) / totalDelta * 100
+	if usage < 0 {
+		return 0
+	}
+	if usage > 100 {
+		return 100
+	}
+	return usage
 }
 
 func parseModuleLoadavg(value string, snapshot *moduleSnapshot) {

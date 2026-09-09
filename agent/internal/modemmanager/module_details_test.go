@@ -4,6 +4,19 @@ import (
 	"testing"
 )
 
+func TestCPUUsageBetweenUsesProcStatDeltas(t *testing.T) {
+	before := parseProcStatLine("cpu  1200 0 800 9000 100 0 0 0 0 0")
+	after := parseProcStatLine("cpu  1250 0 820 9800 110 0 0 0 0 0")
+	usage := cpuUsageBetween(before, after)
+	// total delta = 870, idle+wait delta = 810 -> busy = 60/870 ~ 6.9%.
+	if usage < 6 || usage > 8 {
+		t.Fatalf("cpu usage = %f, want about 6.9", usage)
+	}
+	if idleSpike := cpuUsageBetween(before, parseProcStatLine("cpu  1200 0 800 10000 100 0 0 0 0 0")); idleSpike != 0 {
+		t.Fatalf("all-idle delta usage = %f, want 0", idleSpike)
+	}
+}
+
 // The fixture mirrors the real QDC507 module output for the batched metrics
 // shell command: MDM9207 single-core ARMv7, 42 MB RAM, 128 MB NAND with UBI
 // volumes for / and /data.
@@ -13,6 +26,8 @@ HW:Qualcomm Technologies, Inc MDM9207
 CURF:998400
 MAXF:1305600
 LOAD:1.01 1.03 1.04 3/224 12345
+STAT1:cpu  1200 0 800 9000 100 0 0 0 0 0
+STAT2:cpu  1250 0 820 9800 110 0 0 0 0 0
 MemTotal:          43460 kB
 MemFree:            3128 kB
 MemAvailable:       9520 kB
@@ -38,6 +53,10 @@ func TestParseModuleSnapshotUsesModuleValues(t *testing.T) {
 	snapshot := parseModuleSnapshot(moduleSnapshotFixture)
 	if snapshot.Cores != 1 {
 		t.Fatalf("cores = %d, want 1", snapshot.Cores)
+	}
+	usage := snapshot.CPUUsagePercent
+	if usage < 6 || usage > 8 {
+		t.Fatalf("cpu usage = %f, want about 6.9 from the stat pair", usage)
 	}
 	if snapshot.CPUModelName != "Qualcomm MDM9207" {
 		t.Fatalf("cpu model = %q, want Qualcomm MDM9207", snapshot.CPUModelName)

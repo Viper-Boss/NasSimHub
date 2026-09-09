@@ -13,9 +13,13 @@ export interface SystemMetricsSample {
   modemTemp: number | null
   cpuTemp: number | null
   cpu: number
+  cpu5?: number
+  /** Real utilization from /proc/stat deltas; falls back to `cpu` when absent. */
+  cpuUsage?: number
   mem: number
   flash: number
   rxRate: number
+  txRate?: number
   /** Epoch millis when the sample was taken; used to expire restored history. */
   at?: number
 }
@@ -91,6 +95,7 @@ async function poll(): Promise<void> {
     }
     const iface = modemInterface(snapshot)
     let rxRate = 0
+    let txRate = 0
     if (previous && iface) {
       const previousIface = modemInterface(previous)
       const seconds = (Date.parse(snapshot.observed_at) - Date.parse(previous.observed_at)) / 1000
@@ -101,6 +106,9 @@ async function poll(): Promise<void> {
         iface.rx_bytes >= previousIface.rx_bytes
       ) {
         rxRate = (iface.rx_bytes - previousIface.rx_bytes) / seconds
+        txRate = iface.tx_bytes >= previousIface.tx_bytes
+          ? (iface.tx_bytes - previousIface.tx_bytes) / seconds
+          : 0
       }
     }
     previous = snapshot
@@ -113,9 +121,12 @@ async function poll(): Promise<void> {
         modemTemp: snapshot.modem_temp_celsius,
         cpuTemp: snapshot.cpu_temp_celsius,
         cpu: snapshot.load_percent_1,
+        cpu5: snapshot.load_percent_5,
+        cpuUsage: snapshot.cpu_usage_percent,
         mem: snapshot.memory_used_percent,
         flash: snapshot.flash_used_percent,
         rxRate,
+        txRate,
         at: Date.now()
       }
     ].slice(-HISTORY)
