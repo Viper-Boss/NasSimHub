@@ -10,6 +10,7 @@ import {
   loadBootstrap,
   loadContacts
 } from '../state/workspace'
+import AccountAvatarSetting from './AccountAvatarSetting.vue'
 import AccountProfileSetting from './AccountProfileSetting.vue'
 import DefaultLineSettingsForm from './DefaultLineSettingsForm.vue'
 import SystemSettingsForm from './SystemSettingsForm.vue'
@@ -72,6 +73,8 @@ onMounted(() => {
           {{ sessionState.role === 'admin' ? t('account.administrator') : t('account.member') }}
         </span>
       </section>
+
+      <AccountAvatarSetting v-if="props.showProfile" />
 
       <AccountProfileSetting
         v-if="props.showProfile"

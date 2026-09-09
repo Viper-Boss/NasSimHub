@@ -850,7 +850,7 @@ export default {
     online: '線上',
     callReady: '可通話',
     messageReady: '可簡訊',
-    manageDevices: '管理裝置', metricsTemp: '模組溫度', metricsCpu: 'CPU 負載', metricsMemory: '記憶體', metricsFlash: '快閃儲存', metricsData: '4G 流量', metricsLoad: '負載 1/5/15 分鐘', metricsLoadHint: '負載佔 CPU 總容量的百分比', metricsUnavailable: '系統指標不可用', metricsChannelStale: '模組通道異常，顯示最近一次資料', metricsChannelDown: '模組通道不可達', metricsCoresUnit: '核', metricsThreadsUnit: '執行緒', metricsUtilized: '使用率', metricsRx: '接收速度', metricsTx: '傳送速度', metricsCellular: '4G 模組', metricsSINR: '訊號增益', radioBand: '頻段',
+    manageDevices: '管理裝置', metricsTemp: '模組溫度', metricsCpu: 'CPU 負載', metricsMemory: '記憶體', metricsFlash: '快閃儲存', metricsData: '4G 流量', metricsLoad: '平均利用率 1/5/15 分鐘', metricsLoadHint: '負載佔 CPU 總容量的百分比', metricsUnavailable: '系統指標不可用', metricsChannelStale: '模組通道異常，顯示最近一次資料', metricsChannelDown: '模組通道不可達', metricsCoresUnit: '核', metricsThreadsUnit: '執行緒', metricsUtilized: '使用率', metricsRx: '接收速度', metricsTx: '傳送速度', metricsCellular: '4G 模組', metricsSINR: '訊號增益', radioBand: '頻段',
     metricsThermal: '溫度', metricsCpuTemp: 'CPU 溫度', metricsModel: '型號', metricsCores: '核心數', metricsFreq: '頻率', metricsCache: '快取', metricsProcesses: '行程', metricsThreads: '執行緒', metricsCapacity: '容量', metricsUsed: '已用', metricsAvailable: '可用', metricsCached: '快取占用', metricsBuffers: '緩衝', metricsMemSpec: '類型/頻率', metricsDevice: '裝置', metricsFs: '檔案系統', metricsFree: '剩餘', metricsMount: '掛載點',
     loadingLines: '正在載入線路',
     loadLinesFailed: '無法載入線路',
@@ -1551,5 +1551,18 @@ export default {
     imageTooLarge: '原圖不能超過 10 MB',
     invalidImageDimensions: '圖片尺寸無效',
     imageTooComplex: '圖片內容過於複雜，請選擇更小的圖片'
+  },
+  runtimeStatus: {
+    title: '執行狀態',
+    uptime: '本次執行',
+    dayUnit: '天',
+    hourUnit: '小時',
+    minuteUnit: '分',
+    secondUnit: '秒',
+    memory: '記憶體',
+    storage: '儲存空間',
+    temperature: '溫度',
+    avatarTitle: '頭像',
+    avatarDescription: '上傳一張圖片作為你的個人頭像，儲存後立即生效'
   }
 } as const

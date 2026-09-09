@@ -41,6 +41,9 @@ type systemMetricsResponse struct {
 	ProcessCount    int      `json:"process_count"`
 	ThreadCount     int      `json:"thread_count"`
 
+	// Kernel uptime of the machine the agent runs on; 0 when unavailable.
+	HostUptimeSeconds int64 `json:"host_uptime_seconds"`
+
 	Cellular      *systemMetricsCellular   `json:"cellular"`
 	ModuleChannel string                   `json:"module_channel,omitempty"`
 	Interfaces    []systemMetricsInterface `json:"interfaces"`
@@ -121,6 +124,7 @@ func (api *API) systemMetrics(response http.ResponseWriter, request *http.Reques
 	result.CPUTempCelsius = metrics.CPUTempCelsius
 	result.ProcessCount = metrics.ProcessCount
 	result.ThreadCount = metrics.ThreadCount
+	result.HostUptimeSeconds = metrics.HostUptimeSeconds
 	if metrics.Cellular != nil {
 		result.Cellular = &systemMetricsCellular{
 			State:                metrics.Cellular.State,

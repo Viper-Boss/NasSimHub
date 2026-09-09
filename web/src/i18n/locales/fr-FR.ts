@@ -830,7 +830,7 @@ export default {
     "online": "en ligne",
     "callReady": "appel prêt",
     "messageReady": "message prêt",
-    "manageDevices": "Gérer les appareils", metricsTemp: 'Temp. du module', metricsCpu: 'Charge CPU', metricsMemory: 'Mémoire', metricsFlash: 'Flash', metricsData: 'Données 4G', metricsLoad: 'Charge 1/5/15 min', metricsLoadHint: 'Moyennes de charge en pourcentage de la capacité CPU totale', metricsUnavailable: 'Métriques système indisponibles', metricsChannelStale: 'Canal module dégradé, dernières valeurs affichées', metricsChannelDown: 'Canal module injoignable', metricsCoresUnit: 'cœurs', metricsThreadsUnit: 'threads', metricsUtilized: 'Utilisation', metricsRx: 'Réception', metricsTx: 'Envoi', metricsCellular: 'Module 4G', metricsSINR: 'SINR', radioBand: 'Bande',
+    "manageDevices": "Gérer les appareils", metricsTemp: 'Temp. du module', metricsCpu: 'Charge CPU', metricsMemory: 'Mémoire', metricsFlash: 'Flash', metricsData: 'Données 4G', metricsLoad: 'Utilisation moy. 1/5/15 min', metricsLoadHint: 'Moyennes de charge en pourcentage de la capacité CPU totale', metricsUnavailable: 'Métriques système indisponibles', metricsChannelStale: 'Canal module dégradé, dernières valeurs affichées', metricsChannelDown: 'Canal module injoignable', metricsCoresUnit: 'cœurs', metricsThreadsUnit: 'threads', metricsUtilized: 'Utilisation', metricsRx: 'Réception', metricsTx: 'Envoi', metricsCellular: 'Module 4G', metricsSINR: 'SINR', radioBand: 'Bande',
     metricsThermal: 'Température', metricsCpuTemp: 'Temp. CPU', metricsModel: 'Modèle', metricsCores: 'Cœurs', metricsFreq: 'Fréquence', metricsCache: 'Cache', metricsProcesses: 'Processus', metricsThreads: 'Threads', metricsCapacity: 'Capacité', metricsUsed: 'Utilisé', metricsAvailable: 'Disponible', metricsCached: 'En cache', metricsBuffers: 'Tampons', metricsMemSpec: 'Type/Freq.', metricsDevice: 'Périphérique', metricsFs: 'Syst. fichiers', metricsFree: 'Libre', metricsMount: 'Point montage',
     "loadingLines": "Lignes de chargement",
     "loadLinesFailed": "Impossible de charger les lignes",
@@ -1529,5 +1529,18 @@ export default {
     "imageTooLarge": "L'image source ne peut pas dépasser 10 Mo",
     "invalidImageDimensions": "Dimensions de l'image non valides",
     "imageTooComplex": "L'image est trop complexe. Choisissez une image plus petite."
+  },
+  runtimeStatus: {
+    title: 'Etat du systeme',
+    uptime: 'Temps de marche',
+    dayUnit: 'j',
+    hourUnit: 'h',
+    minuteUnit: 'min',
+    secondUnit: 's',
+    memory: 'Memoire',
+    storage: 'Stockage',
+    temperature: 'Temp.',
+    avatarTitle: 'Avatar du profil',
+    avatarDescription: 'Envoyez une image comme avatar personnel, applique aussitot'
   }
 } as const

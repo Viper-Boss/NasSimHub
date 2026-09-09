@@ -830,7 +830,7 @@ export default {
     "online": "オンライン",
     "callReady": "通話準備完了",
     "messageReady": "メッセージの準備ができました",
-    "manageDevices": "デバイスの管理", metricsTemp: 'モジュール温度', metricsCpu: 'CPU負荷', metricsMemory: 'メモリ', metricsFlash: 'フラッシュ', metricsData: '4Gデータ', metricsLoad: '負荷 1/5/15分', metricsLoadHint: 'CPU総容量に対する負荷平均の割合', metricsUnavailable: 'システム指標を利用できません', metricsChannelStale: 'モジュールチャネル異常、最後の値を表示中', metricsChannelDown: 'モジュールチャネルに接続できません', metricsCoresUnit: 'コア', metricsThreadsUnit: 'スレッド', metricsUtilized: '使用率', metricsRx: '受信速度', metricsTx: '送信速度', metricsCellular: '4G モジュール', metricsSINR: 'SINR', radioBand: '帯域',
+    "manageDevices": "デバイスの管理", metricsTemp: 'モジュール温度', metricsCpu: 'CPU負荷', metricsMemory: 'メモリ', metricsFlash: 'フラッシュ', metricsData: '4Gデータ', metricsLoad: '平均使用率 1/5/15分', metricsLoadHint: 'CPU総容量に対する負荷平均の割合', metricsUnavailable: 'システム指標を利用できません', metricsChannelStale: 'モジュールチャネル異常、最後の値を表示中', metricsChannelDown: 'モジュールチャネルに接続できません', metricsCoresUnit: 'コア', metricsThreadsUnit: 'スレッド', metricsUtilized: '使用率', metricsRx: '受信速度', metricsTx: '送信速度', metricsCellular: '4G モジュール', metricsSINR: 'SINR', radioBand: '帯域',
     metricsThermal: '温度', metricsCpuTemp: 'CPU温度', metricsModel: 'モデル', metricsCores: 'コア数', metricsFreq: '周波数', metricsCache: 'キャッシュ', metricsProcesses: 'プロセス', metricsThreads: 'スレッド', metricsCapacity: '容量', metricsUsed: '使用中', metricsAvailable: '利用可能', metricsCached: 'キャッシュ済み', metricsBuffers: 'バッファ', metricsMemSpec: '種類/周波数', metricsDevice: 'デバイス', metricsFs: 'ファイルシステム', metricsFree: '空き', metricsMount: 'マウント',
     "loadingLines": "回線を読み込み中",
     "loadLinesFailed": "回線を読み込めません",
@@ -1529,5 +1529,18 @@ export default {
     "imageTooLarge": "ソース画像は 10 MB を超えることはできません",
     "invalidImageDimensions": "無効な画像寸法",
     "imageTooComplex": "イメージが複雑すぎます。小さい画像を選択してください。"
+  },
+  runtimeStatus: {
+    title: '実行状態',
+    uptime: '稼働時間',
+    dayUnit: '日',
+    hourUnit: '時間',
+    minuteUnit: '分',
+    secondUnit: '秒',
+    memory: 'メモリ',
+    storage: 'ストレージ',
+    temperature: '温度',
+    avatarTitle: 'アバター',
+    avatarDescription: '画像をアップロードしてアバターに設定できます'
   }
 } as const

@@ -75,6 +75,9 @@ import GlobalSearch from './GlobalSearch.vue'
 import IncomingCallModeControl from './IncomingCallModeControl.vue'
 import LineStatusStrip from './LineStatusStrip.vue'
 import OverlayDialog from './OverlayDialog.vue'
+import PopoverTransition from './PopoverTransition.vue'
+import RuntimeStatusCard from './RuntimeStatusCard.vue'
+import { profileAvatarState } from '../state/profileAvatar'
 
 const route = useRoute()
 const router = useRouter()
@@ -86,6 +89,26 @@ const occupiedLineCount = computed(() => occupiedLineIDs().size)
 const profileContact = computed(() =>
   contactsResource.data.find(contact => contact.id === sessionState.profileContactID)
 )
+// Rail avatar: user-uploaded avatar wins, then the profile contact's photo.
+const railAvatar = computed(
+  () => profileAvatarState.avatar || profileContact?.value?.avatar || ''
+)
+const runtimeCardOpen = ref(false)
+const runtimeCardRoot = ref<HTMLElement | null>(null)
+
+function toggleRuntimeCard(): void {
+  runtimeCardOpen.value = !runtimeCardOpen.value
+}
+
+function handleRuntimeClickOutside(event: MouseEvent): void {
+  if (!runtimeCardOpen.value) return
+  if (runtimeCardRoot.value?.contains(event.target as Node)) return
+  runtimeCardOpen.value = false
+}
+
+function onRuntimeKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') runtimeCardOpen.value = false
+}
 const activeCallPresent = computed(() =>
   callState.sessions.some(isLiveCallSession)
 )
@@ -396,12 +419,16 @@ onMounted(() => {
   dialerMediaQuery.addEventListener('change', syncDialerMode)
   nonModalDialerMediaQuery.addEventListener('change', syncDialerMode)
   syncDialerMode()
+  document.addEventListener('click', handleRuntimeClickOutside)
+  document.addEventListener('keydown', onRuntimeKeydown)
 })
 
 onBeforeUnmount(() => {
   mountGeneration += 1
   dialerMediaQuery?.removeEventListener('change', syncDialerMode)
   nonModalDialerMediaQuery?.removeEventListener('change', syncDialerMode)
+  document.removeEventListener('click', handleRuntimeClickOutside)
+  document.removeEventListener('keydown', onRuntimeKeydown)
   stopApplicationVersionChecks?.()
   stopApplicationVersionChecks = undefined
   stopForegroundCommunicationRefresh?.()
@@ -419,22 +446,31 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell">
     <aside class="rail" :aria-label="t('shell.primaryNavigation')">
-      <RouterLink
-        class="brand-mark"
-        :to="{ name: 'settings', params: { section: 'preferences' } }"
-        :aria-label="t('homesim.profile')"
-        :title="t('homesim.profile')"
-      >
-        <span class="brand-mark__avatar">
-          <BaseAvatar
-            :name="profileContact?.display_name || sessionState.username"
-            :src="profileContact?.avatar"
-            fallback="person"
-            :palette-key="profileContact?.id || sessionState.userID"
-          />
-        </span>
-        <strong>{{ sessionState.username }}</strong>
-      </RouterLink>
+      <div ref="runtimeCardRoot" class="brand-mark-wrap">
+        <button
+          class="brand-mark"
+          type="button"
+          :aria-expanded="runtimeCardOpen"
+          :aria-label="t('runtimeStatus.title')"
+          :title="t('runtimeStatus.title')"
+          @click.stop="toggleRuntimeCard"
+        >
+          <span class="brand-mark__avatar">
+            <BaseAvatar
+              :name="profileContact?.display_name || sessionState.username"
+              :src="railAvatar"
+              fallback="person"
+              :palette-key="profileContact?.id || sessionState.userID"
+            />
+          </span>
+          <strong>{{ sessionState.username }}</strong>
+        </button>
+        <PopoverTransition>
+          <div v-if="runtimeCardOpen" class="runtime-card-pop" @click.stop>
+            <RuntimeStatusCard />
+          </div>
+        </PopoverTransition>
+      </div>
 
       <nav class="rail__primary">
         <RouterLink

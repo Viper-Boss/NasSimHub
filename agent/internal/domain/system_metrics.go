@@ -55,6 +55,11 @@ type SystemMetrics struct {
 	// single-core module overstate usage, so the dashboard uses this.
 	CPUUsagePercent float64 `json:"cpu_usage_percent"`
 
+	// HostUptimeSeconds is the kernel uptime of the machine the agent runs
+	// on (containers share the host kernel, so /proc/uptime is the real
+	// host uptime). 0 when unavailable.
+	HostUptimeSeconds int64 `json:"host_uptime_seconds"`
+
 	// Serving-cell radio details parsed from AT+QENG="servingcell"; nil when
 	// the modem does not answer.
 	Cellular *CellularServingCell `json:"cellular"`

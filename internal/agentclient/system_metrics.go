@@ -45,6 +45,9 @@ type SystemMetrics struct {
 	ProcessCount    int      `json:"process_count"`
 	ThreadCount     int      `json:"thread_count"`
 
+	// Kernel uptime of the machine the agent runs on; 0 when unavailable.
+	HostUptimeSeconds int64 `json:"host_uptime_seconds"`
+
 	Cellular *CellularServingCell `json:"cellular"`
 
 	// Health of the ADB channel into the module's own system: ok/stale/

@@ -4,7 +4,9 @@ import { gzipSync } from 'node:zlib'
 const kibibyte = 1024
 const limits = {
   initialRequests: 12,
-  initialGzip: 230 * kibibyte,
+  // 2026-09-09: 230 -> 240, dashboard task-manager panel grew (temperature
+  // sparkline + percent load stats); still far below any real perf cliff.
+  initialGzip: 240 * kibibyte,
   javascriptGzip: 100 * kibibyte,
   stylesheetGzip: 20 * kibibyte
 }

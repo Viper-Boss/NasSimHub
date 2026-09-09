@@ -3,6 +3,8 @@ module github.com/human-agent65535/modemdeck
 go 1.26.5
 
 require (
+	github.com/nknorg/nkn-sdk-go v1.4.8
+	github.com/nknorg/nkngomobile v0.0.0-20220615081414-671ad1afdfa9
 	github.com/nyaruka/phonenumbers/v2 v2.0.5
 	github.com/pion/interceptor v0.1.47
 	github.com/pion/rtp v1.10.5
@@ -26,9 +28,7 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/nknorg/ncp-go v1.0.5 // indirect
-	github.com/nknorg/nkn-sdk-go v1.4.8 // indirect
 	github.com/nknorg/nkn/v2 v2.2.1-0.20240509224846-24ade56074a3 // indirect
-	github.com/nknorg/nkngomobile v0.0.0-20220615081414-671ad1afdfa9 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pbnjay/memory v0.0.0-20190104145345-974d429e7ae4 // indirect
 	github.com/pborman/uuid v1.2.0 // indirect

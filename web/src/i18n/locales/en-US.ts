@@ -870,7 +870,7 @@ export default {
     online: 'online',
     callReady: 'call ready',
     messageReady: 'message ready',
-    manageDevices: 'Manage devices', metricsTemp: 'Module temp', metricsCpu: 'CPU load', metricsMemory: 'Memory', metricsFlash: 'Flash', metricsData: '4G data', metricsLoad: 'Load 1/5/15min', metricsLoadHint: 'Load averages as percent of total CPU capacity', metricsUnavailable: 'System metrics unavailable', metricsChannelStale: 'Module channel degraded, showing last known values', metricsChannelDown: 'Module channel unreachable', metricsCoresUnit: 'cores', metricsThreadsUnit: 'threads', metricsUtilized: 'Utilization', metricsRx: 'Receive', metricsTx: 'Send', metricsCellular: '4G module', metricsSINR: 'SINR', radioBand: 'Band',
+    manageDevices: 'Manage devices', metricsTemp: 'Module temp', metricsCpu: 'CPU load', metricsMemory: 'Memory', metricsFlash: 'Flash', metricsData: '4G data', metricsLoad: 'Avg utilization 1/5/15min', metricsLoadHint: 'Load averages as percent of total CPU capacity', metricsUnavailable: 'System metrics unavailable', metricsChannelStale: 'Module channel degraded, showing last known values', metricsChannelDown: 'Module channel unreachable', metricsCoresUnit: 'cores', metricsThreadsUnit: 'threads', metricsUtilized: 'Utilization', metricsRx: 'Receive', metricsTx: 'Send', metricsCellular: '4G module', metricsSINR: 'SINR', radioBand: 'Band',
     metricsThermal: 'Temperature', metricsCpuTemp: 'CPU temp', metricsModel: 'Model', metricsCores: 'Cores', metricsFreq: 'Frequency', metricsCache: 'Cache', metricsProcesses: 'Processes', metricsThreads: 'Threads', metricsCapacity: 'Capacity', metricsUsed: 'Used', metricsAvailable: 'Available', metricsCached: 'Cached', metricsBuffers: 'Buffers', metricsMemSpec: 'Type/Freq', metricsDevice: 'Device', metricsFs: 'Filesystem', metricsFree: 'Free', metricsMount: 'Mount point',
     loadingLines: 'Loading lines',
     loadLinesFailed: 'Unable to load lines',
@@ -1590,5 +1590,18 @@ export default {
     imageTooLarge: 'The source image cannot exceed 10 MB',
     invalidImageDimensions: 'Invalid image dimensions',
     imageTooComplex: 'The image is too complex. Choose a smaller image.'
+  },
+  runtimeStatus: {
+    title: 'Runtime status',
+    uptime: 'Uptime',
+    dayUnit: 'd',
+    hourUnit: 'h',
+    minuteUnit: 'm',
+    secondUnit: 's',
+    memory: 'Memory',
+    storage: 'Storage',
+    temperature: 'Temp',
+    avatarTitle: 'Profile avatar',
+    avatarDescription: 'Upload an image as your personal avatar; it applies instantly'
   }
 } as const

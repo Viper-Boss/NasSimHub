@@ -12,10 +12,8 @@ import {
 export interface SystemMetricsSample {
   modemTemp: number | null
   cpuTemp: number | null
-  cpu: number
-  cpu5?: number
-  /** Real utilization from /proc/stat deltas; falls back to `cpu` when absent. */
-  cpuUsage?: number
+  /** Real utilization percent from /proc/stat deltas. */
+  cpuUsage: number
   mem: number
   flash: number
   rxRate: number
@@ -32,7 +30,8 @@ export const systemMetricsState = reactive({
 })
 
 const POLL_MS = 10_000
-const HISTORY = 60
+// 90 samples x 10s covers the 15-minute utilization average window.
+const HISTORY = 90
 const STORAGE_KEY = 'modemdeck.systemMetrics.history'
 const HISTORY_TTL_MS = HISTORY * POLL_MS + 5_000
 
@@ -120,8 +119,6 @@ async function poll(): Promise<void> {
       {
         modemTemp: snapshot.modem_temp_celsius,
         cpuTemp: snapshot.cpu_temp_celsius,
-        cpu: snapshot.load_percent_1,
-        cpu5: snapshot.load_percent_5,
         cpuUsage: snapshot.cpu_usage_percent,
         mem: snapshot.memory_used_percent,
         flash: snapshot.flash_used_percent,

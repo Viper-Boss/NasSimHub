@@ -46,10 +46,29 @@ func (p *Provider) SystemMetrics(ctx context.Context) (domain.SystemMetrics, err
 	metrics.Interfaces = p.collectNetworkCounters()
 	metrics.ModemTempCelsius = p.cachedModemTemperature(ctx)
 	metrics.Cellular = p.cachedCellular(ctx)
+	metrics.HostUptimeSeconds = readHostUptime()
 	if metrics.Interfaces == nil {
 		metrics.Interfaces = []domain.NetworkInterfaceCounters{}
 	}
 	return metrics, nil
+}
+
+// readHostUptime parses /proc/uptime. Containers share the host kernel, so
+// this is the real machine uptime regardless of container restarts.
+func readHostUptime() int64 {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0
+	}
+	seconds, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return int64(seconds)
 }
 
 func percentOfCapacity(load float64, cores int) float64 {

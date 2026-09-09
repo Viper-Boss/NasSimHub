@@ -830,7 +830,7 @@ export default {
     "online": "online",
     "callReady": "Anruf bereit",
     "messageReady": "Nachricht bereit",
-    "manageDevices": "Geräte verwalten", metricsTemp: 'Modultemperatur', metricsCpu: 'CPU-Last', metricsMemory: 'Arbeitsspeicher', metricsFlash: 'Flash', metricsData: '4G-Daten', metricsLoad: 'Last 1/5/15 Min', metricsLoadHint: 'Lastmittelwerte als Prozent der CPU-Gesamtkapazität', metricsUnavailable: 'Systemkennzahlen nicht verfügbar', metricsChannelStale: 'Modulkanal gestört, letzte Werte werden angezeigt', metricsChannelDown: 'Modulkanal nicht erreichbar', metricsCoresUnit: 'Kerne', metricsThreadsUnit: 'Threads', metricsUtilized: 'Auslastung', metricsRx: 'Empfang', metricsTx: 'Senden', metricsCellular: '4G-Modul', metricsSINR: 'SINR', radioBand: 'Band',
+    "manageDevices": "Geräte verwalten", metricsTemp: 'Modultemperatur', metricsCpu: 'CPU-Last', metricsMemory: 'Arbeitsspeicher', metricsFlash: 'Flash', metricsData: '4G-Daten', metricsLoad: 'Ø Auslastung 1/5/15 Min', metricsLoadHint: 'Lastmittelwerte als Prozent der CPU-Gesamtkapazität', metricsUnavailable: 'Systemkennzahlen nicht verfügbar', metricsChannelStale: 'Modulkanal gestört, letzte Werte werden angezeigt', metricsChannelDown: 'Modulkanal nicht erreichbar', metricsCoresUnit: 'Kerne', metricsThreadsUnit: 'Threads', metricsUtilized: 'Auslastung', metricsRx: 'Empfang', metricsTx: 'Senden', metricsCellular: '4G-Modul', metricsSINR: 'SINR', radioBand: 'Band',
     metricsThermal: 'Temperatur', metricsCpuTemp: 'CPU-Temp', metricsModel: 'Modell', metricsCores: 'Kerne', metricsFreq: 'Frequenz', metricsCache: 'Cache', metricsProcesses: 'Prozesse', metricsThreads: 'Threads', metricsCapacity: 'Kapazität', metricsUsed: 'Belegt', metricsAvailable: 'Verfügbar', metricsCached: 'Cache', metricsBuffers: 'Puffer', metricsMemSpec: 'Typ/Freq.', metricsDevice: 'Gerät', metricsFs: 'Dateisystem', metricsFree: 'Frei', metricsMount: 'Einhängepunkt',
     "loadingLines": "Ladelinien",
     "loadLinesFailed": "Zeilen können nicht geladen werden",
@@ -1529,5 +1529,18 @@ export default {
     "imageTooLarge": "Das Quellbild darf 10 MB nicht überschreiten",
     "invalidImageDimensions": "Ungültige Bildabmessungen",
     "imageTooComplex": "Das Bild ist zu komplex. Wählen Sie ein kleineres Bild."
+  },
+  runtimeStatus: {
+    title: 'Laufzeitstatus',
+    uptime: 'Laufzeit',
+    dayUnit: 'T',
+    hourUnit: 'Std',
+    minuteUnit: 'Min',
+    secondUnit: 'Sek',
+    memory: 'RAM',
+    storage: 'Speicher',
+    temperature: 'Temp.',
+    avatarTitle: 'Profil-Avatar',
+    avatarDescription: 'Bild als persönlichen Avatar hochladen, wirkt sofort'
   }
 } as const

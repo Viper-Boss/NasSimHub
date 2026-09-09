@@ -830,7 +830,7 @@ export default {
     "online": "trực tuyến",
     "callReady": "cuộc gọi đã sẵn sàng",
     "messageReady": "tin nhắn đã sẵn sàng",
-    "manageDevices": "Quản lý thiết bị", metricsTemp: 'Nhiệt độ module', metricsCpu: 'Tải CPU', metricsMemory: 'Bộ nhớ', metricsFlash: 'Flash', metricsData: 'Dữ liệu 4G', metricsLoad: 'Tải 1/5/15 phút', metricsLoadHint: 'Tải trung bình theo phần trăm tổng dung lượng CPU', metricsUnavailable: 'Không khả dụng chỉ số hệ thống', metricsChannelStale: 'Kênh module lỗi, hiển thị giá trị gần nhất', metricsChannelDown: 'Không thể kết nối kênh module', metricsCoresUnit: 'lõi', metricsThreadsUnit: 'luồng', metricsUtilized: 'Sử dụng', metricsRx: 'Tải về', metricsTx: 'Tải lên', metricsCellular: 'Module 4G', metricsSINR: 'SINR', radioBand: 'Băng tần',
+    "manageDevices": "Quản lý thiết bị", metricsTemp: 'Nhiệt độ module', metricsCpu: 'Tải CPU', metricsMemory: 'Bộ nhớ', metricsFlash: 'Flash', metricsData: 'Dữ liệu 4G', metricsLoad: 'Sử dụng TB 1/5/15 phút', metricsLoadHint: 'Tải trung bình theo phần trăm tổng dung lượng CPU', metricsUnavailable: 'Không khả dụng chỉ số hệ thống', metricsChannelStale: 'Kênh module lỗi, hiển thị giá trị gần nhất', metricsChannelDown: 'Không thể kết nối kênh module', metricsCoresUnit: 'lõi', metricsThreadsUnit: 'luồng', metricsUtilized: 'Sử dụng', metricsRx: 'Tải về', metricsTx: 'Tải lên', metricsCellular: 'Module 4G', metricsSINR: 'SINR', radioBand: 'Băng tần',
     metricsThermal: 'Nhiệt độ', metricsCpuTemp: 'Nhiệt độ CPU', metricsModel: 'Model', metricsCores: 'Số lõi', metricsFreq: 'Tần số', metricsCache: 'Bộ nhớ đệm', metricsProcesses: 'Tiến trình', metricsThreads: 'Luồng', metricsCapacity: 'Dung lượng', metricsUsed: 'Đã dùng', metricsAvailable: 'Khả dụng', metricsCached: 'Trong bộ đệm', metricsBuffers: 'Bộ đệm', metricsMemSpec: 'Loại/Tần số', metricsDevice: 'Thiết bị', metricsFs: 'Hệ tệp', metricsFree: 'Còn trống', metricsMount: 'Điểm gắn',
     "loadingLines": "Đang tải đường dây",
     "loadLinesFailed": "Không thể tải đường dây",
@@ -1529,5 +1529,18 @@ export default {
     "imageTooLarge": "Hình ảnh nguồn không thể vượt quá 10 MB",
     "invalidImageDimensions": "Kích thước hình ảnh không hợp lệ",
     "imageTooComplex": "Hình ảnh quá phức tạp. Chọn một hình ảnh nhỏ hơn."
+  },
+  runtimeStatus: {
+    title: 'Trạng thái chạy',
+    uptime: 'Thời gian chạy',
+    dayUnit: 'ngày',
+    hourUnit: 'giờ',
+    minuteUnit: 'phút',
+    secondUnit: 'giây',
+    memory: 'Bộ nhớ',
+    storage: 'Lưu trữ',
+    temperature: 'Nhiệt độ',
+    avatarTitle: 'Ảnh đại diện',
+    avatarDescription: 'Tải ảnh lên làm ảnh đại diện cá nhân, áp dụng ngay'
   }
 } as const

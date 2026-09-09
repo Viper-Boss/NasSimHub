@@ -2745,6 +2745,7 @@ export interface SystemMetricsSnapshot {
   cpu_temp_celsius: number | null
   process_count: number
   thread_count: number
+  host_uptime_seconds: number
   cellular: SystemMetricsCellular | null
   module_channel?: string
   interfaces: SystemMetricsInterfaceCounters[]
@@ -2789,6 +2790,7 @@ export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
     cpu_temp_celsius: typeof result.cpu_temp_celsius === 'number' ? result.cpu_temp_celsius : null,
     process_count: Number(result.process_count ?? 0),
     thread_count: Number(result.thread_count ?? 0),
+    host_uptime_seconds: Number(result.host_uptime_seconds ?? 0),
     cellular: result.cellular && typeof result.cellular === 'object' ? result.cellular as SystemMetricsCellular : null,
     module_channel: typeof result.module_channel === 'string' ? result.module_channel : undefined,
     interfaces: result.interfaces,

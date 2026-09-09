@@ -850,7 +850,7 @@ export default {
     online: '在线',
     callReady: '可通话',
     messageReady: '可短信',
-    manageDevices: '管理设备', metricsTemp: '模组温度', metricsCpu: 'CPU 负载', metricsMemory: '内存', metricsFlash: '闪存', metricsData: '4G 流量', metricsLoad: '负载 1/5/15 分钟', metricsLoadHint: '负载占 CPU 总容量的百分比', metricsUnavailable: '系统指标不可用', metricsChannelStale: '模组通道异常，显示最近一次数据', metricsChannelDown: '模组通道不可达', metricsCoresUnit: '核', metricsThreadsUnit: '线程', metricsUtilized: '利用率', metricsRx: '接收速度', metricsTx: '发送速度', metricsCellular: '4G 模组', metricsSINR: '信号增益', radioBand: '频段',
+    manageDevices: '管理设备', metricsTemp: '模组温度', metricsCpu: 'CPU 负载', metricsMemory: '内存', metricsFlash: '闪存', metricsData: '4G 流量', metricsLoad: '平均利用率 1/5/15 分钟', metricsLoadHint: '负载占 CPU 总容量的百分比', metricsUnavailable: '系统指标不可用', metricsChannelStale: '模组通道异常，显示最近一次数据', metricsChannelDown: '模组通道不可达', metricsCoresUnit: '核', metricsThreadsUnit: '线程', metricsUtilized: '利用率', metricsRx: '接收速度', metricsTx: '发送速度', metricsCellular: '4G 模组', metricsSINR: '信号增益', radioBand: '频段',
     metricsThermal: '温度', metricsCpuTemp: 'CPU 温度', metricsModel: '型号', metricsCores: '核心数', metricsFreq: '频率', metricsCache: '缓存', metricsProcesses: '进程', metricsThreads: '线程', metricsCapacity: '容量', metricsUsed: '已用', metricsAvailable: '可用', metricsCached: '缓存占用', metricsBuffers: '缓冲', metricsMemSpec: '类型/频率', metricsDevice: '设备', metricsFs: '文件系统', metricsFree: '剩余', metricsMount: '挂载点',
     loadingLines: '正在载入线路',
     loadLinesFailed: '无法载入线路',
@@ -1552,5 +1552,18 @@ export default {
     imageTooLarge: '原图不能超过 10 MB',
     invalidImageDimensions: '图片尺寸无效',
     imageTooComplex: '图片内容过于复杂，请选择更小的图片'
+  },
+  runtimeStatus: {
+    title: '运行状态',
+    uptime: '本次运行',
+    dayUnit: '天',
+    hourUnit: '小时',
+    minuteUnit: '分',
+    secondUnit: '秒',
+    memory: '内存',
+    storage: '存储',
+    temperature: '温度',
+    avatarTitle: '头像',
+    avatarDescription: '上传一张图片作为你的个人头像，保存后立即生效'
   }
 } as const

@@ -234,6 +234,15 @@ body .brand-mark > span, .login-brand > span { color: #ffffff; }
 .brand-mark > strong { display: block; max-width: 100%; overflow: hidden; font-size: .75rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .brand-mark__avatar { display: grid; place-items: center; overflow: hidden; }
 .brand-mark__avatar .avatar { width: 34px; height: 34px; border-radius: 50%; }
+/* Rail avatar: clickable, opens the runtime status popover. */
+button.brand-mark {
+  border: 0; background: none; padding: 0; font: inherit; color: inherit;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.brand-mark-wrap { position: relative; display: flex; justify-content: center; }
+.runtime-card-pop {
+  position: absolute; z-index: 60; top: calc(100% + 8px); left: 12px;
+}
 .shell-location > span:first-child { color: var(--text); font-size: 1.125rem; font-weight: 700; letter-spacing: -.03em; }
 .app-shell .rail-link { min-height: 62px; }
 .app-shell .rail__primary { gap: 4px; padding-block: 8px; }
