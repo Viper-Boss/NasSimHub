@@ -92,8 +92,6 @@ export const homesimEN = {
     title: 'Sponsor', subtitle: 'If NAS猫窝 saves you time or money, a coffee is always appreciated.',
     wechat: 'WeChat Pay', alipay: 'Alipay',
     replaceHint: 'Drop your QR image at web/public/sponsor/ (wechat.png / alipay.png).',
-    cryptoTitle: 'Crypto donation addresses', copy: 'Copy', copied: 'Copied',
-    cryptoEmpty: 'Address not set yet — fill it in SponsorView.vue (CRYPTO array).',
     thanks: 'Thank you for supporting independent development!',
   },
   fraudGuard: {
@@ -241,8 +239,6 @@ export const homesimZH = {
     title: '赞助', subtitle: '如果 NAS猫窝 帮你省了时间省了钱，请作者喝杯咖啡吧。',
     wechat: '微信支付', alipay: '支付宝',
     replaceHint: '把收款码图片放到 web/public/sponsor/（wechat.png / alipay.png）。',
-    cryptoTitle: '区块链捐助地址', copy: '复制', copied: '已复制',
-    cryptoEmpty: '地址待填：编辑 SponsorView.vue 顶部的 CRYPTO 配置。',
     thanks: '感谢支持独立开发！',
   },
   fraudGuard: {
