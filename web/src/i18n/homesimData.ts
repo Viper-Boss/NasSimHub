@@ -89,7 +89,7 @@ export const homesimEN = {
     empty: 'No conversations yet. Send the first message to an NKN address above.',
   },
   sponsor: {
-    title: 'Sponsor', subtitle: 'If NAS猫窝 saves you time or money, a coffee is always appreciated.',
+    title: 'Sponsor', subtitle: 'This app is built with AI tokens — and tokens are bought with real money. If you feel like it, a little tip keeps the tokens (and the updates) flowing. Thank you!',
     wechat: 'WeChat Pay', alipay: 'Alipay',
     replaceHint: 'Drop your QR image at web/public/sponsor/ (wechat.png / alipay.png).',
     thanks: 'Thank you for supporting independent development!',
@@ -236,7 +236,7 @@ export const homesimZH = {
     empty: '还没有会话。在上方输入对方 NKN 地址发送第一条消息。',
   },
   sponsor: {
-    title: '赞助', subtitle: '如果 NAS猫窝 帮你省了时间省了钱，请作者喝杯咖啡吧。',
+    title: '赞助', subtitle: '软件是用 token 开发的，token 是用软妹币买的。如果可以，感谢打赏，让我有更多的 token 开发更新的版本。',
     wechat: '微信支付', alipay: '支付宝',
     replaceHint: '把收款码图片放到 web/public/sponsor/（wechat.png / alipay.png）。',
     thanks: '感谢支持独立开发！',

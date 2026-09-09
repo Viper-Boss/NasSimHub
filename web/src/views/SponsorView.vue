@@ -17,7 +17,9 @@ function markFailed(key: string): void {
   <PageContentFrame>
     <div class="sponsor">
       <header class="sponsor__head">
-        <HeartHandshake :size="28" />
+        <span class="sponsor__badge">
+          <HeartHandshake :size="26" />
+        </span>
         <h1>{{ t('homesim.sponsor.title') }}</h1>
         <p>{{ t('homesim.sponsor.subtitle') }}</p>
       </header>
@@ -29,7 +31,6 @@ function markFailed(key: string): void {
             v-if="!failed.wechat"
             src="/sponsor/wechat.png"
             :alt="t('homesim.sponsor.wechat')"
-            loading="lazy"
             @error="markFailed('wechat')"
           >
           <div v-else class="sponsor__placeholder">{{ t('homesim.sponsor.replaceHint') }}</div>
@@ -40,7 +41,6 @@ function markFailed(key: string): void {
             v-if="!failed.alipay"
             src="/sponsor/alipay.png"
             :alt="t('homesim.sponsor.alipay')"
-            loading="lazy"
             @error="markFailed('alipay')"
           >
           <div v-else class="sponsor__placeholder">{{ t('homesim.sponsor.replaceHint') }}</div>
@@ -53,44 +53,85 @@ function markFailed(key: string): void {
 </template>
 
 <style scoped>
-.sponsor { display: grid; gap: 18px; justify-items: center; }
-.sponsor__head { display: grid; justify-items: center; gap: 6px; text-align: center; color: var(--text); }
-.sponsor__head h1 { font-size: 22px; }
-.sponsor__head p { color: var(--muted); font-size: 13px; max-width: 480px; }
-.sponsor__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; max-width: 640px; }
+.sponsor {
+  display: grid;
+  gap: 28px;
+  justify-items: center;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.sponsor__head { display: grid; justify-items: center; gap: 12px; text-align: center; color: var(--text); }
+.sponsor__badge {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f97316, #ec4899);
+  color: #fff;
+  box-shadow: 0 6px 18px rgb(236 72 153 / 25%);
+}
+.sponsor__head h1 { margin: 0; font-size: 26px; letter-spacing: 0.5px; }
+.sponsor__head p {
+  margin: 0;
+  max-width: 480px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.sponsor__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
 .sponsor__card {
   display: grid;
-  gap: 10px;
+  gap: 14px;
   justify-items: center;
   margin: 0;
-  padding: 18px;
+  padding: 22px 18px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 18px;
   background: var(--surface-subtle);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.sponsor__card h2 { font-size: 14px; color: var(--text); }
+.sponsor__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 18%);
+}
+.sponsor__card h2 { margin: 0; font-size: 15px; color: var(--text); }
 .sponsor__card img {
   width: 100%;
-  max-width: 240px;
+  max-width: 300px;
   aspect-ratio: 1;
-  border-radius: 10px;
-  background: var(--border);
+  border-radius: 12px;
+  background: #fff;
   object-fit: contain;
 }
 .sponsor__placeholder {
   display: grid;
   place-items: center;
   width: 100%;
-  max-width: 240px;
+  max-width: 300px;
   aspect-ratio: 1;
   padding: 12px;
   border: 1px dashed var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
 }
-.sponsor__thanks { color: var(--muted); font-size: 12.5px; }
+
+.sponsor__thanks {
+  margin: 0;
+  max-width: 480px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+  text-align: center;
+}
 @media (max-width: 560px) {
   .sponsor__grid { grid-template-columns: 1fr; }
 }
