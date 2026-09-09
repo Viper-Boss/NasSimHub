@@ -31,6 +31,7 @@ type handler struct {
 	networkSelection     domain.NetworkSelectionProvider
 	diagnosticLogs       diagnostics.LogSource
 	systemMetrics        domain.SystemMetricsProvider
+	vowifiDiagnostics    domain.VowifiDiagnosticsProvider
 	agentVersion         string
 	media                *media.Manager
 }
@@ -101,6 +102,7 @@ func NewWithOptions(
 	h.callMedia, _ = provider.(domain.CallMediaActivator)
 	h.messageDeleter, _ = provider.(domain.MessageDeleter)
 	h.systemMetrics, _ = provider.(domain.SystemMetricsProvider)
+	h.vowifiDiagnostics, _ = provider.(domain.VowifiDiagnosticsProvider)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health", h.health)
 	mux.HandleFunc("GET /v1/events", h.events)
@@ -110,6 +112,7 @@ func NewWithOptions(
 	mux.HandleFunc("GET /v1/snapshot", h.snapshot)
 	mux.HandleFunc("GET /v1/telemetry", h.getTelemetry)
 	mux.HandleFunc("GET /v1/system/metrics", h.getSystemMetrics)
+	mux.HandleFunc("GET /v1/vowifi/diagnostics", h.getVowifiDiagnostics)
 	mux.HandleFunc("GET /v1/lines/{id}/configuration", h.getDeviceConfiguration)
 	mux.HandleFunc("PATCH /v1/lines/{id}/configuration", h.patchDeviceConfiguration)
 	mux.HandleFunc("GET /v1/lines/{id}/sim", h.getSIMStatus)

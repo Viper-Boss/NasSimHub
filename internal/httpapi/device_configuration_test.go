@@ -40,6 +40,16 @@ func (service *fakeDeviceConfigurations) ApplyDeviceConfiguration(
 	return service.configuration, service.err
 }
 
+func (service *fakeDeviceConfigurations) SystemMetrics(context.Context) (agentclient.SystemMetrics, error) {
+	return agentclient.SystemMetrics{}, nil
+}
+
+func (service *fakeDeviceConfigurations) VowifiDiagnostics(
+	context.Context,
+) (agentclient.VowifiDiagnostics, error) {
+	return agentclient.VowifiDiagnostics{}, nil
+}
+
 type fakeCallPolicies struct {
 	global               store.GlobalCallSettings
 	line                 store.LineCallPolicy

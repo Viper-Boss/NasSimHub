@@ -153,6 +153,14 @@ func (agent *fakeAgent) ApplyDeviceConfiguration(
 	return agent.deviceConfiguration, agent.applyDeviceConfigurationError
 }
 
+func (agent *fakeAgent) SystemMetrics(context.Context) (agentclient.SystemMetrics, error) {
+	return agentclient.SystemMetrics{}, nil
+}
+
+func (agent *fakeAgent) VowifiDiagnostics(context.Context) (agentclient.VowifiDiagnostics, error) {
+	return agentclient.VowifiDiagnostics{}, nil
+}
+
 type fakeRepository struct {
 	snapshot                    store.HardwareSnapshot
 	snapshotResult              store.HardwareSnapshotResult

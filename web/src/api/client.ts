@@ -2737,6 +2737,91 @@ export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
   }
 }
 
+export interface VowifiIkeProbe {
+  attempted: boolean
+  address?: string
+  port_500: boolean
+  port_4500: boolean
+  reachable: boolean
+  wait_millis?: number
+  error?: string
+}
+
+export interface VowifiPathProbe {
+  available: boolean
+  answer_code?: string
+  addresses?: string[]
+  dns_servers?: string[]
+  interface?: string
+  error?: string
+  ike: VowifiIkeProbe
+}
+
+export interface VowifiEgressProbe {
+  available: boolean
+  public_ip?: string
+  isp?: string
+  error?: string
+}
+
+export interface VowifiDiagnosticsSnapshot {
+  observed_at: string
+  plmn?: string
+  epdg_fqdn?: string
+  operator_name?: string
+  data_connected: boolean
+  cellular_path: VowifiPathProbe
+  broadband_path: VowifiPathProbe
+  egress: VowifiEgressProbe
+  available: boolean
+  error?: string
+}
+
+export async function getVowifiDiagnostics(): Promise<VowifiDiagnosticsSnapshot> {
+  if (fixtureMode) throw new Error('当前为演示模式，VoWiFi 诊断未连接 NAS。')
+  const result = await get(`${API_ROOT}/vowifi-diagnostics`) as Partial<VowifiDiagnosticsSnapshot> | null
+  if (!result) throw new Error('VoWiFi 诊断响应无效。')
+  const path = (value: unknown): VowifiPathProbe => {
+    const source = (value ?? {}) as Partial<VowifiPathProbe>
+    const ike = (source.ike ?? {}) as Partial<VowifiIkeProbe>
+    return {
+      available: source.available === true,
+      answer_code: typeof source.answer_code === 'string' ? source.answer_code : undefined,
+      addresses: Array.isArray(source.addresses) ? source.addresses : [],
+      dns_servers: Array.isArray(source.dns_servers) ? source.dns_servers : [],
+      interface: typeof source.interface === 'string' ? source.interface : undefined,
+      error: typeof source.error === 'string' ? source.error : undefined,
+      ike: {
+        attempted: ike.attempted === true,
+        address: typeof ike.address === 'string' ? ike.address : undefined,
+        port_500: ike.port_500 === true,
+        port_4500: ike.port_4500 === true,
+        reachable: ike.reachable === true,
+        wait_millis: typeof ike.wait_millis === 'number' ? ike.wait_millis : undefined,
+        error: typeof ike.error === 'string' ? ike.error : undefined
+      }
+    }
+  }
+  const egress = (result.egress ?? {}) as Partial<VowifiEgressProbe>
+  return {
+    observed_at: typeof result.observed_at === 'string' ? result.observed_at : '',
+    plmn: typeof result.plmn === 'string' ? result.plmn : undefined,
+    epdg_fqdn: typeof result.epdg_fqdn === 'string' ? result.epdg_fqdn : undefined,
+    operator_name: typeof result.operator_name === 'string' ? result.operator_name : undefined,
+    data_connected: result.data_connected === true,
+    cellular_path: path(result.cellular_path),
+    broadband_path: path(result.broadband_path),
+    egress: {
+      available: egress.available === true,
+      public_ip: typeof egress.public_ip === 'string' ? egress.public_ip : undefined,
+      isp: typeof egress.isp === 'string' ? egress.isp : undefined,
+      error: typeof egress.error === 'string' ? egress.error : undefined
+    },
+    available: result.available === true,
+    error: typeof result.error === 'string' ? result.error : undefined
+  }
+}
+
 export interface NKNNetworkPeer {
   address: string
   meta?: string

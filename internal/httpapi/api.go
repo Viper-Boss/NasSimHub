@@ -146,6 +146,7 @@ type DeviceConfigurationService interface {
 		agentclient.ApplyDeviceConfigurationRequest,
 	) (agentclient.DeviceConfiguration, error)
 	SystemMetrics(context.Context) (agentclient.SystemMetrics, error)
+	VowifiDiagnostics(context.Context) (agentclient.VowifiDiagnostics, error)
 }
 
 type LineService interface {

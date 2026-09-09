@@ -11,8 +11,8 @@ import { isRegisteredNetwork } from '../utils/operatorNetwork'
 import { callState } from '../state/call'
 import { connectData, disconnectData } from '../state/deviceConfiguration'
 import { gateway } from '../api/client'
-import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus } from '../api/client'
-import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus } from '../api/client'
+import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus, getVowifiDiagnostics } from '../api/client'
+import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus, VowifiDiagnosticsSnapshot, VowifiPathProbe } from '../api/client'
 const LineSelector = defineAsyncComponent(() => import('./LineSelector.vue'))
 
 const { t } = useI18n()
@@ -177,6 +177,75 @@ async function toggleDataSwitch(): Promise<void> {
   await refreshDataState()
 }
 
+// VoWiFi honest diagnostics: run the reachability probes when the popover
+// opens (cached) and let the user re-run them on demand. A full sweep takes
+// up to ~15s, hence the dedicated loading state.
+const vowifiDiag = ref<VowifiDiagnosticsSnapshot | null>(null)
+const vowifiDiagLoading = ref(false)
+const vowifiDiagError = ref('')
+
+async function loadVowifiDiagnostics(): Promise<void> {
+  if (vowifiDiagLoading.value) return
+  vowifiDiagLoading.value = true
+  vowifiDiagError.value = ''
+  try {
+    vowifiDiag.value = await getVowifiDiagnostics()
+  } catch (error) {
+    vowifiDiagError.value = error instanceof Error ? error.message : String(error)
+  }
+  vowifiDiagLoading.value = false
+}
+
+function vowifiDiscoveryRow(path: VowifiPathProbe): { text: string; level: string } {
+  if (!path.available) {
+    return { text: path.error || t('homesim.strip.vowifiDiagUnknown'), level: 'muted' }
+  }
+  if (path.answer_code === 'NOERROR' && (path.addresses?.length ?? 0) > 0) {
+    return { text: t('homesim.strip.vowifiDiagDiscoveryOk', { count: path.addresses?.length ?? 0 }), level: 'ok' }
+  }
+  if (path.answer_code === 'NXDOMAIN') {
+    return { text: t('homesim.strip.vowifiDiagDiscoveryNone', { code: path.answer_code }), level: 'bad' }
+  }
+  return { text: t('homesim.strip.vowifiDiagDiscoveryTimeout', { code: path.answer_code || '-' }), level: 'warn' }
+}
+
+const vowifiDiagRows = computed(() => {
+  const diag = vowifiDiag.value
+  if (!diag) return []
+  const rows: Array<{ label: string; text: string; level: string }> = []
+  rows.push({
+    label: t('homesim.strip.vowifiDiagFirmware'),
+    text: wifiCapability.value === true
+      ? t('homesim.strip.vowifiDiagFirmwareOk')
+      : t('homesim.strip.vowifiDiagFirmwareMissing'),
+    level: wifiCapability.value === true ? 'ok' : 'bad'
+  })
+  rows.push({ label: t('homesim.strip.vowifiDiagEpdgBroadband'), ...vowifiDiscoveryRow(diag.broadband_path) })
+  if (!diag.data_connected) {
+    rows.push({ label: t('homesim.strip.vowifiDiagEpdgCellular'), text: t('homesim.strip.vowifiDiagDataOff'), level: 'muted' })
+  } else {
+    rows.push({ label: t('homesim.strip.vowifiDiagEpdgCellular'), ...vowifiDiscoveryRow(diag.cellular_path) })
+  }
+  const ike = diag.broadband_path.ike.attempted ? diag.broadband_path.ike : diag.cellular_path.ike
+  rows.push({
+    label: t('homesim.strip.vowifiDiagIke'),
+    text: !ike.attempted
+      ? t('homesim.strip.vowifiDiagIkeSkipped')
+      : ike.reachable
+        ? t('homesim.strip.vowifiDiagIkeOk')
+        : t('homesim.strip.vowifiDiagIkeNone'),
+    level: !ike.attempted ? 'muted' : ike.reachable ? 'ok' : 'warn'
+  })
+  rows.push({
+    label: t('homesim.strip.vowifiDiagEgress'),
+    text: diag.egress.available
+      ? (diag.egress.isp || diag.egress.public_ip || t('homesim.strip.vowifiDiagUnknown'))
+      : t('homesim.strip.vowifiDiagEgressUnknown'),
+    level: 'muted'
+  })
+  return rows
+})
+
 const registered = computed(() => Boolean(line.value && isRegisteredNetwork(line.value)))
 
 const volte = computed(() => voiceStatus({ registered: registered.value, network: networkLabel.value,
@@ -222,6 +291,9 @@ const quotaRings = computed(() => {
 
 function toggle(): void {
   open.value = !open.value
+  if (open.value && !vowifiDiag.value && !vowifiDiagLoading.value) {
+    void loadVowifiDiagnostics()
+  }
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
@@ -410,6 +482,25 @@ onBeforeUnmount(() => {
           />
         </label>
         <p v-if="vowifiWritable !== true" class="line-status-pop__switch-hint">{{ t('homesim.strip.vowifiUnavailable') }}</p>
+      </div>
+      <div class="line-status-pop__vowifi-diag">
+        <div class="vowifi-diag__head">
+          <span>{{ t('homesim.strip.vowifiDiagTitle') }}</span>
+          <button
+            type="button"
+            class="vowifi-diag__refresh"
+            :disabled="vowifiDiagLoading"
+            @click="loadVowifiDiagnostics"
+          >{{ vowifiDiagLoading ? t('homesim.strip.vowifiDiagProbing') : t('homesim.strip.vowifiDiagRecheck') }}</button>
+        </div>
+        <p v-if="vowifiDiagError" class="vowifi-diag__error">{{ vowifiDiagError }}</p>
+        <div v-else class="vowifi-diag__rows">
+          <div v-for="row in vowifiDiagRows" :key="row.label" class="vowifi-diag__row">
+            <span class="vowifi-diag__dot" :class="`is-${row.level}`" aria-hidden="true" />
+            <span class="vowifi-diag__label">{{ row.label }}</span>
+            <span class="vowifi-diag__value">{{ vowifiDiagLoading && !vowifiDiag ? '…' : row.text }}</span>
+          </div>
+        </div>
       </div>
       <div
         v-for="ring in quotaRings"
@@ -860,6 +951,95 @@ onBeforeUnmount(() => {
   font-size: 10.5px;
   line-height: 1.45;
   color: var(--muted);
+}
+
+/* VoWiFi honest-diagnostics panel inside the quota popover */
+.line-status-pop__vowifi-diag {
+  margin-top: 2px;
+  padding: 8px 10px;
+  background: var(--surface-subtle);
+  border-radius: 8px;
+}
+
+.vowifi-diag__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.vowifi-diag__refresh {
+  padding: 2px 8px;
+  font-size: 10.5px;
+  color: var(--text);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.vowifi-diag__refresh:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.vowifi-diag__refresh:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.vowifi-diag__error {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--danger);
+  word-break: break-all;
+}
+
+.vowifi-diag__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.vowifi-diag__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.vowifi-diag__dot {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.vowifi-diag__dot.is-ok { background: var(--success, #34d399); }
+.vowifi-diag__dot.is-warn { background: var(--warning, #fbbf24); }
+.vowifi-diag__dot.is-bad { background: var(--danger, #f87171); }
+.vowifi-diag__dot.is-muted { background: var(--muted); }
+
+.vowifi-diag__label {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.vowifi-diag__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* NKN badge: standalone box beside the status strip, same surface look */
