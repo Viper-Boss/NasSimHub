@@ -141,10 +141,10 @@ func TestEnsureURCPortBlindWritesWhenUnreadable(t *testing.T) {
 		t.Fatalf("blind writes = %d, want 1", writes)
 	}
 
-	// The throttle holds a second immediate pass back.
-	if err := provider.ensureURCPort(context.Background(), line.ID); err != nil {
-		t.Fatalf("second ensureURCPort() error = %v", err)
-	}
+	// The throttle holds a second immediate pass back: the read fails again and
+	// the error propagates (the caller only logs it at debug level), but no
+	// second write happens.
+	_ = provider.ensureURCPort(context.Background(), line.ID)
 	writes = 0
 	for _, invocation := range caller.invocations() {
 		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
