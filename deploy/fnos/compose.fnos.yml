@@ -46,6 +46,16 @@ services:
       # to the host; inside this (bridge-networked) container 127.0.0.1 is the
       # container itself, so reach the node's RPC through the host gateway.
       HOMESIM_NKN_NODE_RPC: http://host.docker.internal:30003
+      # Browser call audio is P2P UDP and the browser cannot reach this
+      # container's internal address, so Pion must advertise the NAS address
+      # and carry every call over the single UDP port mapped below.
+      # Empty disables the override (call audio then relies on relay/TURN only).
+      MODEMDECK_CALL_MEDIA_PUBLIC_IPS: ${MODEMDECK_CALL_MEDIA_PUBLIC_IPS:-}
+      MODEMDECK_CALL_MEDIA_UDP_PORT: "7881"
+    # One shared UDP port for all call media (Pion ICE UDP mux). Without this
+    # mapping ICE never completes and calls connect with no audio.
+    ports:
+      - "7881:7881/udp"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Forwarder credentials (ServerChan/PushPlus/Bark/NKN seeds/...) live on

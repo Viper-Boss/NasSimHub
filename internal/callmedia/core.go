@@ -23,12 +23,20 @@ type Options struct {
 	RecoveryTimeout    time.Duration
 	Jitter             JitterConfig
 	OnOwnerStateChange func(callID string, connected bool)
+	// PublicIPs are the external addresses the browser reaches this host by.
+	// They replace the container-local host candidates Pion would otherwise
+	// advertise. Empty keeps the previous behaviour.
+	PublicIPs []string
+	// UDPPort, when non-zero, multiplexes every call's ICE traffic over this
+	// single UDP port so one container port mapping is sufficient.
+	UDPPort int
 }
 
 type Core struct {
 	opener             MediaEndpointOpener
 	codecs             OpusCodecFactory
 	api                *webrtc.API
+	closeMedia         func() error
 	configuration      webrtc.Configuration
 	gatherTimeout      time.Duration
 	recoveryTime       time.Duration
@@ -95,7 +103,7 @@ func New(options Options) (*Core, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create call media core: jitter: %w", err)
 	}
-	api, err := newWebRTCAPI()
+	api, closeMedia, err := newWebRTCAPI(options.PublicIPs, options.UDPPort)
 	if err != nil {
 		return nil, fmt.Errorf("create call media core: Pion: %w", ErrNegotiation)
 	}
@@ -112,6 +120,7 @@ func New(options Options) (*Core, error) {
 		opener:             options.EndpointOpener,
 		codecs:             codecs,
 		api:                api,
+		closeMedia:         closeMedia,
 		configuration:      clonePeerConfiguration(options.PeerConfiguration),
 		gatherTimeout:      timeout,
 		recoveryTime:       recoveryTime,
@@ -507,6 +516,11 @@ func (c *Core) Close(ctx context.Context) error {
 	clear(c.lifetimes)
 	clear(c.authority)
 	c.mu.Unlock()
+	if c.closeMedia != nil {
+		if err := c.closeMedia(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

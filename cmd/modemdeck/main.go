@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -235,8 +236,15 @@ func run(
 		_ = db.Close()
 		return fmt.Errorf("create host media opener: %w", err)
 	}
+	mediaUDPPort, err := parseMediaUDPPort(os.Getenv("MODEMDECK_CALL_MEDIA_UDP_PORT"))
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
 	mediaCore, err := callmedia.New(callmedia.Options{
 		EndpointOpener: mediaOpener,
+		PublicIPs:      parseCommaSeparatedList(os.Getenv("MODEMDECK_CALL_MEDIA_PUBLIC_IPS")),
+		UDPPort:        mediaUDPPort,
 		OnOwnerStateChange: func(callID string, connected bool) {
 			if connected {
 				callLeases.MediaConnected(callID)
@@ -559,6 +567,30 @@ func parseCommaSeparatedList(value string) []string {
 		}
 	}
 	return values
+}
+
+// parseMediaUDPPort reads the optional single-port ICE mux setting. Zero means
+// "unset" and preserves the default ephemeral-port behaviour.
+func parseMediaUDPPort(value string) (int, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, nil
+	}
+	port, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"MODEMDECK_CALL_MEDIA_UDP_PORT %q is not a number: %w",
+			trimmed,
+			err,
+		)
+	}
+	if port < 1 || port > 65535 {
+		return 0, fmt.Errorf(
+			"MODEMDECK_CALL_MEDIA_UDP_PORT %d is outside 1-65535",
+			port,
+		)
+	}
+	return port, nil
 }
 
 func maintainTLSCertificates(

@@ -3,10 +3,12 @@ package callmedia
 import (
 	"fmt"
 	"math"
+	"net"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/pion/ice/v4"
 	"github.com/pion/interceptor"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
@@ -29,19 +31,88 @@ func opusRTPParameters() webrtc.RTPCodecParameters {
 	}
 }
 
-func newWebRTCAPI() (*webrtc.API, error) {
+// normalizePublicIPs validates the operator-supplied external address list.
+// Entries are trimmed and blanks are dropped; an unparseable entry is rejected
+// rather than silently ignored, because a typo would otherwise produce a
+// candidate the browser can never reach.
+func normalizePublicIPs(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	ips := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if net.ParseIP(trimmed) == nil {
+			return nil, fmt.Errorf(
+				"call media public IP %q is not a valid IP address",
+				trimmed,
+			)
+		}
+		ips = append(ips, trimmed)
+	}
+	if len(ips) == 0 {
+		return nil, nil
+	}
+	return ips, nil
+}
+
+// newWebRTCAPI builds the Pion API used for every browser call.
+//
+// publicIPs and udpPort exist because the API runs inside a container whose
+// own addresses are not reachable from the browser. Without them Pion would
+// advertise container-internal host candidates and ICE could never complete.
+// Both are optional: an empty publicIPs and a zero udpPort preserve the
+// previous behaviour exactly.
+//
+// The returned closer releases the shared UDP mux, if one was created. It is
+// always non-nil so callers can defer it unconditionally.
+func newWebRTCAPI(publicIPs []string, udpPort int) (*webrtc.API, func() error, error) {
 	engine := &webrtc.MediaEngine{}
 	if err := engine.RegisterCodec(opusRTPParameters(), webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	interceptors := &interceptor.Registry{}
 	if err := webrtc.RegisterDefaultInterceptors(engine, interceptors); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return webrtc.NewAPI(
+
+	validatedIPs, err := normalizePublicIPs(publicIPs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if validatedIPs == nil && udpPort == 0 {
+		return webrtc.NewAPI(
+			webrtc.WithMediaEngine(engine),
+			webrtc.WithInterceptorRegistry(interceptors),
+		), func() error { return nil }, nil
+	}
+	settings := webrtc.SettingEngine{}
+	if validatedIPs != nil {
+		// Rewrite the container-local host candidates to the address the
+		// browser actually reaches the host by.
+		settings.SetNAT1To1IPs(validatedIPs, webrtc.ICECandidateTypeHost)
+	}
+	closer := func() error { return nil }
+	if udpPort != 0 {
+		// One shared UDP port carries every call, so a single container port
+		// mapping is enough and the browser can reach it predictably.
+		mux, err := ice.NewMultiUDPMuxFromPort(udpPort)
+		if err != nil {
+			return nil, nil, fmt.Errorf("create ICE UDP mux on port %d: %w", udpPort, err)
+		}
+		settings.SetICEUDPMux(mux)
+		closer = mux.Close
+	}
+
+	api := webrtc.NewAPI(
 		webrtc.WithMediaEngine(engine),
 		webrtc.WithInterceptorRegistry(interceptors),
-	), nil
+		webrtc.WithSettingEngine(settings),
+	)
+	return api, closer, nil
 }
 
 func validateOfferSDP(value string) error {
