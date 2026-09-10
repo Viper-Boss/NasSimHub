@@ -47,9 +47,12 @@ func (store *FileOperationStore) Save(operation updatecheck.Operation) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err == nil {
-		_, err = temporary.Write(contents)
-	}
+	// Tightening the mode is best effort: CreateTemp already made the file
+	// 0600. The write result, however, must reach the outer err — assigning it
+	// inside an "if err := ...;" block would drop it with the block scope and
+	// commit a truncated operation file.
+	_ = temporary.Chmod(0o600)
+	_, err = temporary.Write(contents)
 	if err == nil {
 		err = temporary.Sync()
 	}

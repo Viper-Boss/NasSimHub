@@ -63,10 +63,12 @@ func TestAboutReportsProductMetadata(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode about response: %v", err)
 	}
-	if body.Name != "ModemDeck" || body.Version != "v1.0.0" {
+	// The product name and licence label are branding constants; assert against
+	// them instead of hard-coded literals so a rebrand does not break this test.
+	if body.Name != applicationName || body.Version != "v1.0.0" {
 		t.Fatalf("identity = %q %q", body.Name, body.Version)
 	}
-	if body.LicenseName != "PolyForm Noncommercial 1.0.0" || body.NoticesURL == "" {
+	if body.LicenseName != licenseName || body.NoticesURL == "" {
 		t.Fatalf("legal metadata = %+v", body)
 	}
 }

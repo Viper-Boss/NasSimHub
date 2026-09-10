@@ -275,9 +275,12 @@ func (runtime *DockerRuntime) recordInstalledVersion(version string) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err == nil {
-		_, err = temporary.WriteString(strings.TrimSpace(version) + "\n")
-	}
+	// Tightening the mode is best effort: CreateTemp already made the file
+	// 0600. The write result, however, must reach the outer err — assigning it
+	// inside an "if err := ...;" block would drop it with the block scope and
+	// commit a truncated state file.
+	_ = temporary.Chmod(0o600)
+	_, err = temporary.WriteString(strings.TrimSpace(version) + "\n")
 	if err == nil {
 		err = temporary.Sync()
 	}
@@ -434,14 +437,16 @@ func replaceFile(path string, contents []byte) error {
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
+	// Restoring mode and owner is best effort — the updater may not be able to
+	// chown — but the write result must reach the outer err. Assigning it to the
+	// err scoped to an "if err := ...;" block would drop it and let a truncated
+	// Compose environment be renamed over the real one.
 	if err := temporary.Chmod(info.Mode().Perm()); err == nil {
 		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-			err = temporary.Chown(int(stat.Uid), int(stat.Gid))
+			_ = temporary.Chown(int(stat.Uid), int(stat.Gid))
 		}
 	}
-	if err == nil {
-		_, err = temporary.Write(contents)
-	}
+	_, err = temporary.Write(contents)
 	if err == nil {
 		err = temporary.Sync()
 	}

@@ -17,6 +17,20 @@ type nknObservationHistory struct {
 	LastSeen  map[string]time.Time `json:"last_seen"`
 }
 
+const (
+	// Daily and monthly are the same measurement over two windows: identities
+	// this NAS has seen subscribed to the topic since the cutoff. Reporting the
+	// daily figure as "peers in the newest sample" instead made it an
+	// instantaneous count that swung with every poll and could not be compared
+	// against the monthly number beside it.
+	nknObservationDailyWindow   = 24 * time.Hour
+	nknObservationMonthlyWindow = 30 * 24 * time.Hour
+	// Identities that have not been seen for this long stop being counted as
+	// "registered", which also keeps the file from growing without bound.
+	nknObservationRetention     = 180 * 24 * time.Hour
+	nknObservationMaxIdentities = 100000
+)
+
 func nknDeviceIdentity(address string) string {
 	parts := strings.Split(address, ".")
 	key := parts[len(parts)-1]
@@ -29,9 +43,11 @@ func nknDeviceIdentity(address string) string {
 // Historical counts describe this NAS's observations, not an invented global
 // all-time registry. Only hashed public identities are retained on disk.
 func (api *API) recordNKNObservations(result *nknNetworkPeersResponse) error {
-	if result.Active24h == nil {
-		return nil
-	}
+	// A truncated peer page leaves Active24h nil upstream, because an incomplete
+	// page must not be published as a complete instantaneous total. The sightings
+	// in it are still real, though — skipping the whole recording meant that on a
+	// busy topic (>=1000 subscribers) the history silently stopped updating and
+	// every counter froze.
 	api.nknMetricsMu.Lock()
 	defer api.nknMetricsMu.Unlock()
 	dir, ok := api.homeSIMDataDirectory()
@@ -48,29 +64,40 @@ func (api *API) recordNKNObservations(result *nknNetworkPeersResponse) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	unique := map[string]bool{}
 	for _, peer := range result.Peers {
 		identity := nknDeviceIdentity(peer.Address)
 		hash := sha256.Sum256([]byte(identity))
 		key := hex.EncodeToString(hash[:])
-		unique[key] = true
 		if result.FetchedAt.After(history.LastSeen[key]) {
 			history.LastSeen[key] = result.FetchedAt
 		}
 	}
-	if len(history.LastSeen) > 100000 {
+	// Drop identities past the retention window before the cap is checked.
+	// Erroring out at a fixed size instead froze every counter permanently once
+	// the file filled up, with no way back short of deleting it by hand.
+	for key, last := range history.LastSeen {
+		if last.Before(result.FetchedAt.Add(-nknObservationRetention)) {
+			delete(history.LastSeen, key)
+		}
+	}
+	if len(history.LastSeen) > nknObservationMaxIdentities {
 		return fmt.Errorf("statistics history limit reached")
 	}
-	month := 0
+	dailyCutoff := result.FetchedAt.Add(-nknObservationDailyWindow)
+	monthCutoff := result.FetchedAt.Add(-nknObservationMonthlyWindow)
+	daily, month := 0, 0
 	for _, last := range history.LastSeen {
-		if !last.Before(result.FetchedAt.Add(-30 * 24 * time.Hour)) {
+		if !last.Before(dailyCutoff) {
+			daily++
+		}
+		if !last.Before(monthCutoff) {
 			month++
 		}
 	}
 	if err := writeHomeSIMJSON(path, history); err != nil {
 		return err
 	}
-	daily, total := len(unique), len(history.LastSeen)
+	total := len(history.LastSeen)
 	result.Active24h = &daily
 	result.ActiveMonth = &month
 	result.RegisteredTotal = &total
