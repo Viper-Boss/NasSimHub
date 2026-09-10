@@ -1670,143 +1670,6 @@ func TestRefreshDeletesOnlyPersistedTerminalMessagesFromDevice(t *testing.T) {
 	}
 }
 
-// assertNoDeviceMessageDeletion fails the test if the service asked the host
-// agent to delete an SMS. The trailing wait covers the cleanup goroutine, which
-// is dispatched asynchronously.
-func assertNoDeviceMessageDeletion(t *testing.T, agent *messageDeletingAgent, context string) {
-	t.Helper()
-	select {
-	case messageID := <-agent.deleted:
-		t.Fatalf("unexpected device message deletion %q (%s)", messageID, context)
-	case <-time.After(50 * time.Millisecond):
-	}
-}
-
-func TestMessageStateInTransit(t *testing.T) {
-	t.Parallel()
-
-	for state, want := range map[string]bool{
-		"receiving": true,
-		"sending":   true,
-		"received":  false,
-		"sent":      false,
-		"stored":    false,
-		"unknown":   false,
-		"":          false,
-	} {
-		if got := messageStateInTransit(state); got != want {
-			t.Errorf("messageStateInTransit(%q) = %t, want %t", state, got, want)
-		}
-	}
-}
-
-// TestRefreshClearsSMSWedgedMidReception covers the production failure where
-// ModemManager never finishes receiving an SMS. The wedged object keeps the
-// modem's SMS slot occupied, so later SMS never complete and the user cannot
-// receive anything until the radio is reset.
-func TestRefreshClearsSMSWedgedMidReception(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.September, 10, 3, 2, 55, 0, time.UTC)
-	base := connectedAgent(now)
-	base.snapshot.Messages = []agentclient.Message{{
-		ID:        "message_wedged",
-		LineID:    "line-1",
-		Number:    "95555",
-		Text:      "partial reception",
-		Direction: "incoming",
-		State:     "receiving",
-		StateCode: 2,
-		Timestamp: now.Format(time.RFC3339),
-	}}
-	agent := &messageDeletingAgent{
-		fakeAgent: base,
-		deleted:   make(chan string, 4),
-	}
-	repository := &fakeRepository{}
-	service, err := New(agent, repository, messageevents.NewBuffer(8))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	clock := now
-	service.now = func() time.Time { return clock }
-
-	// The first observation only starts the clock: a message that is genuinely
-	// arriving must survive.
-	if _, err := service.Refresh(context.Background()); err != nil {
-		t.Fatalf("Refresh() error = %v", err)
-	}
-	assertNoDeviceMessageDeletion(t, agent, "first observation")
-
-	clock = now.Add(deviceMessageTransitGrace - time.Second)
-	if _, err := service.Refresh(context.Background()); err != nil {
-		t.Fatalf("Refresh() error = %v", err)
-	}
-	assertNoDeviceMessageDeletion(t, agent, "inside the transit grace")
-
-	clock = now.Add(deviceMessageTransitGrace + time.Second)
-	if _, err := service.Refresh(context.Background()); err != nil {
-		t.Fatalf("Refresh() error = %v", err)
-	}
-	select {
-	case messageID := <-agent.deleted:
-		if messageID != "message_wedged" {
-			t.Fatalf("deleted message = %q, want message_wedged", messageID)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("wedged message was never cleared from the modem")
-	}
-	assertNoDeviceMessageDeletion(t, agent, "after the wedged message was cleared")
-}
-
-// TestRefreshRestartsTransitClockWhenMessageLeavesTheSnapshot proves the transit
-// bookkeeping cannot leak: once a message stops being in flight, a later
-// re-observation starts a fresh grace period instead of inheriting the old one.
-func TestRefreshRestartsTransitClockWhenMessageLeavesTheSnapshot(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, time.September, 10, 3, 10, 0, 0, time.UTC)
-	inFlight := agentclient.Message{
-		ID:        "message_flapping",
-		LineID:    "line-1",
-		Number:    "95555",
-		Text:      "reception restarted",
-		Direction: "incoming",
-		State:     "receiving",
-		StateCode: 2,
-		Timestamp: now.Format(time.RFC3339),
-	}
-	base := connectedAgent(now)
-	base.snapshot.Messages = []agentclient.Message{inFlight}
-	agent := &messageDeletingAgent{
-		fakeAgent: base,
-		deleted:   make(chan string, 4),
-	}
-	service, err := New(agent, &fakeRepository{}, messageevents.NewBuffer(8))
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	clock := now
-	service.now = func() time.Time { return clock }
-
-	if _, err := service.Refresh(context.Background()); err != nil {
-		t.Fatalf("Refresh() error = %v", err)
-	}
-
-	// The modem drops the object, then starts receiving it again.
-	base.snapshot.Messages = nil
-	clock = now.Add(deviceMessageTransitGrace - time.Second)
-	if _, err := service.Refresh(context.Background()); err != nil {
-		t.Fatalf("Refresh() error = %v", err)
-	}
-	base.snapshot.Messages = []agentclient.Message{inFlight}
-	clock = now.Add(deviceMessageTransitGrace + time.Second)
-	if _, err := service.Refresh(context.Background()); err != nil {
-		t.Fatalf("Refresh() error = %v", err)
-	}
-	assertNoDeviceMessageDeletion(t, agent, "re-observed after leaving the snapshot")
-}
-
 func TestRefreshDoesNotDeleteDeviceMessagesWhenPersistenceFails(t *testing.T) {
 	t.Parallel()
 
@@ -2048,7 +1911,7 @@ func TestProjectSnapshotDropsStaleSignalTelemetry(t *testing.T) {
 	rsrp := -94.0
 	rsrq := -11.0
 	snr := 7.25
-	hardware, _, lines := projectSnapshot(agentclient.Snapshot{
+	hardware, lines := projectSnapshot(agentclient.Snapshot{
 		ObservedAt: time.Date(2026, time.July, 24, 14, 0, 0, 0, time.UTC),
 		Lines: []agentclient.Line{{
 			ID:                  "line-stale-signal",
@@ -2083,7 +1946,7 @@ func TestProjectSnapshotUsesFreshExtendedSignalWhenGenericQualityIsStale(t *test
 	rsrp := -106.0
 	rsrq := -8.0
 	snr := 8.0
-	hardware, _, lines := projectSnapshot(agentclient.Snapshot{
+	hardware, lines := projectSnapshot(agentclient.Snapshot{
 		ObservedAt: time.Date(2026, time.July, 26, 10, 0, 0, 0, time.UTC),
 		Lines: []agentclient.Line{{
 			ID:                  "line-fresh-extended-signal",

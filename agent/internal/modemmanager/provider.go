@@ -82,6 +82,12 @@ type Provider struct {
 	changes           *changeHub
 	radioLifecycle    *changeHub
 	modemLifecycle    *changeHub
+
+	// transitMu guards transitMessages, which records the SMS objects seen in a
+	// transitional ModemManager state on the previous reconcile pass. See
+	// ReconcileStuckMessages.
+	transitMu       sync.Mutex
+	transitMessages map[string]struct{}
 }
 
 type terminalCallProjection struct {

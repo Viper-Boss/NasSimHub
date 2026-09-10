@@ -103,14 +103,14 @@ func TestProjectSnapshotWaitsForIncomingMessageCompletion(t *testing.T) {
 			Timestamp: "2026-07-24T14:30:17+08",
 		}},
 	}
-	projected, _, _ := projectSnapshot(snapshot, "boot-1")
+	projected, _ := projectSnapshot(snapshot, "boot-1")
 	if len(projected.Messages) != 0 {
 		t.Fatalf("receiving message was persisted: %+v", projected.Messages)
 	}
 
 	snapshot.Messages[0].State = "received"
 	snapshot.Messages[0].StateCode = 3
-	projected, _, _ = projectSnapshot(snapshot, "boot-1")
+	projected, _ = projectSnapshot(snapshot, "boot-1")
 	if len(projected.Messages) != 1 {
 		t.Fatalf("completed message was not persisted: %+v", projected.Messages)
 	}

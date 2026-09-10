@@ -47,17 +47,6 @@ const (
 	controlLeaseRenewInterval  = time.Second
 	controlLeaseRequestTimeout = 5 * time.Second
 	deviceMessageDeleteTimeout = 5 * time.Second
-	// deviceMessageTransitGrace bounds how long a message may stay in a
-	// non-terminal ModemManager state ("receiving"/"sending") before ModemDeck
-	// treats it as wedged and clears it from the modem.
-	//
-	// ModemManager can fail to finish receiving an SMS (observed on the QDC507
-	// with a long message from 95555, stuck in "receiving" for over six hours).
-	// The wedged object occupies the modem's SMS slot, so every later SMS also
-	// fails to complete and the user sees nothing until the modem is reset.
-	// A healthy reception of a concatenated SMS completes within seconds, so
-	// this grace period is generous while still freeing the slot automatically.
-	deviceMessageTransitGrace = 3 * time.Minute
 )
 
 type Agent interface {
@@ -299,11 +288,6 @@ type Service struct {
 	messageCleanupMu      sync.Mutex
 	messageCleanupPending map[string]struct{}
 	messageCleanupRunning bool
-	// messageTransitSince records, per endpoint message id, when ModemDeck first
-	// observed the message sitting in a non-terminal state. Entries are dropped
-	// as soon as the message reaches a terminal state or disappears from the
-	// host agent snapshot, so the map only ever holds messages in flight.
-	messageTransitSince map[string]time.Time
 }
 
 func New(
@@ -329,7 +313,6 @@ func New(
 		logger:                  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		loggedDeliveryReportIDs: make(map[string]struct{}),
 		messageCleanupPending:   make(map[string]struct{}),
-		messageTransitSince:     make(map[string]time.Time),
 	}, nil
 }
 
@@ -522,7 +505,7 @@ func (s *Service) commitSnapshotLocked(
 	}
 	snapshot = bindSnapshotHomeCountries(snapshot, stableLines)
 
-	hardwareSnapshot, unsettledMessages, lines := projectSnapshot(snapshot, health.Provider.BootEpoch)
+	hardwareSnapshot, lines := projectSnapshot(snapshot, health.Provider.BootEpoch)
 	for index := range hardwareSnapshot.Calls {
 		call := &hardwareSnapshot.Calls[index]
 		annotation, found := callAnnotations[call.EndpointCallID]
@@ -564,7 +547,6 @@ func (s *Service) commitSnapshotLocked(
 	s.publishTerminalCalls(snapshotResult.TerminalCalls, snapshot.ObservedAt)
 	s.enqueueDeviceMessageCleanup(
 		hardwareSnapshot.Messages,
-		unsettledMessages,
 		snapshotResult.HandledDeliveryReportIDs,
 	)
 	stableLines, err = s.repository.Lines(ctx)
@@ -632,60 +614,20 @@ func (s *Service) commitSnapshotLocked(
 
 func (s *Service) enqueueDeviceMessageCleanup(
 	messages []store.HardwareMessage,
-	unsettledMessages []store.HardwareMessage,
 	deliveryReportIDs []string,
 ) {
 	deleter, available := s.agent.(AgentMessageDeleter)
 	if !available {
 		return
 	}
-	now := s.now().UTC()
-	candidates := make([]store.HardwareMessage, 0, len(messages)+len(unsettledMessages))
-	candidates = append(candidates, messages...)
-	candidates = append(candidates, unsettledMessages...)
 	s.messageCleanupMu.Lock()
-	inTransit := make(map[string]struct{}, len(candidates))
-	for _, message := range candidates {
-		messageID := strings.TrimSpace(message.EndpointMessageID)
-		if messageID == "" {
-			continue
-		}
+	for _, message := range messages {
 		state := strings.ToLower(strings.TrimSpace(message.State))
-		if state == "received" || state == "sent" {
-			// Terminal: persist-then-delete frees the modem slot immediately.
-			delete(s.messageTransitSince, messageID)
+		if state != "received" && state != "sent" {
+			continue
+		}
+		if messageID := strings.TrimSpace(message.EndpointMessageID); messageID != "" {
 			s.messageCleanupPending[messageID] = struct{}{}
-			continue
-		}
-		if !messageStateInTransit(state) {
-			continue
-		}
-		inTransit[messageID] = struct{}{}
-		firstSeen, known := s.messageTransitSince[messageID]
-		if !known {
-			s.messageTransitSince[messageID] = now
-			continue
-		}
-		if now.Sub(firstSeen) < deviceMessageTransitGrace {
-			continue
-		}
-		// Reception never completed. Leaving it in place would keep occupying
-		// the modem's SMS slot, so every later SMS also fails to arrive.
-		delete(s.messageTransitSince, messageID)
-		s.messageCleanupPending[messageID] = struct{}{}
-		s.loggerForDiagnostics().Warn(
-			"SMS stuck mid-reception was cleared to free the modem slot",
-			"component", "communication",
-			"message_id", messageID,
-			"line_id", message.LineID,
-			"state", state,
-			"stuck_for", now.Sub(firstSeen).String(),
-		)
-	}
-	// Forget messages that are no longer in flight so the map cannot grow.
-	for messageID := range s.messageTransitSince {
-		if _, active := inTransit[messageID]; !active {
-			delete(s.messageTransitSince, messageID)
 		}
 	}
 	for _, reportID := range deliveryReportIDs {
@@ -700,15 +642,6 @@ func (s *Service) enqueueDeviceMessageCleanup(
 	s.messageCleanupRunning = true
 	s.messageCleanupMu.Unlock()
 	go s.drainDeviceMessageCleanup(deleter)
-}
-
-// messageStateInTransit reports whether a ModemManager SMS state is a
-// non-terminal one that ModemDeck must watch for wedging. The names mirror
-// MM_SMS_STATE_* as surfaced by the host agent ("stored", "receiving",
-// "received", "sending", "sent"). Only the two transitional states are
-// interesting: they are the ones the modem can fail to leave.
-func messageStateInTransit(state string) bool {
-	return state == "receiving" || state == "sending"
 }
 
 func (s *Service) drainDeviceMessageCleanup(deleter AgentMessageDeleter) {
@@ -2753,7 +2686,7 @@ func durableContext(ctx context.Context) (context.Context, context.CancelFunc) {
 func projectSnapshot(
 	snapshot agentclient.Snapshot,
 	bootEpoch string,
-) (store.HardwareSnapshot, []store.HardwareMessage, []store.LineSummary) {
+) (store.HardwareSnapshot, []store.LineSummary) {
 	lines := make([]store.LineSummary, 0, len(snapshot.Lines))
 	hardwareLines := make([]store.HardwareLine, 0, len(snapshot.Lines))
 	lineIndex := make(map[string]store.LineSummary, len(snapshot.Lines))
@@ -2811,33 +2744,13 @@ func projectSnapshot(
 		))
 	}
 	messages := make([]store.HardwareMessage, 0, len(snapshot.Messages))
-	// Incoming messages ModemManager has not finished receiving are deliberately
-	// kept out of the persisted snapshot: their content is incomplete. They must
-	// still be watched, though. A reception that never completes occupies the
-	// modem's SMS slot, so every later SMS also fails to arrive and the user
-	// cannot receive anything until the radio is reset. These are handed to
-	// enqueueDeviceMessageCleanup, which clears them once they stop progressing.
-	unsettledMessages := make([]store.HardwareMessage, 0)
 	for _, message := range snapshot.Messages {
 		line, found := lineIndex[message.LineID]
-		if !found || strings.TrimSpace(message.Number) == "" {
+		if !found || strings.TrimSpace(message.Number) == "" || strings.TrimSpace(message.Text) == "" {
 			continue
 		}
 		if normalizeMessageDirection(message.Direction) == "incoming" &&
 			strings.ToLower(strings.TrimSpace(message.State)) != "received" {
-			if messageStateInTransit(strings.ToLower(strings.TrimSpace(message.State))) {
-				unsettledMessages = append(unsettledMessages, projectMessage(
-					message,
-					line,
-					"",
-					message.Text,
-					snapshot.ObservedAt,
-					0,
-				))
-			}
-			continue
-		}
-		if strings.TrimSpace(message.Text) == "" {
 			continue
 		}
 		messages = append(messages, projectMessage(
@@ -2885,7 +2798,7 @@ func projectSnapshot(
 		Calls:           calls,
 		Messages:        messages,
 		DeliveryReports: deliveryReports,
-	}, unsettledMessages, lines
+	}, lines
 }
 
 func roundedSignal(value *float64) *int64 {

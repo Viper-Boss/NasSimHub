@@ -96,49 +96,70 @@ if state != "received" && state != "sent" {
 
 ## 3. 修复
 
-### 3.1 把「在途来信」显式捞出来交给清理逻辑
+### 3.1 放在哪一层：**agent**，不是 API
 
-`projectSnapshot()` 新增第三个返回值 `unsettledMessages []store.HardwareMessage`：来信中处于**在途状态**（`receiving` / `sending`）的消息，仍然**不落库**（保持原有语义），但会被单独收集出来传给清理逻辑。
+第一版我把修复放在 API 层（`internal/communication`），后来**推翻了**，原因是一个硬约束：
 
-注意这里放宽了 `Text` 的约束：清理只需要消息 ID 和 line，不需要正文，所以正文为空的在途消息也能被收集（正常落库路径仍然要求正文非空，行为不变）。
+API 的 `Refresh()` 是**纯事件驱动**的——`Run()` 的维护循环里，对支持 Events 的 agent 只刷 telemetry，不重读完整快照（`internal/communication/service.go:1542-1551`，并且有 `TestRunSamplesTelemetryWithoutApplyingHardwareSnapshot` 专门守着这个设计）。而卡死的短信**再也不会产生任何 ModemManager 信号**，所以：
 
-### 3.2 清理逻辑识别「卡住的在途消息」并清掉
+- API 根本不会再次观察到它 → API 侧的「观察到两次」逻辑永远凑不齐
+- 就算偶尔因为别的事件碰巧刷到，也只是碰运气
 
-`enqueueDeviceMessageCleanup()` 新增第二个入参 `unsettledMessages`，并做了两件事：
+agent 侧则**已经有为这类问题准备的成熟模式**：`cmd/modemdeck-agent/main.go` 里有两个 3 分钟周期的 reconciler（QDC507 语音 adbd、射频状态），注释写得明明白白——「模块卡住时不会有 lifecycle 事件，所以必须有周期性 tick」。短信卡死是同一类问题，理应放在同一层，并且不依赖 API 是否在跑。
 
-- 用 `messageTransitSince map[string]time.Time` 记录每条在途消息**第一次被观察到**的时间（这个 map 在消息转为终态或从快照消失时立即清理，不会泄漏）
-- 在途时间超过 `deviceMessageTransitGrace`（**3 分钟**）仍没收完 → 判定为卡死 → 排进删除队列 + 打一条 `Warn` 日志，日志里带 `message_id` / `line_id` / `state` / `stuck_for`
+所以 API 层的改动已整体回退（`git checkout` 回 r67），最终只保留 agent 侧修复。
 
-新增辅助：
+### 3.2 修复实现
+
+新增 `agent/internal/modemmanager/message_hygiene.go`：
+
+- `messageStateInTransit(state)` —— `receiving` / `sending` 视为在途
+- `(*Provider).ReconcileStuckMessages(ctx)` —— 读一次快照，把「上一轮也在途、这一轮还在途」的消息删掉
+
+判定规则用的是**两轮对比**，而不是时间戳：
 
 ```go
-func messageStateInTransit(state string) bool {
-	return state == "receiving" || state == "sending"
+// 本轮在途的记下来；上一轮也在途的 → 卡死
+inTransit[messageID] = struct{}{}
+if _, seen := p.transitMessages[messageID]; seen {
+    stuck = append(stuck, message)
 }
+p.transitMessages = inTransit   // 整张替换，离开快照的消息自动遗忘
 ```
 
-**为什么用「观察时长」而不是短信自带的时间戳**：`projectMessage()` 在 ModemManager 的 `Timestamp` 解析失败时会**回退成观察时刻**，那种情况下时间戳每次刷新都会变，永远算不出「卡了多久」。用服务侧自己记录的时间更可靠，也完全不依赖 SMSC 的时钟。
+**为什么不看时间戳**：`Receiving` 那条的 `Timestamp` 来自 SMSC，ModemManager 可能不给（`parseMessage` 里是空字符串），而且 SMSC 时钟未必可信。而 reconciler 的周期本身（3 分钟）就是天然的度量——「连续两轮都在途」= 卡了至少一个周期，正常的多段短信合并接收在数秒内完成，不可能跨两轮。
 
-**为什么是 3 分钟**：正常的长短信（多段合并）接收在数秒内完成。3 分钟足够宽松，不会误删正在接收的消息，又能自动释放槽位。
+**开箱即用**：`transitMessages` 一直是整张赋值，所以 nil map 也安全，无需改构造函数。
 
-### 3.3 为什么不改前端
+### 3.3 接入周期
 
-前端刷新完全由 SSE `/messages/events` 驱动（`web/src/state/messageRuntime.ts`），而事件只在消息以 `received` 落库时才发布。所以前端的刷新链路本身没问题——**根因是上游压根没产生「已收到」的消息**。修好槽位后事件自然就来了。
+`agent/cmd/modemdeck-agent/main.go` 新增 `runMessageReconciler`（与既有两个 reconciler 同构）：
+
+- 启动时先跑一轮（只做记录，不会删任何东西）
+- 之后每 **3 分钟**一轮，每轮 60 秒超时
+- 删除单条消息超时 10 秒（`stuckMessageDeleteTimeout`）
+- 删除成功/失败都打 `Warn` 日志，关键字见第 5 节
+
+也就是说：一条短信卡住后，最长约 **3～6 分钟**内会被自动清掉，槽位释放，后续短信恢复正常。而且**不依赖前端是否打开、不依赖 API 有没有收到事件**。
+
+### 3.4 为什么不改前端
+
+前端刷新完全由 SSE `/messages/events` 驱动（`web/src/state/messageRuntime.ts`），而事件只在消息以 `received` 落库时才发布。所以前端的刷新链路本身没问题——**根因是上游压根没产生「已收到」的消息**。槽位修好后事件自然就来了。
 
 ---
 
 ## 4. 验证
 
-新增测试（`internal/communication/service_test.go`）：
+新增测试（`agent/internal/modemmanager/message_hygiene_test.go`，该包含 Linux-only 文件，需在 NAS 的 golang 容器里跑）：
 
 | 测试 | 断言 |
 |---|---|
-| `TestMessageStateInTransit` | `receiving`/`sending` 为真；`received`/`sent`/`stored`/`unknown`/空串为假 |
-| `TestRefreshClearsSMSWedgedMidReception` | 首次观察不删；宽限期内不删；超过宽限期**删除**；删除后不再重复删 |
-| `TestRefreshRestartsTransitClockWhenMessageLeavesTheSnapshot` | 消息从快照消失后再出现，重新起算宽限期（证明记录不会漏） |
-| `TestRefreshDeletesOnlyPersistedTerminalMessagesFromDevice`（既有） | 仍在跑：`stored` 消息不得被删，回归保护 |
+| `TestMessageStateInTransit` | `receiving`/`sending`/`RECEIVING` 为真；`received`/`sent`/`stored`/`unknown`/空串为假 |
+| `TestStuckTransitMessagesOnlyReportsSecondObservation` | 第一轮不报；第二轮只报「一直在途」的那条；离开快照后再出现重新起算 |
+| `TestReconcileStuckMessagesClearsWedgedReception` | 第一轮不删；第二轮删掉 `receiving` 的对象；第三轮无重复删除 |
+| `TestReconcileStuckMessagesLeavesCompletedReceptionAlone` | 在途中的消息不删；两轮之间转为 `sent` 的消息不删（回归保护） |
 
-结果：`internal/communication` 整包通过；`GOOS=linux` 交叉编译干净。
+同时 `internal/communication` 保持原样（已回退），整包测试通过。
 
 ---
 
@@ -153,4 +174,6 @@ func messageStateInTransit(state string) bool {
 2. **不要**先怀疑前端刷新。前端刷新由 SSE 事件驱动，事件来自「已 `received` 且落库」的消息；没有新事件说明上游没有完成接收。
 3. **不要**把「切飞行模式能收到」当作飞行模式的功劳——那只是射频重启顺带冲掉了卡死的短信会话。真正的修法是让 ModemDeck 主动清掉卡住的对象。
 4. `set_radio_enabled` 紧跟着 `SMS received` 的日志配对模式，是「用户被迫手动重启射频」的典型指纹，见到就按本档案查。
-5. 修完之后卡死消息会在 **3 分钟**内被自动清掉，日志关键字：`SMS stuck mid-reception was cleared to free the modem slot`。
+5. **修完之后**卡死消息最长 3～6 分钟自动清掉，日志关键字：`SMS stuck mid-reception was cleared to free the modem SMS slot`。
+6. **这一层不要放回 API**：API 的 `Refresh()` 是事件驱动的（见 3.1），卡死的消息不产生事件，放 API 永远不会触发。要加这类「静静卡住、不再产生事件」的兜底，都放 agent 的周期 reconciler——`main.go` 里已经有两个先例。
+

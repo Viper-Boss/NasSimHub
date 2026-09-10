@@ -262,6 +262,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 		}()
 	}
 	go runRadioReconciler(ctx, provider)
+	go runMessageReconciler(ctx, provider)
 	if qdc507VoiceRuntime.Enabled() {
 		go runQDC507VoiceReconciler(ctx, provider, qdc507VoiceRuntime)
 	}
@@ -462,6 +463,45 @@ func runRadioReconciler(ctx context.Context, provider radioReconciler) {
 				return
 			}
 			reconcile()
+		case <-ticker.C:
+			reconcile()
+		}
+	}
+}
+
+type messageReconciler interface {
+	ReconcileStuckMessages(context.Context) error
+}
+
+// runMessageReconciler frees SMS slots ModemManager has stopped progressing.
+//
+// Like the voice and radio reconcilers above, this needs a periodic tick rather
+// than lifecycle events: an SMS whose reception stalled stops producing
+// ModemManager signals, so no event can ever trigger its cleanup, and an
+// event-driven design would never observe it a second time. The interval also
+// defines what "stuck" means — a message still in transit on the next pass has
+// been stalled for a whole interval, far longer than a healthy concatenated
+// reception takes.
+func runMessageReconciler(ctx context.Context, provider messageReconciler) {
+	const attemptTimeout = time.Minute
+	reconcile := func() {
+		attemptContext, cancel := context.WithTimeout(ctx, attemptTimeout)
+		if err := provider.ReconcileStuckMessages(attemptContext); err != nil &&
+			!errors.Is(err, context.Canceled) {
+			slog.Warn("reconcile stuck SMS reception", "error", err)
+		}
+		cancel()
+	}
+
+	// The first pass only records what is already in transit; the pass after it
+	// clears anything that never progressed.
+	reconcile()
+	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			reconcile()
 		}
