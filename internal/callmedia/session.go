@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -80,7 +81,7 @@ func (e *peerEvents) fail(err error) {
 	}
 }
 
-func (c *Core) preparePeer(configuration rtcconfig.Configuration) (
+func (c *Core) preparePeer(callID string, configuration rtcconfig.Configuration) (
 	*webrtc.PeerConnection,
 	*webrtc.TrackLocalStaticSample,
 	*webrtc.RTPSender,
@@ -131,6 +132,38 @@ func (c *Core) preparePeer(configuration rtcconfig.Configuration) (
 		events.acceptTrack(remote)
 	})
 	peer.OnConnectionStateChange(events.updateState)
+	// Call audio problems are otherwise invisible: signalling, the SDP exchange
+	// and the host media stream all report success while the transport never
+	// carries a packet. Logging the candidates we advertise and every ICE state
+	// transition is what makes "the call connected but there is no audio"
+	// diagnosable from the server side at all.
+	peer.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate == nil {
+			slog.Info(
+				"call media ICE gathering finished",
+				"component", "media",
+				"call_id", callID,
+			)
+			return
+		}
+		slog.Info(
+			"call media ICE candidate gathered",
+			"component", "media",
+			"call_id", callID,
+			"address", candidate.Address,
+			"port", candidate.Port,
+			"type", candidate.Typ.String(),
+			"protocol", candidate.Protocol.String(),
+		)
+	})
+	peer.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		slog.Info(
+			"call media ICE state changed",
+			"component", "media",
+			"call_id", callID,
+			"ice_state", state.String(),
+		)
+	})
 	return peer, track, sender, events, nil
 }
 

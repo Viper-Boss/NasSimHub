@@ -173,6 +173,7 @@ func (c *Core) Exchange(ctx context.Context, offer Offer) (ExchangeResult, error
 	}()
 
 	peer, localTrack, sender, events, err := c.preparePeer(
+		call.ID,
 		offer.RTCConfiguration,
 	)
 	if err != nil {
