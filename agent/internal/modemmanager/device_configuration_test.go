@@ -1997,10 +1997,10 @@ func TestActivationFailureRecoversWedgedModem(t *testing.T) {
 
 	powerStates := []uint32{}
 	for _, invocation := range caller.calls {
-		if invocation.method != modemInterface+".SetPowerState" {
+		if invocation.Method != modemInterface+".SetPowerState" {
 			continue
 		}
-		powerState, _ := invocation.args[0].(uint32)
+		powerState, _ := invocation.Args[0].(uint32)
 		powerStates = append(powerStates, powerState)
 	}
 	if fmt.Sprint(powerStates) != fmt.Sprint([]uint32{modemPowerStateLow, modemPowerStateOn}) {
@@ -2021,7 +2021,7 @@ func TestRecoverWedgedModemLeavesSettledModemAlone(t *testing.T) {
 		t.Fatalf("recoverWedgedBearerState() error = %v", err)
 	}
 	for _, invocation := range caller.calls {
-		if invocation.method == modemInterface+".SetPowerState" {
+		if invocation.Method == modemInterface+".SetPowerState" {
 			t.Fatal("settled modem was power-cycled")
 		}
 	}
@@ -2040,7 +2040,7 @@ func TestRecoverWedgedModemToleratesMissingModem(t *testing.T) {
 		t.Fatalf("recoverWedgedBearerState() error = %v, want nil for a missing modem", err)
 	}
 	for _, invocation := range caller.calls {
-		if invocation.method == modemInterface+".SetPowerState" {
+		if invocation.Method == modemInterface+".SetPowerState" {
 			t.Fatal("missing modem was power-cycled")
 		}
 	}
