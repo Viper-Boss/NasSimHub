@@ -2,6 +2,7 @@ package modemmanager
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -177,5 +178,108 @@ func TestReconcileSMSReachabilityCorrectsCircuitSwitchedOnlyService(t *testing.T
 	}
 	if got := countMethod(caller.invocations(), modemInterface+".Enable"); got != 0 {
 		t.Fatalf("radio Enable calls = %d, want 0 for an empty storage", got)
+	}
+}
+
+func TestURCPortValue(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]int{
+		`+QURCCFG: "urcport","usbat"`: 0,
+		`+QURCCFG: "urcport","all"`:   1,
+		`+QURCCFG: "urcport","uart1"`: 0,
+	}
+	for response, expectedKnown := range cases {
+		port, known := urcPortValue(response)
+		if known != (expectedKnown == 1) {
+			t.Fatalf("urcPortValue(%q) known = %v", response, known)
+		}
+		if !known {
+			continue
+		}
+		if port != urcPortExpected {
+			t.Fatalf("urcPortValue(%q) = %q, want %q", response, port, urcPortExpected)
+		}
+	}
+	for _, response := range []string{"", "OK", "+QURCCFG: \"urcport\""} {
+		if _, known := urcPortValue(response); known {
+			t.Fatalf("urcPortValue(%q) reported a known port", response)
+		}
+	}
+}
+
+func TestReconcileSMSReachabilityCorrectsIndicationPort(t *testing.T) {
+	t.Parallel()
+
+	caller := newFakeCaller(emptyLineObjects(true, true))
+	caller.atResponses = map[string]string{
+		smsStorageQuery: "+CPMS: \"ME\",0,23,\"ME\",0,23,\"ME\",0,23",
+		smsServiceQuery: "+CGSMS: 2",
+		urcPortQuery:    "+QURCCFG: \"urcport\",\"usbat\"",
+	}
+	provider := newTestProvider(caller)
+
+	if err := provider.ReconcileSMSReachability(context.Background()); err != nil {
+		t.Fatalf("ReconcileSMSReachability() error = %v", err)
+	}
+	corrected := false
+	for _, invocation := range caller.invocations() {
+		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
+			continue
+		}
+		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite {
+			corrected = true
+		}
+	}
+	if !corrected {
+		t.Fatalf("the indication port was not corrected: %#v", caller.invocations())
+	}
+}
+
+func TestReconcileSMSReachabilityLeavesEveryPortIndicationAlone(t *testing.T) {
+	t.Parallel()
+
+	caller := newFakeCaller(emptyLineObjects(true, true))
+	caller.atResponses = map[string]string{
+		smsStorageQuery: "+CPMS: \"ME\",0,23,\"ME\",0,23,\"ME\",0,23",
+		smsServiceQuery: "+CGSMS: 2",
+		urcPortQuery:    "+QURCCFG: \"urcport\",\"all\"",
+	}
+	provider := newTestProvider(caller)
+
+	if err := provider.ReconcileSMSReachability(context.Background()); err != nil {
+		t.Fatalf("ReconcileSMSReachability() error = %v", err)
+	}
+	for _, invocation := range caller.invocations() {
+		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
+			continue
+		}
+		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite {
+			t.Fatal("the indication port was written although it already reports every port")
+		}
+	}
+}
+
+func TestReconcileSMSReachabilityIgnoresUnreadableIndicationPort(t *testing.T) {
+	t.Parallel()
+
+	caller := newFakeCaller(emptyLineObjects(true, true))
+	caller.atResponses = map[string]string{
+		smsStorageQuery: "+CPMS: \"ME\",0,23,\"ME\",0,23,\"ME\",0,23",
+		smsServiceQuery: "+CGSMS: 2",
+	}
+	caller.atCommandErrors[urcPortQuery] = errors.New("Unknown error")
+	provider := newTestProvider(caller)
+
+	if err := provider.ReconcileSMSReachability(context.Background()); err != nil {
+		t.Fatalf("an unreadable indication port must not fail the pass: %v", err)
+	}
+	for _, invocation := range caller.invocations() {
+		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
+			continue
+		}
+		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite {
+			t.Fatal("the guard wrote the indication port without being able to read it")
+		}
 	}
 }

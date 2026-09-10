@@ -41,6 +41,21 @@ const (
 	smsStorageQuery = "AT+CPMS?"
 	smsServiceQuery = "AT+CGSMS?"
 
+	// urcPortQuery reads where the modem reports unsolicited indications
+	// (incoming-call RING, +CMTI, ...). Measured on the QDC507: the modem was
+	// shipped reporting them to "usbat" only, and incoming calls never reached
+	// ModemManager at all — the call history held outgoing calls exclusively.
+	urcPortQuery = "AT+QURCCFG?"
+	// urcPortExpected is "report every indication on every port", so the port
+	// ModemManager listens on always receives them.
+	urcPortExpected = "all"
+	urcPortWrite    = "AT+QURCCFG=\"urcport\",\"all\""
+	// urcPortCheckInterval throttles the guard. The write only happens when a
+	// read positively reports a wrong port, so the check is cheap, but the
+	// firmware answers this query unreliably and there is no reason to probe
+	// it every pass.
+	urcPortCheckInterval = 10 * time.Minute
+
 	// smsExpectedService is "packet switched preferred, circuit switched
 	// fallback". The QDC507 was found reporting 1 ("circuit switched only"),
 	// which cannot carry SMS on an LTE-only attach at all: there is no circuit
@@ -72,13 +87,14 @@ const (
 // smsReachabilityState remembers what the previous pass saw about the modem's
 // message storage.
 type smsReachabilityState struct {
-	mu          sync.Mutex
-	used        int
-	known       int
-	observedAt  time.Time
-	suspectedAt time.Time
-	lastCycleAt time.Time
-	lastSentAt  time.Time
+	mu           sync.Mutex
+	used         int
+	known        int
+	observedAt   time.Time
+	suspectedAt  time.Time
+	lastCycleAt  time.Time
+	lastSentAt   time.Time
+	urcCheckedAt time.Time
 }
 
 func (state *smsReachabilityState) noteSent(at time.Time) {
@@ -92,6 +108,18 @@ func (state *smsReachabilityState) markCycled(at time.Time) {
 	defer state.mu.Unlock()
 	state.lastCycleAt = at
 	state.suspectedAt = time.Time{}
+}
+
+// urcPortDue reports and records whether this pass should re-check the
+// modem's indication port.
+func (state *smsReachabilityState) urcPortDue(at time.Time) bool {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if !state.urcCheckedAt.IsZero() && at.Sub(state.urcCheckedAt) < urcPortCheckInterval {
+		return false
+	}
+	state.urcCheckedAt = at
+	return true
 }
 
 // diverged records this pass and reports whether the modem is holding messages
@@ -172,6 +200,23 @@ func smsServiceValue(response string) (int, bool) {
 	return 0, false
 }
 
+// urcPortValue parses the indication port from an AT+QURCCFG? answer such as
+// `+QURCCFG: "urcport","usbat"`.
+func urcPortValue(response string) (string, bool) {
+	for _, line := range strings.Split(response, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "+QURCCFG:") {
+			continue
+		}
+		fields := strings.Split(strings.TrimPrefix(line, "+QURCCFG:"), ",")
+		if len(fields) < 2 {
+			return "", false
+		}
+		return strings.Trim(strings.TrimSpace(fields[1]), `"`), true
+	}
+	return "", false
+}
+
 // messageLine returns the line that owns the modem's messaging interface.
 func messageLine(parsed ParsedObjects) (domain.Line, dbus.ObjectPath, bool) {
 	for _, line := range parsed.Lines {
@@ -222,6 +267,19 @@ func (p *Provider) ReconcileSMSReachability(ctx context.Context) error {
 			"error", err,
 		)
 	}
+	if p.smsState.urcPortDue(time.Now()) {
+		if err := p.ensureURCPort(ctx, line.ID); err != nil {
+			// The read is unreliable on this firmware ("Unknown error" through
+			// ModemManager was observed right after writing the port), and a
+			// guard that cannot read must not act. Stay quiet at debug level.
+			slog.Debug(
+				"read the modem indication port",
+				"component", "modemmanager",
+				"line_id", line.ID,
+				"error", err,
+			)
+		}
+	}
 
 	response, err := p.commandATBounded(ctx, line.ID, smsStorageQuery)
 	if err != nil {
@@ -271,6 +329,32 @@ func (p *Provider) ensureSMSService(ctx context.Context, lineID string) error {
 		"line_id", lineID,
 		"previous", service,
 		"expected", smsExpectedService,
+	)
+	return nil
+}
+
+// ensureURCPort repairs a modem that reports its unsolicited indications
+// (incoming-call RING, +CMTI, ...) to a single USB AT port instead of every
+// port. With the shipped "usbat" setting, incoming calls never reached
+// ModemManager at all on the QDC507.
+func (p *Provider) ensureURCPort(ctx context.Context, lineID string) error {
+	response, err := p.commandATBounded(ctx, lineID, urcPortQuery)
+	if err != nil {
+		return err
+	}
+	port, known := urcPortValue(response)
+	if !known || port == urcPortExpected {
+		return nil
+	}
+	if _, err := p.commandATBounded(ctx, lineID, urcPortWrite); err != nil {
+		return err
+	}
+	slog.Warn(
+		"the modem reported its indications to one USB AT port and has been corrected",
+		"component", "modemmanager",
+		"line_id", lineID,
+		"previous", port,
+		"expected", urcPortExpected,
 	)
 	return nil
 }
