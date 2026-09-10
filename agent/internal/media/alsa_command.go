@@ -132,6 +132,8 @@ func (o *ALSACommandOpener) OpenDuplexPCM(
 		captureTransfer:  make([]byte, captureBytes),
 		captureOffset:    captureBytes,
 		playbackTransfer: make([]byte, playbackBytes),
+		captureLevel:     newLevelMeter("capture", time.Now()),
+		playbackLevel:    newLevelMeter("playback", time.Now()),
 	}, nil
 }
 
@@ -156,10 +158,14 @@ type alsaCommandDevice struct {
 	captureMu       sync.Mutex
 	captureTransfer []byte
 	captureOffset   int
+	// captureLevel measures what the module actually delivers during a call.
+	captureLevel *levelMeter
 
 	playbackMu       sync.Mutex
 	playbackTransfer []byte
 	playbackOffset   int
+	// playbackLevel measures what the browser actually sends during a call.
+	playbackLevel *levelMeter
 
 	closeOnce sync.Once
 	closeErr  error
@@ -186,6 +192,7 @@ func (d *alsaCommandDevice) Read(destination []byte) (int, error) {
 	}
 	read := copy(destination, d.captureTransfer[d.captureOffset:])
 	d.captureOffset += read
+	d.captureLevel.observe(destination[:read])
 	return read, nil
 }
 
@@ -196,6 +203,7 @@ func (d *alsaCommandDevice) Write(source []byte) (int, error) {
 	d.playbackMu.Lock()
 	defer d.playbackMu.Unlock()
 
+	d.playbackLevel.observe(source)
 	consumed := 0
 	for consumed < len(source) {
 		copied := copy(d.playbackTransfer[d.playbackOffset:], source[consumed:])
