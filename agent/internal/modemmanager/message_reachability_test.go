@@ -116,8 +116,16 @@ func TestEnsureURCPortBlindWritesWhenUnreadable(t *testing.T) {
 	caller := newFakeCaller(emptyLineObjects(true, true))
 	caller.atCommandErrors[urcPortQuery] = errors.New("Unknown error")
 	provider := newTestProvider(caller)
+	parsed, err := provider.snapshotContent(context.Background(), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, _, found := messageLine(parsed)
+	if !found {
+		t.Fatal("no message line in the fixture")
+	}
 
-	if err := provider.ensureURCPort(context.Background(), "line-a"); err != nil {
+	if err := provider.ensureURCPort(context.Background(), line.ID); err != nil {
 		t.Fatalf("ensureURCPort() error = %v", err)
 	}
 	writes := 0
@@ -134,16 +142,20 @@ func TestEnsureURCPortBlindWritesWhenUnreadable(t *testing.T) {
 	}
 
 	// The throttle holds a second immediate pass back.
-	if err := provider.ensureURCPort(context.Background(), "line-a"); err != nil {
+	if err := provider.ensureURCPort(context.Background(), line.ID); err != nil {
 		t.Fatalf("second ensureURCPort() error = %v", err)
 	}
+	writes = 0
 	for _, invocation := range caller.invocations() {
 		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
 			continue
 		}
-		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite && writes > 1 {
-			t.Fatal("the blind write was not throttled")
+		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite {
+			writes++
 		}
+	}
+	if writes != 1 {
+		t.Fatalf("blind writes after the throttle = %d, want 1", writes)
 	}
 }
 
@@ -314,26 +326,7 @@ func TestReconcileSMSReachabilityLeavesEveryPortIndicationAlone(t *testing.T) {
 	}
 }
 
-func TestReconcileSMSReachabilityIgnoresUnreadableIndicationPort(t *testing.T) {
-	t.Parallel()
-
-	caller := newFakeCaller(emptyLineObjects(true, true))
-	caller.atResponses = map[string]string{
-		smsStorageQuery: "+CPMS: \"ME\",0,23,\"ME\",0,23,\"ME\",0,23",
-		smsServiceQuery: "+CGSMS: 2",
-	}
-	caller.atCommandErrors[urcPortQuery] = errors.New("Unknown error")
-	provider := newTestProvider(caller)
-
-	if err := provider.ReconcileSMSReachability(context.Background()); err != nil {
-		t.Fatalf("an unreadable indication port must not fail the pass: %v", err)
-	}
-	for _, invocation := range caller.invocations() {
-		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
-			continue
-		}
-		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite {
-			t.Fatal("the guard wrote the indication port without being able to read it")
-		}
-	}
-}
+// The unreadable-port case is covered by TestEnsureURCPortBlindWritesWhenUnreadable:
+// since r79b an unreadable query leads to a throttled blind rewrite instead of
+// an inactive guard, because the firmware stops answering the query once the
+// port is on "all".
