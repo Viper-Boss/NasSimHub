@@ -395,7 +395,9 @@ func TestEnsureDoesNotReleaseWhenDriversCorrect(t *testing.T) {
 	releaser := &fakeReleaser{}
 	devices := &fakeDeviceAccess{initial: USBInterfaces{
 		VendorID: 0x2ca3, ProductID: 0x4006,
-		ADB: true, ADBDriver: "usbfs", UACControl: true, UACStreaming: true,
+		ADB: true, ADBDriver: "usbfs",
+		UACControl: true, UACDriver: "snd-usb-audio",
+		UACStreaming: true, UACStreamingDriver: "snd-usb-audio",
 	}}
 	manager, err := New(Options{
 		Inhibitor:         &fakeInhibitor{},

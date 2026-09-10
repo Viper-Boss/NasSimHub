@@ -44,12 +44,19 @@ type USBInterfaces struct {
 	ADB          bool
 	UACControl   bool
 	UACStreaming bool
-	// ADBDriver is the driver actually bound to the ADB interface (ff:42:01,
-	// e.g. 1.6). Empty when no driver is bound to that interface.
+	// ADBDriver, UACDriver and UACStreamingDriver record the kernel driver
+	// actually bound to the ADB (ff:42:01, e.g. 1.6), UAC control (01:01,
+	// e.g. 1.7) and UAC streaming (01:02, e.g. 1.8/1.9) interfaces. Empty when
+	// no driver is bound. Descriptors alone cannot reveal an option-driver
+	// hijack: the classes stay correct while the functional driver is
+	// displaced. The streaming role is tracked separately from the control
+	// role because the option driver can claim either set on its own.
 	ADBDriver string
-	// UACDriver is the driver actually bound to a UAC interface (01:01 / 01:02,
-	// e.g. 1.7). Empty when no driver is bound to that interface.
+	// UACDriver is the driver bound to the UAC control interface (01:01).
 	UACDriver string
+	// UACStreamingDriver is the driver bound to the first UAC streaming
+	// interface (01:02) that has one.
+	UACStreamingDriver string
 }
 
 func (u USBInterfaces) voiceReady() bool {

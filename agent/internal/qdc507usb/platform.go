@@ -68,14 +68,17 @@ func (a *sysfsDeviceAccess) Inspect(physicalDevice string) (USBInterfaces, error
 		}
 		if class == 0x01 && subclass == 0x01 {
 			interfaces.UACControl = true
-			// The UAC control interface (1.7) is the representative UAC
-			// interface for driver-ownership checks.
 			interfaces.UACDriver = readInterfaceDriver(interfacePath)
 		}
 		if class == 0x01 && subclass == 0x02 {
 			interfaces.UACStreaming = true
-			if interfaces.UACDriver == "" {
-				interfaces.UACDriver = readInterfaceDriver(interfacePath)
+			// The streaming interfaces (1.8/1.9) are distinct from the UAC
+			// control interface (1.7): the option driver can claim either set
+			// independently, so a hijack that only covers the streams must not
+			// hide behind a correctly bound control interface.
+			if driver := readInterfaceDriver(interfacePath); driver != "" &&
+				interfaces.UACStreamingDriver == "" {
+				interfaces.UACStreamingDriver = driver
 			}
 		}
 	}
@@ -100,14 +103,19 @@ func readInterfaceDriver(interfacePath string) string {
 // driverHijacked reports whether a non-serial QDC507 interface was claimed by
 // the kernel's generic serial driver instead of its functional driver. The
 // descriptors are still correct in that state, so voiceReady() alone cannot
-// see it: the ADB interface belongs to usbfs and the UAC interface to
-// snd-usb-audio, but the option driver has taken them over.
+// see it: the ADB interface belongs to usbfs and the UAC interfaces to
+// snd-usb-audio, but the option driver has taken them over. The UAC control
+// (1.7) and streaming (1.8/1.9) interfaces are checked separately because the
+// option driver can claim only one of the two sets.
 func (u USBInterfaces) driverHijacked() bool {
 	if u.ADB && u.ADBDriver != "" && u.ADBDriver != "usbfs" && u.ADBDriver != "usb" {
 		return true
 	}
-	if (u.UACControl || u.UACStreaming) && u.UACDriver != "" &&
-		u.UACDriver != "snd-usb-audio" && u.UACDriver != "usb" {
+	if u.UACControl && u.UACDriver != "" && u.UACDriver != "snd-usb-audio" && u.UACDriver != "usb" {
+		return true
+	}
+	if u.UACStreaming && u.UACStreamingDriver != "" &&
+		u.UACStreamingDriver != "snd-usb-audio" && u.UACStreamingDriver != "usb" {
 		return true
 	}
 	return false

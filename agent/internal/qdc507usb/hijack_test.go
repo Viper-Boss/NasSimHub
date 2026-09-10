@@ -9,8 +9,8 @@ import "testing"
 func TestDriverHijackedTruthTable(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name    string
-		iface   USBInterfaces
+		name     string
+		iface    USBInterfaces
 		hijacked bool
 	}{
 		{
@@ -61,6 +61,36 @@ func TestDriverHijackedTruthTable(t *testing.T) {
 		{
 			name:     "clean descriptors are not hijacked",
 			iface:    USBInterfaces{ADB: true, ADBDriver: "usbfs", UACControl: true, UACStreaming: true, UACDriver: "snd-usb-audio"},
+			hijacked: false,
+		},
+		{
+			// The option driver can claim only the streaming interfaces while
+			// leaving the UAC control interface correctly bound. That must still
+			// be detected, otherwise the device looks ready yet stays silent.
+			name: "streaming-only hijack behind a healthy control interface is caught",
+			iface: USBInterfaces{
+				ADB: true, ADBDriver: "usbfs",
+				UACControl: true, UACDriver: "snd-usb-audio",
+				UACStreaming: true, UACStreamingDriver: "option",
+			},
+			hijacked: true,
+		},
+		{
+			name: "streaming bound to snd-usb-audio is correct",
+			iface: USBInterfaces{
+				ADB: true, ADBDriver: "usbfs",
+				UACControl: true, UACDriver: "snd-usb-audio",
+				UACStreaming: true, UACStreamingDriver: "snd-usb-audio",
+			},
+			hijacked: false,
+		},
+		{
+			name: "streaming present but unbound is not a hijack",
+			iface: USBInterfaces{
+				ADB: true, ADBDriver: "usbfs",
+				UACControl: true, UACDriver: "snd-usb-audio",
+				UACStreaming: true, UACStreamingDriver: "",
+			},
 			hijacked: false,
 		},
 	}
