@@ -105,9 +105,10 @@ async function onRestartModem(): Promise<void> {
   }
 }
 
-// One-click rescue: reset_usb -> forced QADBKEY re-auth -> re-enable radio ->
-// reprobe voice. Covers the wedged-module cases we hit in the field (voice
-// route down, radio disabled after re-enumeration, internal adbd wedged).
+// One-click rescue: release_hijacked_usb -> reset_usb -> forced QADBKEY re-auth
+// -> re-enable radio -> reprobe voice. Covers the wedged-module cases we hit in
+// the field (voice route down, radio disabled after re-enumeration, internal
+// adbd wedged, host option driver hijacking ADB/audio interfaces).
 const repairBusy = ref(false)
 const repairStep = ref('')
 const repairResult = ref<'none' | 'ok' | 'failed'>('none')
@@ -115,6 +116,7 @@ const repairError = ref('')
 
 const repairStepLabel = computed(() => {
   switch (repairStep.value) {
+    case 'interfaces': return t('dashboard.repairStepInterfaces')
     case 'usb': return t('dashboard.repairStepUSB')
     case 'auth': return t('dashboard.repairStepAuth')
     case 'radio': return t('dashboard.repairStepRadio')
@@ -134,6 +136,7 @@ async function onRepair(): Promise<void> {
     repairResult.value = outcome === 'ok' ? 'ok' : 'failed'
     if (outcome !== 'ok') {
       const stepLabels: Record<string, string> = {
+        interfaces: t('dashboard.repairStepInterfaces'),
         usb: t('dashboard.repairStepUSB'),
         auth: t('dashboard.repairStepAuth'),
         radio: t('dashboard.repairStepRadio'),

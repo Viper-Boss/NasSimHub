@@ -1317,6 +1317,11 @@ export type UpdateDeviceConfigurationInput =
       operation: 'reset_usb'
       expected_device_revision: string
     }
+  | {
+      request_id: string
+      operation: 'release_hijacked_usb'
+      expected_device_revision: string
+    }
 
 export type TelegramUnit = {
   id: string

@@ -1513,6 +1513,7 @@ export function createDeviceConfigurationPayload(
     case 'reprobe_voice':
     case 'restart_modem':
     case 'reset_usb':
+    case 'release_hijacked_usb':
       return {
         request_id: requestID,
         operation: input.operation,

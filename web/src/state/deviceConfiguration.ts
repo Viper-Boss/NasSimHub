@@ -47,6 +47,7 @@ type HardwareUpdateIntent =
   | { operation: 'set_volte_policy'; volte_policy: 'enabled' | 'disabled' }
   | { operation: 'reprobe_voice' }
   | { operation: 'reset_usb' }
+  | { operation: 'release_hijacked_usb' }
   | { operation: 'restart_modem' }
 
 type DeviceUpdateIntent = IncomingPolicyUpdate | MessagePolicyUpdate | HardwareUpdateIntent
@@ -449,26 +450,41 @@ export function resetUSB(lineID: string): Promise<boolean> {
   })
 }
 
+export function releaseHijackedUSB(lineID: string): Promise<boolean> {
+  return updateDevice(lineID, {
+    operation: 'release_hijacked_usb'
+  })
+}
+
 function waitSeconds(seconds: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, seconds * 1000))
 }
 
 /**
  * One-click rescue sequence for a wedged module (voice route down, radio
- * disabled after re-enumeration, stale USB state, internal adbd wedged):
- *   1. reset_usb          — re-enumerate the module (cleans USB channel state)
- *   2. repair_voice_usb   — force fresh QADBKEY authorization + controlled
+ * disabled after re-enumeration, stale USB state, internal adbd wedged,
+ * or the host `option` serial driver having hijacked the module's non-serial
+ * interfaces):
+ *   1. release_hijacked_usb — (NEW, root-cause fix) make the host-side script
+ *                           hand the ADB / audio interfaces back from the
+ *                           `option` serial driver; without this the other
+ *                           steps have nothing to work with
+ *   2. reset_usb          — re-enumerate the module (cleans USB channel state)
+ *   3. repair_voice_usb   — force fresh QADBKEY authorization + controlled
  *                           reboot so the module's internal adbd comes back
- *   3. set_radio_enabled  — re-enable the radio (modems come back disabled)
- *   4. reprobe_voice      — make the agent reconcile the voice route again
+ *   4. set_radio_enabled  — re-enable the radio (modems come back disabled)
+ *   5. reprobe_voice      — make the agent reconcile the voice route again
  * Returns '' on success or a step label describing where it failed.
  */
-export type ModuleRepairStep = 'usb' | 'auth' | 'radio' | 'voice'
+export type ModuleRepairStep = 'interfaces' | 'usb' | 'auth' | 'radio' | 'voice'
 
 export async function repairModule(
   lineID: string,
   onStep: (step: ModuleRepairStep) => void
 ): Promise<'ok' | ModuleRepairStep> {
+  onStep('interfaces')
+  if (!await releaseHijackedUSB(lineID)) return 'interfaces'
+  await waitSeconds(6)
   onStep('usb')
   if (!await resetUSB(lineID)) return 'usb'
   await waitSeconds(25)

@@ -1186,6 +1186,16 @@ onBeforeUnmount(() => {
                   </code>
                 </dd>
               </div>
+              <p
+                v-if="selectedDiagnosticHardware.voice_verification &&
+                      selectedDiagnosticHardware.voice_verification.usb_configuration === 'enabled' &&
+                      selectedDiagnosticHardware.voice_verification.media_routing !== 'enabled'"
+                class="inline-error"
+                role="alert"
+              >
+                <strong>{{ t('diagnostics.interfaceClaimHint') }}:</strong>
+                {{ t('diagnostics.interfaceClaimSuspect') }}
+              </p>
             </template>
           </dl>
 
