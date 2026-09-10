@@ -348,6 +348,15 @@ func (m *Manager) ensureLine(
 	}
 	bootID := strings.TrimSpace(boot.Output)
 	state := lineState{bootID: bootID, selector: device.Selector}
+	// The VoLTE route switches are asserted on every pass, before the ready
+	// check below can short-circuit. The vendor calibration leaves them off
+	// (see ensureVoiceMixers), and with them off a call connects and even
+	// reports an active bearer while carrying no audio in either direction.
+	// A failure here is logged but must not fail the line: restarting the route
+	// cannot fix a mixer that refuses to stay on, and would only churn.
+	if err := m.ensureVoiceMixers(ctx, device.Selector); err != nil {
+		slog.Warn("ensure QDC507 VoLTE route mixers", "component", "qdc507voice", "error", err)
+	}
 	ready, readyErr := m.routeReady(ctx, device.Selector)
 	if readyErr == nil && ready {
 		state.status = m.readyStatus()
