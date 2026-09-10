@@ -1586,6 +1586,10 @@ func TestApplyDeviceConfigurationReportsFailedBearerCleanup(t *testing.T) {
 		propertiesInterface+".GetAll",
 		propertiesInterface+".GetAll",
 		bearerInterface+".Disconnect",
+		// A failed activation is followed by a wedge check, which re-reads the
+		// managed objects to inspect the modem state before deciding whether a
+		// power-state cycle is required.
+		objectManagerInterface+".GetManagedObjects",
 	)
 	if paths, _ := objectPathValuesProperty(
 		caller.objects[testModemPath][modemInterface],
@@ -1635,6 +1639,8 @@ func TestApplyDeviceConfigurationCleanupOutlivesCanceledRequest(t *testing.T) {
 		propertiesInterface+".GetAll",
 		bearerInterface+".Disconnect",
 		modemInterface+".DeleteBearer",
+		// Wedge check after the failed activation (see the sibling test above).
+		objectManagerInterface+".GetManagedObjects",
 	)
 }
 
@@ -1761,9 +1767,10 @@ func attachedBearerObjects(connected bool) (ManagedObjects, map[dbus.ObjectPath]
 	attachedPath := dbus.ObjectPath("/org/freedesktop/ModemManager1/Bearer/attach")
 	objects[testModemPath][modemInterface]["Bearers"] =
 		dbus.MakeVariant([]dbus.ObjectPath{attachedPath})
-	// configurationObjects leaves State unset; the modem is registered.
+	// emptyLineObjects already reports the modem as enabled (State 8); keep the
+	// harness's int32 encoding so the line projection can read it back.
 	objects[testModemPath][modemInterface]["State"] =
-		dbus.MakeVariant(uint32(modemStateEnabled))
+		dbus.MakeVariant(int32(modemStateEnabled))
 	bearers := map[dbus.ObjectPath]Properties{
 		attachedPath: {
 			"BearerType": dbus.MakeVariant(uint32(bearerTypeDefaultAttach)),
