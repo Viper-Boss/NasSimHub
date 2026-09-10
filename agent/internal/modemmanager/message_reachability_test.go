@@ -184,22 +184,17 @@ func TestReconcileSMSReachabilityCorrectsCircuitSwitchedOnlyService(t *testing.T
 func TestURCPortValue(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]int{
-		`+QURCCFG: "urcport","usbat"`: 0,
-		`+QURCCFG: "urcport","all"`:   1,
-		`+QURCCFG: "urcport","uart1"`: 0,
+	port, known := urcPortValue(`+QURCCFG: "urcport","usbat"`)
+	if !known || port != "usbat" {
+		t.Fatalf("usbat: known = %v port = %q", known, port)
 	}
-	for response, expectedKnown := range cases {
-		port, known := urcPortValue(response)
-		if known != (expectedKnown == 1) {
-			t.Fatalf("urcPortValue(%q) known = %v", response, known)
-		}
-		if !known {
-			continue
-		}
-		if port != urcPortExpected {
-			t.Fatalf("urcPortValue(%q) = %q, want %q", response, port, urcPortExpected)
-		}
+	port, known = urcPortValue(`+QURCCFG: "urcport","all"`)
+	if !known || port != urcPortExpected {
+		t.Fatalf("all: known = %v port = %q", known, port)
+	}
+	port, known = urcPortValue(`+QURCCFG: "urcport","uart1"`)
+	if !known || port != "uart1" {
+		t.Fatalf("uart1: known = %v port = %q", known, port)
 	}
 	for _, response := range []string{"", "OK", "+QURCCFG: \"urcport\""} {
 		if _, known := urcPortValue(response); known {
