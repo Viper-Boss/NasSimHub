@@ -2,6 +2,7 @@ package qdc507voice
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"strings"
 	"sync"
@@ -10,12 +11,14 @@ import (
 )
 
 // mixerClient models the module's amix tool as a set of readable, writable
-// boolean controls.
+// boolean controls, and emulates the single batched script ensureVoiceMixers
+// runs.
 type mixerClient struct {
 	mu        sync.Mutex
 	values    map[string]string
 	writable  bool
 	readFails bool
+	writes    int
 	commands  []string
 }
 
@@ -39,17 +42,23 @@ func (c *mixerClient) Shell(
 	if c.readFails {
 		return ShellResult{Status: 1}, nil
 	}
-	name, write := parseMixerCommand(command)
-	if name == "" {
+	if !strings.Contains(command, "for n in") {
 		return ShellResult{Status: 1}, nil
 	}
-	if write {
-		if c.writable {
+	var output strings.Builder
+	for _, name := range voLTEMixers {
+		switch {
+		case c.values[name] == mixerOn:
+			fmt.Fprintf(&output, "on %s\n", name)
+		case c.writable:
 			c.values[name] = mixerOn
+			c.writes++
+			fmt.Fprintf(&output, "fixed %s\n", name)
+		default:
+			fmt.Fprintf(&output, "failed %s\n", name)
 		}
-		return ShellResult{}, nil
 	}
-	return ShellResult{Output: name + ": " + c.values[name]}, nil
+	return ShellResult{Output: output.String()}, nil
 }
 
 func (c *mixerClient) Devices(context.Context) ([]Device, error) { return nil, nil }
@@ -63,25 +72,6 @@ func (c *mixerClient) Push(
 	time.Duration,
 ) error {
 	return nil
-}
-
-// parseMixerCommand decodes the two command shapes ensureVoiceMixers issues:
-// `amix '<name>'` reads and `amix '<name>' 1` writes.
-func parseMixerCommand(command string) (string, bool) {
-	const prefix = "amix "
-	if !strings.HasPrefix(command, prefix) {
-		return "", false
-	}
-	rest := strings.TrimPrefix(command, prefix)
-	write := strings.HasSuffix(rest, " 1")
-	if write {
-		rest = strings.TrimSuffix(rest, " 1")
-	}
-	name := strings.Trim(rest, "'")
-	if name == "" {
-		return "", false
-	}
-	return name, write
 }
 
 func TestEnsureVoiceMixersEnablesWhatCalibrationLeftOff(t *testing.T) {
@@ -98,6 +88,9 @@ func TestEnsureVoiceMixersEnablesWhatCalibrationLeftOff(t *testing.T) {
 			t.Errorf("mixer %q = %q, want on", name, client.values[name])
 		}
 	}
+	if len(client.commands) != 1 {
+		t.Errorf("commands = %d, want a single batched command", len(client.commands))
+	}
 }
 
 func TestEnsureVoiceMixersLeavesEnabledControlsAlone(t *testing.T) {
@@ -112,10 +105,8 @@ func TestEnsureVoiceMixersLeavesEnabledControlsAlone(t *testing.T) {
 	if err := manager.ensureVoiceMixers(context.Background(), "serial"); err != nil {
 		t.Fatalf("ensureVoiceMixers() error = %v", err)
 	}
-	for _, command := range client.commands {
-		if strings.HasSuffix(command, " 1") {
-			t.Errorf("unexpected write to an already-enabled mixer: %q", command)
-		}
+	if client.writes != 0 {
+		t.Fatalf("writes = %d, want none for already-enabled mixers", client.writes)
 	}
 }
 
@@ -130,12 +121,12 @@ func TestEnsureVoiceMixersReportsAControlThatStaysOff(t *testing.T) {
 	if err == nil {
 		t.Fatal("ensureVoiceMixers() error = nil, want a failure")
 	}
-	if !strings.Contains(err.Error(), "stayed off") {
-		t.Fatalf("ensureVoiceMixers() error = %v, want it to mention staying off", err)
+	if !strings.Contains(err.Error(), "is not enabled") {
+		t.Fatalf("ensureVoiceMixers() error = %v, want it to name the disabled mixer", err)
 	}
 }
 
-func TestEnsureVoiceMixersReportsAnUnreadableControl(t *testing.T) {
+func TestEnsureVoiceMixersReportsAFailedCommand(t *testing.T) {
 	t.Parallel()
 
 	client := newMixerClient()
@@ -147,34 +138,30 @@ func TestEnsureVoiceMixersReportsAnUnreadableControl(t *testing.T) {
 	}
 }
 
-func TestMixerValue(t *testing.T) {
+func TestParseMixerStatuses(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]struct {
-		output string
-		want   string
-		found  bool
-	}{
-		"enabled":  {output: "SEC_AUX_PCM_RX_Voice Mixer VoLTE: on\n", want: "on", found: true},
-		"disabled": {output: "VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE: off", want: "off", found: true},
-		"empty output is not a value": {output: "", found: false},
-		"an unreadable control is not a value": {
-			output: "can't find control",
-			found:  false,
-		},
+	output := strings.Join([]string{
+		"on SEC_AUX_PCM_RX_Voice Mixer VoLTE",
+		"fixed VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE",
+		"",
+	}, "\n")
+	statuses := parseMixerStatuses(output)
+	if statuses["SEC_AUX_PCM_RX_Voice Mixer VoLTE"] != mixerStatusOn {
+		t.Errorf("first status = %q, want on", statuses["SEC_AUX_PCM_RX_Voice Mixer VoLTE"])
 	}
-
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			value, found := mixerValue(test.output)
-			if found != test.found {
-				t.Fatalf("found = %t, want %t", found, test.found)
-			}
-			if found && value != test.want {
-				t.Fatalf("value = %q, want %q", value, test.want)
-			}
-		})
+	if statuses["VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE"] != mixerStatusFixed {
+		t.Errorf(
+			"second status = %q, want fixed",
+			statuses["VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE"],
+		)
+	}
+	if len(parseMixerStatuses("")) != 0 {
+		t.Error("empty output should report no statuses")
+	}
+	// Lines that are not status lines must be ignored rather than misparsed.
+	if len(parseMixerStatuses("can't find control\n")) != 0 {
+		t.Error("unrecognised output should report no statuses")
 	}
 }
 

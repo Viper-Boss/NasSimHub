@@ -36,104 +36,89 @@ var voLTEMixers = []string{
 // reading the control back. Failures are reported rather than swallowed: a
 // switch that will not stay on means the route can carry no audio, which is
 // otherwise invisible from every other signal ModemDeck collects.
+//
+// The whole check runs as one module shell command. Each adb round trip costs a
+// slot on the single ADB channel the voice runtime also uses for provisioning,
+// and this runs on every reconcile pass, so the reads and conditional writes are
+// batched rather than issued separately.
 func (m *Manager) ensureVoiceMixers(ctx context.Context, serial string) error {
+	result, err := m.client.Shell(
+		ctx,
+		serial,
+		voiceMixerScript(),
+		mixerCommandTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("ensure QDC507 VoLTE mixers: %w", err)
+	}
+	if result.Status != 0 {
+		return fmt.Errorf(
+			"ensure QDC507 VoLTE mixers: remote command returned status %d",
+			result.Status,
+		)
+	}
+	statuses := parseMixerStatuses(result.Output)
 	var failures []error
 	for _, name := range voLTEMixers {
-		enabled, err := m.readVoiceMixer(ctx, serial, name)
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		if enabled {
-			continue
-		}
-		if err := m.writeVoiceMixer(ctx, serial, name); err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		enabled, err = m.readVoiceMixer(ctx, serial, name)
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		if !enabled {
+		switch statuses[name] {
+		case mixerStatusOn:
+		case mixerStatusFixed:
+			slog.Warn(
+				"enabled a QDC507 VoLTE route mixer the vendor calibration left off",
+				"component", "qdc507voice",
+				"mixer", name,
+			)
+		default:
 			failures = append(
 				failures,
-				fmt.Errorf("mixer %q stayed off after being enabled", name),
+				fmt.Errorf("mixer %q is not enabled", name),
 			)
-			continue
 		}
-		slog.Warn(
-			"enabled a QDC507 VoLTE route mixer the vendor calibration left off",
-			"component", "qdc507voice",
-			"mixer", name,
-		)
 	}
 	return errors.Join(failures...)
 }
 
-// readVoiceMixer reports whether one module mixer control is enabled. The tool
-// prints "<name>: on" or "<name>: off".
-func (m *Manager) readVoiceMixer(ctx context.Context, serial, name string) (bool, error) {
-	result, err := m.client.Shell(
-		ctx,
-		serial,
-		"amix "+quoteMixerName(name),
-		mixerCommandTimeout,
+// mixerStatusOn and mixerStatusFixed are the two outcomes the module reports for
+// a control that is now enabled. "fixed" means this pass had to turn it on.
+const (
+	mixerStatusOn    = "on"
+	mixerStatusFixed = "fixed"
+)
+
+// voiceMixerScript reads every VoLTE route switch and turns on the ones that are
+// off, echoing one status line per control.
+func voiceMixerScript() string {
+	var script strings.Builder
+	script.WriteString("for n in")
+	for _, name := range voLTEMixers {
+		script.WriteString(" ")
+		script.WriteString(quoteMixerName(name))
+	}
+	script.WriteString(
+		`; do v=$(amix "$n"); case "$v" in *": on") echo "` + mixerStatusOn + ` $n" ;; *) ` +
+			`amix "$n" 1; v2=$(amix "$n"); ` +
+			`case "$v2" in *": on") echo "` + mixerStatusFixed + ` $n" ;; ` +
+			`*) echo "failed $n" ;; esac ;; esac; done`,
 	)
-	if err != nil {
-		return false, fmt.Errorf("read QDC507 mixer %q: %w", name, err)
-	}
-	if result.Status != 0 {
-		return false, fmt.Errorf(
-			"read QDC507 mixer %q: remote command returned status %d",
-			name,
-			result.Status,
-		)
-	}
-	value, found := mixerValue(result.Output)
-	if !found {
-		return false, fmt.Errorf("read QDC507 mixer %q: unrecognised output", name)
-	}
-	return value == mixerOn, nil
+	return script.String()
 }
 
-// writeVoiceMixer enables one module mixer control.
-func (m *Manager) writeVoiceMixer(ctx context.Context, serial, name string) error {
-	result, err := m.client.Shell(
-		ctx,
-		serial,
-		"amix "+quoteMixerName(name)+" 1",
-		mixerCommandTimeout,
-	)
-	if err != nil {
-		return fmt.Errorf("enable QDC507 mixer %q: %w", name, err)
-	}
-	if result.Status != 0 {
-		return fmt.Errorf(
-			"enable QDC507 mixer %q: remote command returned status %d",
-			name,
-			result.Status,
-		)
-	}
-	return nil
-}
-
-// mixerValue extracts the value from "amix" output, which is
-// "<control name>: <value>".
-func mixerValue(output string) (string, bool) {
+// parseMixerStatuses maps each control named in the script's output to the last
+// status reported for it.
+func parseMixerStatuses(output string) map[string]string {
+	statuses := make(map[string]string, len(voLTEMixers))
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		index := strings.LastIndex(line, ":")
-		if index < 0 {
+		status, name, found := strings.Cut(line, " ")
+		if !found {
 			continue
 		}
-		value := strings.TrimSpace(line[index+1:])
-		if value != "" {
-			return value, true
+		switch status {
+		case mixerStatusOn, mixerStatusFixed, "failed":
+			statuses[strings.TrimSpace(name)] = status
 		}
 	}
-	return "", false
+	return statuses
 }
 
 // shellQuote wraps a mixer control name for the module's shell. The names
