@@ -64,15 +64,53 @@ func (a *sysfsDeviceAccess) Inspect(physicalDevice string) (USBInterfaces, error
 		}
 		if class == 0xff && subclass == 0x42 && protocol == 0x01 {
 			interfaces.ADB = true
+			interfaces.ADBDriver = readInterfaceDriver(interfacePath)
 		}
 		if class == 0x01 && subclass == 0x01 {
 			interfaces.UACControl = true
+			// The UAC control interface (1.7) is the representative UAC
+			// interface for driver-ownership checks.
+			interfaces.UACDriver = readInterfaceDriver(interfacePath)
 		}
 		if class == 0x01 && subclass == 0x02 {
 			interfaces.UACStreaming = true
+			if interfaces.UACDriver == "" {
+				interfaces.UACDriver = readInterfaceDriver(interfacePath)
+			}
 		}
 	}
 	return interfaces, nil
+}
+
+// readInterfaceDriver returns the kernel driver bound to a USB interface. The
+// driver is exposed as a "driver" symlink under the interface sysfs directory.
+// When the kernel has not bound any driver the symlink is absent, which is not
+// an error: we return an empty string and let callers treat that as "no
+// driver" rather than as a hardware fault.
+func readInterfaceDriver(interfacePath string) string {
+	link := filepath.Join(interfacePath, "driver")
+	target, err := os.Readlink(link)
+	if err != nil {
+		// No driver symlink (or unreadable): treat as no driver bound.
+		return ""
+	}
+	return filepath.Base(target)
+}
+
+// driverHijacked reports whether a non-serial QDC507 interface was claimed by
+// the kernel's generic serial driver instead of its functional driver. The
+// descriptors are still correct in that state, so voiceReady() alone cannot
+// see it: the ADB interface belongs to usbfs and the UAC interface to
+// snd-usb-audio, but the option driver has taken them over.
+func (u USBInterfaces) driverHijacked() bool {
+	if u.ADB && u.ADBDriver != "" && u.ADBDriver != "usbfs" && u.ADBDriver != "usb" {
+		return true
+	}
+	if (u.UACControl || u.UACStreaming) && u.UACDriver != "" &&
+		u.UACDriver != "snd-usb-audio" && u.UACDriver != "usb" {
+		return true
+	}
+	return false
 }
 
 func (a *sysfsDeviceAccess) ATPort(line domain.Line) (ATPort, error) {

@@ -1,8 +1,12 @@
+//go:build linux
+
 package qdc507usb
 
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -285,4 +289,154 @@ func countCommand(commands []string, wanted string) int {
 		}
 	}
 	return count
+}
+
+type fakeReleaser struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (f *fakeReleaser) ReleaseHijackedInterfaces(context.Context) error {
+	f.mu.Lock()
+	f.calls++
+	f.mu.Unlock()
+	return f.err
+}
+
+func (f *fakeReleaser) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// TestEnsureReleasesHijackedInterfaces verifies that a driver hijack is detected
+// from descriptor-independent driver ownership, the host releaser is invoked
+// exactly once, and a clean re-inspection after release reports changed=true so
+// the voice link is rebuilt even though the descriptors already looked complete.
+func TestEnsureReleasesHijackedInterfaces(t *testing.T) {
+	t.Parallel()
+	releaser := &fakeReleaser{}
+	devices := &fakeDeviceAccess{
+		initial: USBInterfaces{
+			VendorID: 0x2ca3, ProductID: 0x4006,
+			ADB: true, ADBDriver: "option", UACControl: true, UACStreaming: true,
+		},
+		post: USBInterfaces{
+			VendorID: 0x2ca3, ProductID: 0x4006,
+			ADB: true, ADBDriver: "usbfs", UACControl: true, UACStreaming: true,
+		},
+	}
+	manager, err := New(Options{
+		Inhibitor:         &fakeInhibitor{},
+		ATClient:          &fakeATClient{},
+		DeviceAccess:      devices,
+		InterfaceReleaser: releaser,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := manager.Ensure(context.Background(), testLine())
+	if err != nil {
+		t.Fatalf("Ensure() unexpected error: %v", err)
+	}
+	if !changed {
+		t.Fatal("Ensure() changed = false, want true after releasing a hijack")
+	}
+	if got := releaser.count(); got != 1 {
+		t.Fatalf("releaser calls = %d, want 1", got)
+	}
+}
+
+// TestEnsureReturnsErrorWhenHijackPersistsAfterRelease confirms that when the
+// host-side release does not actually recover the driver ownership, Ensure
+// returns an explicit error instead of continuing into the (useless) AT/USBCFG
+// provisioning flow.
+func TestEnsureReturnsErrorWhenHijackPersistsAfterRelease(t *testing.T) {
+	t.Parallel()
+	releaser := &fakeReleaser{}
+	devices := &fakeDeviceAccess{
+		initial: USBInterfaces{
+			VendorID: 0x2ca3, ProductID: 0x4006,
+			ADB: true, ADBDriver: "option", UACControl: true, UACStreaming: true,
+		},
+		post: USBInterfaces{
+			VendorID: 0x2ca3, ProductID: 0x4006,
+			ADB: true, ADBDriver: "option", UACControl: true, UACStreaming: true,
+		},
+	}
+	manager, err := New(Options{
+		Inhibitor:         &fakeInhibitor{},
+		ATClient:          &fakeATClient{},
+		DeviceAccess:      devices,
+		InterfaceReleaser: releaser,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := manager.Ensure(context.Background(), testLine())
+	if err == nil {
+		t.Fatal("Ensure() error = nil, want an error for a persistent hijack")
+	}
+	if !strings.Contains(err.Error(), "释放后驱动仍被 option 抢占") {
+		t.Fatalf("Ensure() error = %v, want the persistent-hijack message", err)
+	}
+	if got := releaser.count(); got != 1 {
+		t.Fatalf("releaser calls = %d, want 1", got)
+	}
+	_ = changed
+}
+
+// TestEnsureDoesNotReleaseWhenDriversCorrect confirms the host release is never
+// invoked when the descriptors are complete and the functional drivers are bound
+// correctly, so a healthy device is never disturbed.
+func TestEnsureDoesNotReleaseWhenDriversCorrect(t *testing.T) {
+	t.Parallel()
+	releaser := &fakeReleaser{}
+	devices := &fakeDeviceAccess{initial: USBInterfaces{
+		VendorID: 0x2ca3, ProductID: 0x4006,
+		ADB: true, ADBDriver: "usbfs", UACControl: true, UACStreaming: true,
+	}}
+	manager, err := New(Options{
+		Inhibitor:         &fakeInhibitor{},
+		ATClient:          &fakeATClient{},
+		DeviceAccess:      devices,
+		InterfaceReleaser: releaser,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := manager.Ensure(context.Background(), testLine())
+	if err != nil || changed {
+		t.Fatalf("Ensure() changed = %t, error = %v", changed, err)
+	}
+	if got := releaser.count(); got != 0 {
+		t.Fatalf("releaser calls = %d, want 0 on a healthy device", got)
+	}
+}
+
+// TestInspectReadsInterfaceDrivers exercises the driver-ownership probe that
+// Inspect feeds into driverHijacked. Symlinks cannot be created under the real
+// /sys tree in a test, so we test the underlying readInterfaceDriver helper
+// which Inspect calls for each interface.
+func TestReadInterfaceDriver(t *testing.T) {
+	t.Parallel()
+	withDriver := t.TempDir()
+	if err := os.Symlink("option", filepath.Join(withDriver, "driver")); err != nil {
+		t.Fatalf("create driver symlink: %v", err)
+	}
+	if got := readInterfaceDriver(withDriver); got != "option" {
+		t.Fatalf("readInterfaceDriver = %q, want option", got)
+	}
+	audio := t.TempDir()
+	if err := os.Symlink("snd-usb-audio", filepath.Join(audio, "driver")); err != nil {
+		t.Fatalf("create driver symlink: %v", err)
+	}
+	if got := readInterfaceDriver(audio); got != "snd-usb-audio" {
+		t.Fatalf("readInterfaceDriver = %q, want snd-usb-audio", got)
+	}
+	noDriver := t.TempDir()
+	if got := readInterfaceDriver(noDriver); got != "" {
+		t.Fatalf("readInterfaceDriver = %q, want empty when no driver is bound", got)
+	}
 }

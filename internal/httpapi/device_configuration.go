@@ -568,7 +568,8 @@ func validHardwareConfigurationOperation(
 		agentclient.DeviceConfigurationReprobeVoice,
 		agentclient.DeviceConfigurationRestartModem,
 		agentclient.DeviceConfigurationResetUSB,
-		agentclient.DeviceConfigurationRepairVoiceUSB:
+		agentclient.DeviceConfigurationRepairVoiceUSB,
+		agentclient.DeviceConfigurationReleaseHijackedUSB:
 		return true
 	default:
 		return false

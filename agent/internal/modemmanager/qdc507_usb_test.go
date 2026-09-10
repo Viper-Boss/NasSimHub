@@ -23,6 +23,14 @@ func (p *recordingQDC507USBProvisioner) Ensure(
 	return p.changed, p.err
 }
 
+func (p *recordingQDC507USBProvisioner) EnsureForce(
+	_ context.Context,
+	line domain.Line,
+) (bool, error) {
+	p.lines = append(p.lines, line)
+	return p.changed, p.err
+}
+
 func TestEnsureQDC507VoiceUSBPreflightsAndDelegatesExactLine(t *testing.T) {
 	t.Parallel()
 	objects := emptyLineObjects(true, false)

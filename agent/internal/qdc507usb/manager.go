@@ -5,6 +5,7 @@ import (
 	"crypto/md5" // #nosec G501 -- QDC507's legacy QADBKEY protocol requires MD5-crypt.
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -43,6 +44,12 @@ type USBInterfaces struct {
 	ADB          bool
 	UACControl   bool
 	UACStreaming bool
+	// ADBDriver is the driver actually bound to the ADB interface (ff:42:01,
+	// e.g. 1.6). Empty when no driver is bound to that interface.
+	ADBDriver string
+	// UACDriver is the driver actually bound to a UAC interface (01:01 / 01:02,
+	// e.g. 1.7). Empty when no driver is bound to that interface.
+	UACDriver string
 }
 
 func (u USBInterfaces) voiceReady() bool {
@@ -74,6 +81,7 @@ type Options struct {
 	Inhibitor           Inhibitor
 	ATClient            ATClient
 	DeviceAccess        DeviceAccess
+	InterfaceReleaser   InterfaceReleaser
 	ReenumerationWait   time.Duration
 	ADBSettleDelay      time.Duration
 	PostAuthSettleDelay time.Duration
@@ -86,6 +94,7 @@ type Manager struct {
 	inhibitor           Inhibitor
 	at                  ATClient
 	devices             DeviceAccess
+	releaser            InterfaceReleaser
 	reenumerationWait   time.Duration
 	adbSettleDelay      time.Duration
 	postAuthSettleDelay time.Duration
@@ -102,6 +111,10 @@ func New(options Options) (*Manager, error) {
 	devices := options.DeviceAccess
 	if devices == nil {
 		devices = newSysfsDeviceAccess()
+	}
+	releaser := options.InterfaceReleaser
+	if releaser == nil {
+		releaser = newHostInterfaceReleaser()
 	}
 	reenumerationWait := options.ReenumerationWait
 	if reenumerationWait <= 0 {
@@ -121,6 +134,7 @@ func New(options Options) (*Manager, error) {
 		inhibitor:           options.Inhibitor,
 		at:                  at,
 		devices:             devices,
+		releaser:            releaser,
 		reenumerationWait:   reenumerationWait,
 		adbSettleDelay:      adbSettleDelay,
 		postAuthSettleDelay: postAuthSettleDelay,
@@ -161,8 +175,38 @@ func (m *Manager) ensure(ctx context.Context, line domain.Line, force bool) (cha
 	if err != nil {
 		return false, fmt.Errorf("inspect QDC507 USB interfaces: %w", err)
 	}
+	// The kernel's option serial driver can steal the ADB and UAC interfaces
+	// while their USB descriptors stay correct. voiceReady() cannot see that, so
+	// we independently check driver ownership and ask the host to release the
+	// hijacked interfaces before anything else. Releasing the interfaces changes
+	// the device's live state, so we mark changed=true to rebuild the voice
+	// link even when the descriptors already look complete.
+	if interfaces.driverHijacked() {
+		slog.Info(
+			"检测到 QDC507 非串口接口被 option 驱动抢占，请求主机侧释放",
+			"device", physicalDevice,
+			"adb_driver", interfaces.ADBDriver,
+			"uac_driver", interfaces.UACDriver,
+		)
+		if err := m.releaser.ReleaseHijackedInterfaces(ctx); err != nil {
+			return false, fmt.Errorf("QDC507 接口被 option 抢占，主机侧释放失败: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+		interfaces, err = m.devices.Inspect(physicalDevice)
+		if err != nil {
+			return false, fmt.Errorf("inspect QDC507 USB interfaces after release: %w", err)
+		}
+		if interfaces.driverHijacked() {
+			return false, fmt.Errorf("QDC507 接口释放后驱动仍被 option 抢占")
+		}
+		changed = true
+	}
 	if !force && interfaces.voiceReady() {
-		return false, nil
+		return changed, nil
 	}
 	port, err := m.devices.ATPort(line)
 	if err != nil {

@@ -19,6 +19,7 @@ const (
 	DeviceConfigurationRestartModem    DeviceConfigurationOperation = "restart_modem"
 	DeviceConfigurationResetUSB        DeviceConfigurationOperation = "reset_usb"
 	DeviceConfigurationRepairVoiceUSB  DeviceConfigurationOperation = "repair_voice_usb"
+	DeviceConfigurationReleaseHijackedUSB DeviceConfigurationOperation = "release_hijacked_usb"
 )
 
 type FeatureCapability struct {
