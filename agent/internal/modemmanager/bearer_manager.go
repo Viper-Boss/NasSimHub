@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	bearerPollInterval   = 200 * time.Millisecond
-	bearerCleanupTimeout = 10 * time.Second
+	bearerPollInterval    = 200 * time.Millisecond
+	bearerCleanupTimeout  = 10 * time.Second
+	bearerRecoveryTimeout = 30 * time.Second
 )
 
 // ReconcileDataPlane restores only network state backed by an exact
@@ -186,7 +187,7 @@ func (p *Provider) activateOwnedBearerData(
 	if err != nil {
 		return "", err
 	}
-	if conflict, found, err := p.connectedExternalDefaultBearer(
+	if conflict, conflictConnection, found, err := p.connectedAttachedBearer(
 		ctx,
 		objects,
 		modemPath,
@@ -194,6 +195,42 @@ func (p *Provider) activateOwnedBearerData(
 	); err != nil {
 		return "", err
 	} else if found {
+		// A bearer the modem attached itself already carries this line's
+		// default traffic, which is exactly the state connect_data is asking
+		// for. Adopt it: record the ownership so a later disconnect_data can
+		// manage it, and bring the host data plane up on the same connection.
+		// Only reject it when it plainly belongs to a different request.
+		if dataConnectionMatches(conflictConnection, effectiveAPN, ipFamily) {
+			adopted := ownedBearer{
+				LineID:        lineID,
+				ProviderEpoch: providerEpoch,
+				ModemPath:     modemPath,
+				BearerPath:    dbus.ObjectPath(conflict),
+				APN:           strings.TrimSpace(conflictConnection.APN),
+				IPFamily:      ipFamily,
+			}
+			if err := p.ownedBearers.put(adopted); err != nil {
+				return "", domain.VerificationFailed(
+					operation,
+					"the modem's attached data bearer could not be recorded as ModemDeck-owned",
+					err,
+				)
+			}
+			if err := p.configureDataPlane(ctx, lineID, conflictConnection); err != nil {
+				// The ownership record must not outlive a data plane that was
+				// never configured, otherwise the next disconnect_data would
+				// try to tear down state it never created.
+				if removeErr := p.ownedBearers.remove(lineID); removeErr != nil {
+					err = errors.Join(err, removeErr)
+				}
+				return "", domain.FailedPrecondition(
+					operation,
+					"the modem's attached data bearer could not be configured in the host network namespace",
+					err,
+				)
+			}
+			return adopted.BearerPath, nil
+		}
 		return "", domain.Conflict(
 			operation,
 			fmt.Sprintf(
@@ -202,6 +239,19 @@ func (p *Provider) activateOwnedBearerData(
 			),
 		)
 	}
+
+	// Bound the activation itself. The caller's context covers the whole write
+	// path (and the configMu hold); this shorter deadline keeps a network that
+	// refuses the PDP context from turning into a multi-minute stall.
+	boundedBearer, cancelBearer, err := configurationContext(
+		ctx,
+		bearerActivationTimeout,
+		operation,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer cancelBearer()
 
 	properties := bearerProperties(requestedAPN, automaticAPN, ipFamily)
 	body, err := p.call(
@@ -249,7 +299,7 @@ func (p *Provider) activateOwnedBearerData(
 	}
 
 	if _, err := p.call(
-		ctx,
+		boundedBearer,
 		bearerPath,
 		bearerInterface+".Connect",
 		operation,
@@ -268,7 +318,7 @@ func (p *Provider) activateOwnedBearerData(
 		return "", p.activationFailureWithCleanup(modemPath, lineID, err)
 	}
 
-	connection, err := p.waitBearerReady(ctx, bearerPath, operation)
+	connection, err := p.waitBearerReady(boundedBearer, bearerPath, operation)
 	if err != nil {
 		return "", p.activationFailureWithCleanup(modemPath, lineID, err)
 	}
@@ -438,13 +488,34 @@ func (p *Provider) connectedExternalDefaultBearer(
 	modemPath dbus.ObjectPath,
 	operation string,
 ) (string, bool, error) {
+	foreign, _, found, err := p.connectedAttachedBearer(ctx, objects, modemPath, operation)
+	return foreign, found, err
+}
+
+// connectedAttachedBearer looks for a default-data bearer the modem already
+// has connected but that ModemDeck did not create. It reports the bearer path
+// and its parsed connection so the caller can decide between adopting it and
+// rejecting it.
+//
+// The attach-time default bearer (MM_BEARER_TYPE_DEFAULT_ATTACH) is the data
+// path a bridged module such as the QDC507 actually uses: the vendor ECM
+// netdev answers DHCP and forwards LTE traffic as soon as the modem attaches,
+// long before anyone asks ModemManager to activate a bearer. Refusing to touch
+// it would leave the toggle permanently unable to report or manage a data
+// connection that is demonstrably up.
+func (p *Provider) connectedAttachedBearer(
+	ctx context.Context,
+	objects ManagedObjects,
+	modemPath dbus.ObjectPath,
+	operation string,
+) (string, domain.DataConnection, bool, error) {
 	interfaces, found := objects[modemPath]
 	if !found {
-		return "", false, domain.NotFound(operation, "modem object was not found")
+		return "", domain.DataConnection{}, false, domain.NotFound(operation, "modem object was not found")
 	}
 	modemProperties, found := interfaces[modemInterface]
 	if !found {
-		return "", false, domain.NotSupported(operation, "modem interface is unavailable")
+		return "", domain.DataConnection{}, false, domain.NotSupported(operation, "modem interface is unavailable")
 	}
 	paths, _ := objectPathValuesProperty(modemProperties, "Bearers")
 	for _, path := range paths {
@@ -455,24 +526,24 @@ func (p *Provider) connectedExternalDefaultBearer(
 			operation,
 		)
 		if err != nil {
-			return "", false, err
+			return "", domain.DataConnection{}, false, err
 		}
 		if !found {
 			continue
 		}
 		connection, err := parseDataConnection(p.ids.bearerID(path), properties)
 		if err != nil {
-			return "", false, domain.Internal(
+			return "", domain.DataConnection{}, false, domain.Internal(
 				operation,
 				"ModemManager bearer properties were malformed",
 				err,
 			)
 		}
 		if connection.Connected && dataConnectionIsDefault(connection) {
-			return string(path), true, nil
+			return string(path), connection, true, nil
 		}
 	}
-	return "", false, nil
+	return "", domain.DataConnection{}, false, nil
 }
 
 func (p *Provider) activationFailureWithCleanup(
@@ -480,14 +551,81 @@ func (p *Provider) activationFailureWithCleanup(
 	lineID string,
 	activationErr error,
 ) error {
-	if cleanupErr := p.cleanupOwnedBearerData(modemPath, lineID); cleanupErr != nil {
-		return domain.VerificationFailed(
-			"apply_device_configuration",
-			"packet data activation failed and ModemDeck bearer cleanup also failed",
-			errors.Join(activationErr, cleanupErr),
-		)
+	cleanupErr := p.cleanupOwnedBearerData(modemPath, lineID)
+	// An abandoned activation can leave the modem mid-transition, where it
+	// refuses every later data request. Recover before returning so the next
+	// attempt starts from a settled modem instead of inheriting the wedge.
+	recoveryErr := p.recoverWedgedBearerState(modemPath)
+	joined := errors.Join(activationErr, cleanupErr, recoveryErr)
+	if cleanupErr == nil && recoveryErr == nil {
+		return activationErr
 	}
-	return activationErr
+	return domain.VerificationFailed(
+		"apply_device_configuration",
+		"packet data activation failed and ModemDeck bearer cleanup or modem recovery also failed",
+		joined,
+	)
+}
+
+// recoverWedgedBearerState clears a ModemManager modem that is stuck
+// mid-transition after a failed bearer activation.
+//
+// When a Connect call is abandoned (our bounded deadline, the user pressing
+// the toggle again, or ModemManager's own "Operation was cancelled"), the
+// modem can be left in the transient "connecting" state. ModemManager then
+// refuses to service further data requests, and even AT commands stop
+// answering until the transition resolves on its own — measured at 45 s for
+// connecting and 136 s for disconnecting on the QDC507. Cycling the modem
+// power state forces the transition to resolve and the modem returns to
+// "registered" in roughly ten seconds.
+//
+// The recovery is best-effort and idempotent: it only acts when the modem is
+// not in a settled state, and a failure to recover is reported alongside the
+// original error rather than replacing it.
+func (p *Provider) recoverWedgedBearerState(modemPath dbus.ObjectPath) error {
+	const operation = "recover_bearer_state"
+	ctx, cancel := context.WithTimeout(context.Background(), bearerRecoveryTimeout)
+	defer cancel()
+	objects, err := p.managedObjects(ctx, operation)
+	if err != nil {
+		return err
+	}
+	interfaces, found := objects[modemPath]
+	if !found {
+		return nil
+	}
+	properties, found := interfaces[modemInterface]
+	if !found {
+		return nil
+	}
+	stateCode, known := uint32Property(properties, "State")
+	if !known || !modemStateIsTransient(stateCode) {
+		return nil
+	}
+	var result error
+	for _, powerState := range []uint32{modemPowerStateLow, modemPowerStateOn} {
+		if _, err := p.call(
+			ctx,
+			modemPath,
+			modemInterface+".SetPowerState",
+			operation,
+			"ModemManager failed to cycle the modem power state during recovery",
+			powerState,
+		); err != nil {
+			result = errors.Join(result, err)
+			continue
+		}
+	}
+	return result
+}
+
+func modemStateIsTransient(code uint32) bool {
+	switch code {
+	case modemStateConnecting, modemStateDisconnecting:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Provider) cleanupOwnedBearerData(
@@ -573,7 +711,7 @@ func dataConnectionMatches(
 
 func dataConnectionIsDefault(connection domain.DataConnection) bool {
 	if connection.BearerType != 0 {
-		return connection.BearerType == bearerTypeDefault
+		return isDefaultBearerType(connection.BearerType)
 	}
 	return connection.APNType&domain.APNTypeDefault != 0
 }

@@ -26,6 +26,7 @@ type configurationCaller struct {
 	connectErr           error
 	deactivateErr        error
 	deleteErr            error
+	powerStateErr        error
 	cancelCall           func()
 	negotiatedIPFamily   uint32
 	activationDisappears bool
@@ -133,6 +134,20 @@ func (caller *configurationCaller) Call(
 		}
 		return []any{}, nil
 	case modemInterface + ".Reset":
+		return []any{}, nil
+	case modemInterface + ".SetPowerState":
+		powerState, ok := args[0].(uint32)
+		if !ok {
+			return nil, fmt.Errorf("SetPowerState argument is %T", args[0])
+		}
+		if caller.powerStateErr != nil {
+			return nil, caller.powerStateErr
+		}
+		// Bringing the modem back on settles whatever transient state it was
+		// in, exactly as the real modem does.
+		if powerState == modemPowerStateOn {
+			caller.objects[testModemPath][modemInterface]["State"] = dbus.MakeVariant(uint32(modemStateEnabled))
+		}
 		return []any{}, nil
 	case modemInterface + ".CreateBearer":
 		settings, ok := args[0].(map[string]dbus.Variant)
@@ -1516,6 +1531,9 @@ func TestApplyDeviceConfigurationReportsBearerActivationFailure(t *testing.T) {
 		bearerInterface+".Connect",
 		propertiesInterface+".GetAll",
 		modemInterface+".DeleteBearer",
+		// activationFailureWithCleanup then inspects the modem state to see
+		// whether the abandoned activation left it mid-transition.
+		objectManagerInterface+".GetManagedObjects",
 	)
 	if paths, _ := objectPathValuesProperty(
 		caller.objects[testModemPath][modemInterface],
@@ -1732,6 +1750,300 @@ func multipleConfigurationObjects(count int) ManagedObjects {
 		}
 	}
 	return objects
+}
+
+// attachedBearerObjects models the production QDC507 state: the modem has
+// attached to the packet network and ModemManager reports an attach-time
+// default bearer that is already connected, exposed through a vendor ECM
+// netdev. ModemDeck owns nothing.
+func attachedBearerObjects(connected bool) (ManagedObjects, map[dbus.ObjectPath]Properties) {
+	objects := configurationObjects()
+	attachedPath := dbus.ObjectPath("/org/freedesktop/ModemManager1/Bearer/attach")
+	objects[testModemPath][modemInterface]["Bearers"] =
+		dbus.MakeVariant([]dbus.ObjectPath{attachedPath})
+	// configurationObjects leaves State unset; the modem is registered.
+	objects[testModemPath][modemInterface]["State"] =
+		dbus.MakeVariant(uint32(modemStateEnabled))
+	bearers := map[dbus.ObjectPath]Properties{
+		attachedPath: {
+			"BearerType": dbus.MakeVariant(uint32(bearerTypeDefaultAttach)),
+			"Connected":  dbus.MakeVariant(connected),
+			"Interface":  dbus.MakeVariant("ttyUSB3"),
+			"Properties": dbus.MakeVariant(map[string]dbus.Variant{
+				"apn":     dbus.MakeVariant("automatic.example"),
+				"ip-type": dbus.MakeVariant(uint32(bearerIPFamilyIPv4V6)),
+			}),
+			"Ip4Config": dbus.MakeVariant(map[string]dbus.Variant{
+				"method": dbus.MakeVariant(uint32(2)),
+			}),
+			"Ip6Config": dbus.MakeVariant(map[string]dbus.Variant{}),
+		},
+	}
+	return objects, bearers
+}
+
+// The attach-time default bearer is the data path a bridged modem actually
+// uses. Removing it from the set of default bearers made ModemDeck both
+// misreport the connection and try to create a second PDP context that the
+// network refuses.
+func TestDataConnectionIsDefaultAcceptsAttachBearer(t *testing.T) {
+	t.Parallel()
+
+	connection, err := parseDataConnection("bearer-attach", Properties{
+		"BearerType": dbus.MakeVariant(uint32(bearerTypeDefaultAttach)),
+		"Connected":  dbus.MakeVariant(true),
+		"Properties": dbus.MakeVariant(map[string]dbus.Variant{
+			"apn":     dbus.MakeVariant("internet.example"),
+			"ip-type": dbus.MakeVariant(uint32(bearerIPFamilyIPv4V6)),
+		}),
+		"Ip4Config": dbus.MakeVariant(map[string]dbus.Variant{
+			"method":  dbus.MakeVariant(uint32(3)),
+			"address": dbus.MakeVariant("10.0.0.2"),
+		}),
+		"Ip6Config": dbus.MakeVariant(map[string]dbus.Variant{}),
+	})
+	if err != nil {
+		t.Fatalf("parseDataConnection() error = %v", err)
+	}
+	if !dataConnectionIsDefault(connection) {
+		t.Fatal("attach-time default bearer was not recognized as default data")
+	}
+	if !matchingConnectedData(
+		[]domain.DataConnection{connection},
+		"internet.example",
+		bearerIPFamilyIPv4V6,
+	) {
+		t.Fatal("attach-time default bearer was not recognized as connected data")
+	}
+}
+
+// Bearer types that are neither the explicit default nor the attach-time
+// default must keep being ignored.
+func TestDataConnectionIsDefaultRejectsOtherBearerTypes(t *testing.T) {
+	t.Parallel()
+
+	const bearerTypeMMS = 2
+	connection, err := parseDataConnection("bearer-mms", Properties{
+		"BearerType": dbus.MakeVariant(uint32(bearerTypeMMS)),
+		"Connected":  dbus.MakeVariant(true),
+		"Properties": dbus.MakeVariant(map[string]dbus.Variant{
+			"apn":     dbus.MakeVariant("internet.example"),
+			"ip-type": dbus.MakeVariant(uint32(bearerIPFamilyIPv4V6)),
+		}),
+		"Ip4Config": dbus.MakeVariant(map[string]dbus.Variant{}),
+		"Ip6Config": dbus.MakeVariant(map[string]dbus.Variant{}),
+	})
+	if err != nil {
+		t.Fatalf("parseDataConnection() error = %v", err)
+	}
+	if dataConnectionIsDefault(connection) {
+		t.Fatal("non-default bearer was treated as default data")
+	}
+}
+
+// ReadDeviceConfiguration must report the already-attached bearer as an
+// enabled data connection, so the toggle reflects that data is up.
+func TestDeviceConfigurationReportsAttachedBearerAsConnected(t *testing.T) {
+	t.Parallel()
+	objects, bearers := attachedBearerObjects(true)
+	caller := &configurationCaller{objects: objects, externalBearers: bearers}
+	provider := newTestProvider(caller)
+
+	configuration, err := provider.ReadDeviceConfiguration(
+		context.Background(),
+		parsedLineID(objects, provider.ids),
+	)
+	if err != nil {
+		t.Fatalf("ReadDeviceConfiguration() error = %v", err)
+	}
+	if !configuration.NetworkEnabled {
+		t.Fatal("attached bearer was not reported as enabled mobile data")
+	}
+	if len(configuration.DataConnections) != 1 ||
+		!configuration.DataConnections[0].Connected {
+		t.Fatalf("data connections = %+v", configuration.DataConnections)
+	}
+}
+
+// connect_data must adopt the modem's attached bearer instead of creating a
+// second PDP context that the network will refuse.
+func TestApplyDeviceConfigurationAdoptsAttachedBearer(t *testing.T) {
+	t.Parallel()
+	objects, bearers := attachedBearerObjects(true)
+	caller := &configurationCaller{objects: objects, externalBearers: bearers}
+	dataPlane := &recordingDataPlane{}
+	provider := newTestProvider(caller)
+	provider.dataPlane = dataPlane
+	lineID := parsedLineID(objects, provider.ids)
+	current, err := provider.ReadDeviceConfiguration(context.Background(), lineID)
+	if err != nil {
+		t.Fatalf("ReadDeviceConfiguration() error = %v", err)
+	}
+	caller.calls = nil
+
+	updated, err := provider.ApplyGenericDeviceConfiguration(
+		context.Background(),
+		domain.ApplyDeviceConfigurationRequest{
+			RequestID:        "connect-data-attached",
+			LineID:           lineID,
+			ExpectedRevision: current.Revision,
+			Operation:        domain.DeviceConfigurationConnectData,
+			IPFamily:         "ipv4v6",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ApplyGenericDeviceConfiguration() error = %v", err)
+	}
+	if !updated.NetworkEnabled {
+		t.Fatal("adopted bearer was not reported as enabled mobile data")
+	}
+	// The decisive assertion: no second bearer was ever created or connected.
+	for _, method := range caller.methods() {
+		if method == modemInterface+".CreateBearer" || method == bearerInterface+".Connect" {
+			t.Fatalf("adoption created a new bearer: methods = %v", caller.methods())
+		}
+	}
+	if len(dataPlane.configured) != 1 {
+		t.Fatalf("data plane configured = %+v, want the adopted connection", dataPlane.configured)
+	}
+	if _, found := provider.ownedBearers.get(lineID, provider.ids.providerEpoch()); !found {
+		t.Fatal("adopted bearer was not recorded as ModemDeck-owned")
+	}
+}
+
+// A connected bearer that does not match the request must still be rejected,
+// so a foreign connection is never claimed or reconfigured.
+func TestApplyDeviceConfigurationRejectsMismatchedAttachedBearer(t *testing.T) {
+	t.Parallel()
+	objects, bearers := attachedBearerObjects(true)
+	caller := &configurationCaller{objects: objects, externalBearers: bearers}
+	provider := newTestProvider(caller)
+	lineID := parsedLineID(objects, provider.ids)
+	current, err := provider.ReadDeviceConfiguration(context.Background(), lineID)
+	if err != nil {
+		t.Fatalf("ReadDeviceConfiguration() error = %v", err)
+	}
+	caller.calls = nil
+
+	_, err = provider.ApplyGenericDeviceConfiguration(
+		context.Background(),
+		domain.ApplyDeviceConfigurationRequest{
+			RequestID:        "connect-data-mismatch",
+			LineID:           lineID,
+			ExpectedRevision: current.Revision,
+			Operation:        domain.DeviceConfigurationConnectData,
+			APN:              "other.example",
+			IPFamily:         "ipv4v6",
+		},
+	)
+	operationError, ok := domain.AsOperationError(err)
+	if !ok || operationError.Code != domain.ErrorConflict {
+		t.Fatalf("error = %#v, want conflict", err)
+	}
+}
+
+// Adopting a bearer must not leave an ownership record behind when the host
+// data plane cannot be configured, otherwise disconnect_data would later try
+// to tear down state ModemDeck never created.
+func TestApplyDeviceConfigurationRollsBackAdoptedBearerWhenDataPlaneFails(t *testing.T) {
+	t.Parallel()
+	objects, bearers := attachedBearerObjects(true)
+	caller := &configurationCaller{objects: objects, externalBearers: bearers}
+	dataPlane := &recordingDataPlane{configureErr: errors.New("fixture data plane failure")}
+	provider := newTestProvider(caller)
+	provider.dataPlane = dataPlane
+	lineID := parsedLineID(objects, provider.ids)
+	current, err := provider.ReadDeviceConfiguration(context.Background(), lineID)
+	if err != nil {
+		t.Fatalf("ReadDeviceConfiguration() error = %v", err)
+	}
+	caller.calls = nil
+
+	_, err = provider.ApplyGenericDeviceConfiguration(
+		context.Background(),
+		domain.ApplyDeviceConfigurationRequest{
+			RequestID:        "connect-data-adopt-failure",
+			LineID:           lineID,
+			ExpectedRevision: current.Revision,
+			Operation:        domain.DeviceConfigurationConnectData,
+			IPFamily:         "ipv4v6",
+		},
+	)
+	operationError, ok := domain.AsOperationError(err)
+	if !ok || operationError.Code != domain.ErrorFailedPrecondition {
+		t.Fatalf("error = %#v, want failed precondition", err)
+	}
+	if _, found := provider.ownedBearers.get(lineID, provider.ids.providerEpoch()); found {
+		t.Fatal("ownership record outlived a data plane that was never configured")
+	}
+}
+
+// A modem left mid-transition by an abandoned activation must be recovered,
+// otherwise every later data request inherits the wedge.
+func TestActivationFailureRecoversWedgedModem(t *testing.T) {
+	t.Parallel()
+	objects := configurationObjects()
+	objects[testModemPath][modemInterface]["State"] =
+		dbus.MakeVariant(uint32(modemStateConnecting))
+	caller := &configurationCaller{
+		objects:    objects,
+		connectErr: dbus.NewError(modemManagerCoreErrorPrefix+"WrongState", []any{"fixture"}),
+	}
+	provider := newTestProvider(caller)
+
+	if err := provider.recoverWedgedBearerState(testModemPath); err != nil {
+		t.Fatalf("recoverWedgedBearerState() error = %v", err)
+	}
+
+	powerStates := []uint32{}
+	for _, invocation := range caller.calls {
+		if invocation.method != modemInterface+".SetPowerState" {
+			continue
+		}
+		powerState, _ := invocation.args[0].(uint32)
+		powerStates = append(powerStates, powerState)
+	}
+	if fmt.Sprint(powerStates) != fmt.Sprint([]uint32{modemPowerStateLow, modemPowerStateOn}) {
+		t.Fatalf("power state cycle = %v, want low then on", powerStates)
+	}
+}
+
+// A settled modem must not be power-cycled: recovery is only for wedges.
+func TestRecoverWedgedModemLeavesSettledModemAlone(t *testing.T) {
+	t.Parallel()
+	objects := configurationObjects()
+	objects[testModemPath][modemInterface]["State"] =
+		dbus.MakeVariant(uint32(modemStateEnabled))
+	caller := &configurationCaller{objects: objects}
+	provider := newTestProvider(caller)
+
+	if err := provider.recoverWedgedBearerState(testModemPath); err != nil {
+		t.Fatalf("recoverWedgedBearerState() error = %v", err)
+	}
+	for _, invocation := range caller.calls {
+		if invocation.method == modemInterface+".SetPowerState" {
+			t.Fatal("settled modem was power-cycled")
+		}
+	}
+}
+
+// A modem that vanished must be reported as unrecoverable rather than
+// panicking or looping.
+func TestRecoverWedgedModemToleratesMissingModem(t *testing.T) {
+	t.Parallel()
+	caller := &configurationCaller{
+		objects: ManagedObjects{},
+	}
+	provider := newTestProvider(caller)
+
+	if err := provider.recoverWedgedBearerState(testModemPath); err != nil {
+		t.Fatalf("recoverWedgedBearerState() error = %v, want nil for a missing modem", err)
+	}
+	for _, invocation := range caller.calls {
+		if invocation.method == modemInterface+".SetPowerState" {
+			t.Fatal("missing modem was power-cycled")
+		}
+	}
 }
 
 func assertConfigurationMethods(t *testing.T, got []string, want ...string) {

@@ -22,8 +22,23 @@ const (
 	deviceConfigurationReadTimeout  = 5 * time.Second
 	deviceConfigurationWriteTimeout = 45 * time.Second
 
+	// bearerActivationTimeout bounds the ModemManager bearer Connect call and
+	// the subsequent wait for IP configuration. ModemManager itself waits up
+	// to 20 s ("ip timeout") for the PDP context, and on a network that refuses
+	// the context the call hangs well past that. The whole write path holds
+	// configMu, and the API abandons its agent call after a couple of seconds,
+	// so an unbounded wait here surfaces to the user as "host agent is
+	// unavailable" rather than as a data-plane error.
+	bearerActivationTimeout = 15 * time.Second
+
 	modemStateDisabled = 3
 	modemStateEnabled  = 6
+
+	// MM_MODEM_STATE_CONNECTING / DISCONNECTING. A modem parked in either of
+	// these states refuses new data operations until the transition resolves,
+	// and ModemManager will not cancel it: the wait is measured in minutes.
+	modemStateConnecting    = 9
+	modemStateDisconnecting = 10
 
 	modemPowerStateUnknown = 0
 	modemPowerStateOff     = 1
@@ -35,7 +50,16 @@ const (
 	bearerIPFamilyIPv4V6 = 4
 	bearerIPFamilyAny    = 8
 
-	bearerTypeDefault = 1
+	// ModemManager bearer types (MMBearerType).
+	//
+	// bearerTypeDefaultAttach is the attach-time bearer the modem activates
+	// itself when it registers on a packet-switched network. It is the bearer
+	// that already carries data for modules whose data path is bridged (for
+	// example the QDC507's vendor ECM netdev), so treating it as unrelated to
+	// the default bearer makes ModemDeck create a second PDP context that the
+	// network refuses to activate.
+	bearerTypeDefault       = 1
+	bearerTypeDefaultAttach = 4
 )
 
 type genericConfigurationProvider interface {
@@ -919,13 +943,22 @@ func configurationContext(
 	return bounded, cancel, nil
 }
 
+// isDefaultBearerType reports whether a ModemManager bearer type carries the
+// line's default Internet traffic. Both the explicit default bearer and the
+// attach-time default bearer qualify: the latter is the one a bridged-data
+// module (QDC507 ECM) actually uses, and it is reported as connected as soon
+// as the modem attaches.
+func isDefaultBearerType(bearerType uint32) bool {
+	return bearerType == bearerTypeDefault || bearerType == bearerTypeDefaultAttach
+}
+
 func matchingConnectedData(connections []domain.DataConnection, apn string, family uint32) bool {
 	for _, connection := range connections {
 		if !connection.Connected {
 			continue
 		}
 		if connection.BearerType != 0 {
-			if connection.BearerType != bearerTypeDefault {
+			if !isDefaultBearerType(connection.BearerType) {
 				continue
 			}
 		} else if connection.APNType&domain.APNTypeDefault == 0 {
