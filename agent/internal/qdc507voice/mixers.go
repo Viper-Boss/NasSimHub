@@ -87,6 +87,11 @@ const (
 
 // voiceMixerScript reads every VoLTE route switch and turns on the ones that are
 // off, echoing one status line per control.
+//
+// The reads redirect stderr into the capture because the module's amix tool
+// writes the control value there, not to stdout — without the redirect the
+// command substitution sees nothing, every control looks disabled, and the
+// read-back that is meant to prove the write worked can never succeed.
 func voiceMixerScript() string {
 	var script strings.Builder
 	script.WriteString("for n in")
@@ -95,8 +100,8 @@ func voiceMixerScript() string {
 		script.WriteString(quoteMixerName(name))
 	}
 	script.WriteString(
-		`; do v=$(amix "$n"); case "$v" in *": on") echo "` + mixerStatusOn + ` $n" ;; *) ` +
-			`amix "$n" 1; v2=$(amix "$n"); ` +
+		`; do v=$(amix "$n" 2>&1); case "$v" in *": on") echo "` + mixerStatusOn + ` $n" ;; *) ` +
+			`amix "$n" 1; v2=$(amix "$n" 2>&1); ` +
 			`case "$v2" in *": on") echo "` + mixerStatusFixed + ` $n" ;; ` +
 			`*) echo "failed $n" ;; esac ;; esac; done`,
 	)

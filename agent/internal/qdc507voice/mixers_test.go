@@ -165,6 +165,23 @@ func TestParseMixerStatuses(t *testing.T) {
 	}
 }
 
+func TestVoiceMixerScriptMergesStderrIntoTheReads(t *testing.T) {
+	t.Parallel()
+
+	script := voiceMixerScript()
+	// The module's amix writes the control value to stderr, so a read without
+	// the redirect captures nothing, every control looks disabled, and the
+	// read-back that proves the write worked can never pass.
+	if got := strings.Count(script, "2>&1"); got != 2 {
+		t.Fatalf("script = %q, want both amix reads to merge stderr (found %d)", script, got)
+	}
+	for _, name := range voLTEMixers {
+		if !strings.Contains(script, quoteMixerName(name)) {
+			t.Fatalf("script = %q, want the quoted control %q", script, name)
+		}
+	}
+}
+
 func TestQuoteMixerName(t *testing.T) {
 	t.Parallel()
 
