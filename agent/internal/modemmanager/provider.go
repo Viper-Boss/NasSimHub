@@ -88,6 +88,10 @@ type Provider struct {
 	// ReconcileStuckMessages.
 	transitMu       sync.Mutex
 	transitMessages map[string]struct{}
+
+	// smsState tracks how the modem's message storage compares with the
+	// messages ModemManager reports. See ReconcileSMSReachability.
+	smsState smsReachabilityState
 }
 
 type terminalCallProjection struct {
@@ -883,6 +887,13 @@ func (p *Provider) sendSMS(ctx context.Context, messagePath dbus.ObjectPath) err
 		"send_message",
 		"ModemManager failed to send the SMS",
 	)
+	if err == nil {
+		// Sending stores the modem's own copy of the message. ModemManager may
+		// drop its object while the modem keeps the copy, which looks exactly
+		// like a reception it never reported; the reachability reconciler must
+		// not cycle the radio for the agent's own message.
+		p.smsState.noteSent(time.Now())
+	}
 	return err
 }
 

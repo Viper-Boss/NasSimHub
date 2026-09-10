@@ -263,6 +263,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 	}
 	go runRadioReconciler(ctx, provider)
 	go runMessageReconciler(ctx, provider)
+	go runSMSReachabilityReconciler(ctx, provider)
 	if qdc507VoiceRuntime.Enabled() {
 		go runQDC507VoiceReconciler(ctx, provider, qdc507VoiceRuntime)
 	}
@@ -497,6 +498,44 @@ func runMessageReconciler(ctx context.Context, provider messageReconciler) {
 	// clears anything that never progressed.
 	reconcile()
 	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			reconcile()
+		}
+	}
+}
+
+type smsReachabilityReconciler interface {
+	ReconcileSMSReachability(context.Context) error
+}
+
+// runSMSReachabilityReconciler surfaces receptions ModemManager never reported.
+//
+// This one polls faster than the other reconcilers because it exists to make a
+// message the user is waiting for visible within about a minute: ModemManager
+// only re-reads the modem's message storage when the modem is enabled again, so
+// the agent has to notice the divergence and cycle the radio itself instead of
+// leaving the user to toggle airplane mode. Detection and recovery are both
+// bounded (see ReconcileSMSReachability), so the cadence cannot turn into
+// repeated radio cycles.
+func runSMSReachabilityReconciler(ctx context.Context, provider smsReachabilityReconciler) {
+	const attemptTimeout = 2 * time.Minute
+	const interval = time.Minute
+	reconcile := func() {
+		attemptContext, cancel := context.WithTimeout(ctx, attemptTimeout)
+		if err := provider.ReconcileSMSReachability(attemptContext); err != nil &&
+			!errors.Is(err, context.Canceled) {
+			slog.Warn("reconcile SMS reachability", "error", err)
+		}
+		cancel()
+	}
+
+	reconcile()
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
