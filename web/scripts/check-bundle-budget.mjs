@@ -6,7 +6,11 @@ const limits = {
   initialRequests: 12,
   // 2026-09-09: 230 -> 240, dashboard task-manager panel grew (temperature
   // sparkline + percent load stats); still far below any real perf cliff.
-  initialGzip: 240 * kibibyte,
+  // 2026-09-10: 240 -> 246, browser call media now recovers a broken WebRTC
+  // transport by renegotiating with the same owner token (r76); the measured
+  // worst case is 240.2 KiB, and the extra headroom keeps this guard from
+  // tripping on the next small change that also lands in the startup shell.
+  initialGzip: 246 * kibibyte,
   javascriptGzip: 100 * kibibyte,
   stylesheetGzip: 20 * kibibyte
 }
