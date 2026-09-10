@@ -183,6 +183,24 @@ func (p *Provider) ReconcileRadioState(ctx context.Context) error {
 		return err
 	}
 	parsed := ParseManagedObjects(objects, identity)
+	// A modem left in a transitional ModemManager state refuses every later data
+	// request. That surfaces to the user as "host agent is unavailable" and a
+	// mobile-data switch that will not move, while the agent itself looks
+	// healthy — the wedge is in the modem, not in ModemDeck.
+	//
+	// Recovery existed only on the failed bearer activation path, so a modem
+	// wedged any other way (a cancelled toggle, a module fault) stayed stuck
+	// until someone ran mmcli by hand. Asserting it on this periodic pass makes
+	// that state self-healing. The state parsed above predates the recovery, so
+	// it is re-read whenever the recovery actually cycled the modem; otherwise
+	// the loop below could skip re-enabling a radio the cycle just turned off.
+	if recovered := p.recoverWedgedModems(parsed); recovered {
+		objects, err = p.managedObjects(ctx, operation)
+		if err != nil {
+			return err
+		}
+		parsed = ParseManagedObjects(objects, identity)
+	}
 	sort.Slice(parsed.Lines, func(i, j int) bool {
 		return parsed.Lines[i].ID < parsed.Lines[j].ID
 	})
@@ -230,4 +248,41 @@ func (p *Provider) ReconcileRadioState(ctx context.Context) error {
 		)
 	}
 	return errors.Join(failures...)
+}
+
+// recoverWedgedModems cycles the power state of every modem stuck in a
+// transitional ModemManager state, reporting whether any was cycled.
+//
+// A modem in that state answers no data requests, which the api surfaces as
+// "host agent is unavailable" and the UI shows as a mobile-data switch that
+// does nothing. Cycling low then on forces the transition to resolve; the radio
+// reconciler then re-enables the modem from its recorded desired state, because
+// the cycle itself leaves the radio off.
+func (p *Provider) recoverWedgedModems(parsed ParsedObjects) bool {
+	recovered := false
+	for _, line := range parsed.Lines {
+		modemPath, found := parsed.LinePaths[line.ID]
+		if !found {
+			continue
+		}
+		cycled, err := p.recoverWedgedBearerState(modemPath)
+		if err != nil {
+			slog.Warn(
+				"recover a modem stuck mid-transition",
+				"component", "modemmanager",
+				"line_id", line.ID,
+				"error", err,
+			)
+		}
+		if !cycled {
+			continue
+		}
+		recovered = true
+		slog.Warn(
+			"cycled the power state of a modem stuck mid-transition",
+			"component", "modemmanager",
+			"line_id", line.ID,
+		)
+	}
+	return recovered
 }

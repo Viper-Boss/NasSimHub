@@ -1998,7 +1998,7 @@ func TestActivationFailureRecoversWedgedModem(t *testing.T) {
 	}
 	provider := newTestProvider(caller)
 
-	if err := provider.recoverWedgedBearerState(testModemPath); err != nil {
+	if _, err := provider.recoverWedgedBearerState(testModemPath); err != nil {
 		t.Fatalf("recoverWedgedBearerState() error = %v", err)
 	}
 
@@ -2024,7 +2024,7 @@ func TestRecoverWedgedModemLeavesSettledModemAlone(t *testing.T) {
 	caller := &configurationCaller{objects: objects}
 	provider := newTestProvider(caller)
 
-	if err := provider.recoverWedgedBearerState(testModemPath); err != nil {
+	if _, err := provider.recoverWedgedBearerState(testModemPath); err != nil {
 		t.Fatalf("recoverWedgedBearerState() error = %v", err)
 	}
 	for _, invocation := range caller.calls {
@@ -2043,7 +2043,7 @@ func TestRecoverWedgedModemToleratesMissingModem(t *testing.T) {
 	}
 	provider := newTestProvider(caller)
 
-	if err := provider.recoverWedgedBearerState(testModemPath); err != nil {
+	if _, err := provider.recoverWedgedBearerState(testModemPath); err != nil {
 		t.Fatalf("recoverWedgedBearerState() error = %v, want nil for a missing modem", err)
 	}
 	for _, invocation := range caller.calls {

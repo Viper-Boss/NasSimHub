@@ -555,7 +555,7 @@ func (p *Provider) activationFailureWithCleanup(
 	// An abandoned activation can leave the modem mid-transition, where it
 	// refuses every later data request. Recover before returning so the next
 	// attempt starts from a settled modem instead of inheriting the wedge.
-	recoveryErr := p.recoverWedgedBearerState(modemPath)
+	_, recoveryErr := p.recoverWedgedBearerState(modemPath)
 	joined := errors.Join(activationErr, cleanupErr, recoveryErr)
 	if cleanupErr == nil && recoveryErr == nil {
 		return activationErr
@@ -582,25 +582,28 @@ func (p *Provider) activationFailureWithCleanup(
 // The recovery is best-effort and idempotent: it only acts when the modem is
 // not in a settled state, and a failure to recover is reported alongside the
 // original error rather than replacing it.
-func (p *Provider) recoverWedgedBearerState(modemPath dbus.ObjectPath) error {
+// recoverWedgedBearerState clears a ModemManager modem that is stuck
+// mid-transition. It reports whether it actually cycled the modem, so callers
+// can refresh the state they cached before the recovery.
+func (p *Provider) recoverWedgedBearerState(modemPath dbus.ObjectPath) (bool, error) {
 	const operation = "recover_bearer_state"
 	ctx, cancel := context.WithTimeout(context.Background(), bearerRecoveryTimeout)
 	defer cancel()
 	objects, err := p.managedObjects(ctx, operation)
 	if err != nil {
-		return err
+		return false, err
 	}
 	interfaces, found := objects[modemPath]
 	if !found {
-		return nil
+		return false, nil
 	}
 	properties, found := interfaces[modemInterface]
 	if !found {
-		return nil
+		return false, nil
 	}
 	stateCode, known := uint32Property(properties, "State")
 	if !known || !modemStateIsTransient(stateCode) {
-		return nil
+		return false, nil
 	}
 	var result error
 	for _, powerState := range []uint32{modemPowerStateLow, modemPowerStateOn} {
@@ -616,7 +619,7 @@ func (p *Provider) recoverWedgedBearerState(modemPath dbus.ObjectPath) error {
 			continue
 		}
 	}
-	return result
+	return true, result
 }
 
 func modemStateIsTransient(code uint32) bool {
