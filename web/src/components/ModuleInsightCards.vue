@@ -11,6 +11,7 @@ import {
   type SystemMetricsSample
 } from '../state/systemMetrics'
 import { repairModule, restartModem } from '../state/deviceConfiguration'
+import { requestConfirmation } from '../state/confirmation'
 import type { LineSummary } from '../api/types'
 
 // Three insight cards rendered next to the module card on the dashboard:
@@ -96,7 +97,12 @@ const uptimeText = computed(() => formatUptime(snapshot.value?.host_uptime_secon
 const restartBusy = ref(false)
 async function onRestartModem(): Promise<void> {
   if (restartBusy.value) return
-  if (!window.confirm(t('dashboard.restartModemConfirm'))) return
+  const confirmed = await requestConfirmation({
+    title: t('dashboard.restartModem'),
+    message: t('dashboard.restartModemConfirm'),
+    tone: 'danger'
+  })
+  if (!confirmed) return
   restartBusy.value = true
   try {
     await restartModem(props.line.id)
@@ -127,7 +133,12 @@ const repairStepLabel = computed(() => {
 
 async function onRepair(): Promise<void> {
   if (repairBusy.value) return
-  if (!window.confirm(t('dashboard.repairConfirm'))) return
+  const confirmed = await requestConfirmation({
+    title: t('dashboard.repairButton'),
+    message: t('dashboard.repairConfirm'),
+    tone: 'danger'
+  })
+  if (!confirmed) return
   repairBusy.value = true
   repairResult.value = 'none'
   repairError.value = ''

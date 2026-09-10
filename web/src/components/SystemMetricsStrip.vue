@@ -34,6 +34,11 @@ const channelStale = computed(() => channelState.value === 'stale')
 const channelDown = computed(() => (
   !!current.value && channelState.value === 'unavailable'
 ))
+// Single source of truth for "the banner is already explaining the state", so
+// the no-snapshot fallback below cannot repeat the same sentence underneath it.
+const channelBannerVisible = computed(() => (
+  channelDown.value || channelStale.value || !systemMetricsState.available
+))
 
 const CHART_W = 300
 const CHART_H = 96
@@ -146,12 +151,13 @@ function latestOf(key: 'modemTemp' | 'cpuTemp' | 'rxRate' | 'txRate'): number | 
   return value === null || value === undefined ? null : value
 }
 
-const modemTempValue = computed(() => latestOf('modemTemp'))
 const cpuTempValue = computed(() => latestOf('cpuTemp'))
 const rxRateValue = computed(() => latestOf('rxRate') ?? 0)
 const txRateValue = computed(() => latestOf('txRate') ?? 0)
-const modemTempLevel = computed(() => tempLevelOf(modemTempValue.value))
 const cpuTempLevel = computed(() => tempLevelOf(cpuTempValue.value))
+// The modem temperature is still collected and kept in the history samples
+// (see state/systemMetrics.ts, 'modemTemp'), but this strip has no tile for it
+// and no label to name one, so nothing derives from it here.
 
 // Load averages as mean real utilization over 1/5/15 minutes. The kernel's
 // loadavg overstates this single-core modem (it counts uninterruptible
@@ -260,7 +266,7 @@ const flashUsedBytes = computed(() => {
        module channel must not collapse the dashboard layout. Values freeze at
        the last good sample and the banner explains why they stopped moving. -->
   <p
-    v-if="channelDown || channelStale || !systemMetricsState.available"
+    v-if="channelBannerVisible"
     class="tm__channel tm__channel--stale"
   >{{ channelDown
     ? t('dashboard.metricsChannelDown')
@@ -454,9 +460,10 @@ const flashUsedBytes = computed(() => {
       </div>
     </article>
   </div>
-  <p v-else-if="channelDown" class="tm__loading">{{ t('dashboard.metricsChannelDown') }}</p>
-  <p v-else-if="systemMetricsState.available" class="tm__loading">{{ t('dashboard.metricsUnavailable') }}</p>
-  <p v-else class="tm__loading">{{ systemMetricsState.error || t('dashboard.metricsUnavailable') }}</p>
+  <!-- With no snapshot to show, the banner above is already saying why. Only
+       add a line here when there is no banner, otherwise the same sentence is
+       printed twice, stacked. -->
+  <p v-else-if="!channelBannerVisible" class="tm__loading">{{ t('dashboard.metricsUnavailable') }}</p>
 </template>
 
 <style scoped>

@@ -3,7 +3,11 @@
 // HOMESIM_* env names) intentionally stay unchanged.
 import fs from 'node:fs'
 
+// `optional` marks a file that may legitimately be absent in a partial
+// checkout; it was accepted but never honoured, so a missing optional file
+// still threw. Honour it instead of pretending the parameter does something.
 function patch(file, pairs, optional = false) {
+  if (optional && !fs.existsSync(file)) return 0
   let s = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
   let changed = 0
   for (const [from, to] of pairs) {

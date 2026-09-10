@@ -919,7 +919,9 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-@media (max-width: 640px) {
+/* Shared phone band (560px), not an ad-hoc 640px — see
+   contract-tests/design-system-contract.test.mjs for the allowed bands. */
+@media (max-width: 560px) {
   .f50-siggrid { grid-template-columns: 1fr; }
   .f50-hwgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

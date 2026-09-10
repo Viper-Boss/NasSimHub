@@ -24,7 +24,7 @@ test('responsive media queries use the shared viewport bands', async () => {
 
   for (const file of files) {
     const contents = await readFile(file, 'utf8')
-    for (const media of contents.matchAll(/@media\s*([^\{]+)\{/g)) {
+    for (const media of contents.matchAll(/@media\s*([^{]+)\{/g)) {
       for (const width of media[1].matchAll(/(?:min|max)-width:\s*(\d+)px/g)) {
         const value = Number(width[1])
         assert.ok(

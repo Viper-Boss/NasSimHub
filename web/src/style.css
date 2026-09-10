@@ -36,7 +36,7 @@
   --on-accent: #081b22;
   --control-muted: #304150;
   --skeleton: #233340;
-  --shadow: 0 16px 40px rgb(0 0 0 / 28%);
+  --shadow: 0 18px 44px rgb(0 0 0 / 55%);
   --shadow-lg: 0 24px 80px rgb(0 0 0 / 50%);
   --space-1: 4px;
   --space-2: 8px;
@@ -46,12 +46,12 @@
   /* Radius scale — use these tokens instead of hard-coded px values so the
      whole UI rounds off consistently (--radius-xs … --radius-dialog). */
   --radius-xs: 4px; /* bars, tracks, signal bars */
-  --radius-sm: 6px; /* icon blocks, code, small badges */
-  --radius-md: 8px; /* buttons, menus, chips */
+  --radius-sm: 7px; /* icon blocks, code, small badges */
+  --radius-md: 10px; /* buttons, menus, chips */
   --radius-pill: 999px;
-  --radius-control: 12px; /* inputs, cards-in-cards, list rows */
-  --radius-surface: 18px; /* cards & panels */
-  --radius-dialog: 24px; /* dialogs & sheets */
+  --radius-control: 14px; /* inputs, cards-in-cards, list rows */
+  --radius-surface: 24px; /* cards & panels */
+  --radius-dialog: 28px; /* dialogs & sheets */
   --touch-target: 44px;
   --layer-popover: 80;
   --layer-drawer: 100;

@@ -1,7 +1,15 @@
 /* HomeSIM: user-provided blue / indigo direction, adapted to ModemDeck. */
 :root {
   --signal-glow: 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent);
-  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 4%);
+  /* Elevation language: cards sit above a deep ground on a real drop shadow,
+     with a 1px top highlight so the lit edge reads at the rounded corner. */
+  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 9%);
+  /* A wide soft shadow is invisible against a near-black ground; what reads is
+     a tight seat right under the card edge plus the lit top edge above. */
+  --elevation: 0 10px 24px rgb(0 0 0 / 70%), 0 2px 5px rgb(0 0 0 / 50%);
+  --elevation-sm: 0 5px 14px rgb(0 0 0 / 55%), 0 1px 3px rgb(0 0 0 / 40%);
+  --elevation-card: var(--elevation), var(--panel-highlight);
+  --elevation-card-sm: var(--elevation-sm), var(--panel-highlight);
   --rail-width: 100px;
   --header-height: 80px;
   font-size: 16px;
@@ -29,9 +37,17 @@ button:focus-visible, a:focus-visible {
   border-radius: var(--radius-control); box-shadow: var(--signal-glow);
 }
 .brand-mark > strong { display: none; font-size: 1.05rem; letter-spacing: -.03em; }
-.rail__primary { padding: 18px 12px; gap: 8px; }
-.rail__secondary { margin-inline: 12px; padding: 16px 0 24px; }
-.rail-link { min-height: 64px; border: 1px solid transparent; border-radius: var(--radius-surface); font-size: .875rem; gap: 8px; }
+/* The rail carries 11 destinations. Previously only .rail__primary scrolled
+   while .rail__secondary was pinned with margin-top:auto, so at ordinary laptop
+   heights the last primary link (Traffic) was cut in half by the secondary
+   nav's top border and lost its label. The whole rail scrolls instead, the
+   brand stays pinned, and the links are short enough to fit without scrolling
+   on a 900px-tall window. */
+.app-shell .rail { overflow-y: auto; overscroll-behavior: contain; }
+.app-shell .brand-mark-wrap { position: sticky; top: 0; z-index: 2; background: var(--surface-subtle); }
+.app-shell .rail__primary { flex: 0 0 auto; min-height: auto; overflow: visible; padding: 10px 12px; gap: 4px; }
+.app-shell .rail__secondary { margin-inline: 12px; padding: 10px 0 14px; }
+.rail-link { min-height: 52px; border: 1px solid transparent; border-radius: var(--radius-surface); font-size: .8125rem; gap: 6px; }
 .rail-link.is-current {
   color: var(--accent); background: linear-gradient(110deg, var(--accent-soft), var(--surface));
   border-color: var(--accent-border); box-shadow: var(--panel-highlight);
@@ -46,6 +62,12 @@ button:focus-visible, a:focus-visible {
 .shell-location strong { display: inline-block; min-width: 3em; color: var(--text); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; }
 .shell-header .global-search { flex: 1 1 auto; width: auto; margin-right: 0; }
 .shell-header .search-field { border-radius: var(--radius-control); background: var(--surface-subtle); }
+/* The header packs a title, a line strip, search and five actions into one row.
+   Search is the element that was collapsing until its placeholder was clipped,
+   so it gets a floor and the line strip yields first. */
+.shell-header .global-search { min-width: 208px; }
+.app-shell .shell-header__loc { flex: 0 1 auto; overflow: hidden; }
+.app-shell .shell-location strong { max-width: 14ch; }
 .shell-header__right { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 12px; }
 .shell-header__controls { gap: 8px; }
 .fixture-badge { font-size: .875rem; border-radius: var(--radius-dialog); padding-inline: 12px; }
@@ -63,7 +85,7 @@ button:focus-visible, a:focus-visible {
   grid-template-rows: 36px auto auto; gap: 7px 10px; padding: 18px;
   border-radius: var(--radius-surface);
   background: linear-gradient(135deg, var(--surface-hover), var(--surface));
-  box-shadow: var(--panel-highlight);
+  box-shadow: var(--elevation-card);
   transition: border-color var(--motion-base), transform var(--motion-base), box-shadow var(--motion-base);
 }
 .app-shell .dashboard-workspace .dashboard-summary-card:hover {
@@ -84,7 +106,7 @@ dt, dd { font-size: .875rem; }
 .app-shell .pane-header { min-height: 76px; flex-basis: 76px; gap: 12px; }
 .app-shell .pane-header h1 { font-size: 1.375rem; letter-spacing: -.03em; }
 .app-shell .pane-header span { font-size: .875rem; }
-.app-shell .workspace-detail-header { background: var(--surface); box-shadow: var(--panel-highlight); }
+.app-shell .workspace-detail-header { background: var(--surface); box-shadow: var(--elevation-sm); }
 .app-shell .list-item { min-height: 80px; padding-block: 14px; }
 .app-shell .list-item__content strong { font-size: 1rem; font-weight: 600; }
 .app-shell .list-item__content small { font-size: .875rem; line-height: 1.4; }
@@ -108,16 +130,16 @@ dt, dd { font-size: .875rem; }
 .dashboard-overview-heading h1 { font-size: 1.5rem; letter-spacing: -.04em; font-weight: 600; }
 .app-shell .dashboard-workspace .dashboard-detail-section h3 { font-size: 1.0625rem; font-weight: 600; }
 .app-shell .dashboard-workspace .dashboard-detail-section > header a { font-size: .875rem; color: var(--accent); }
-.app-shell .dashboard-workspace .dashboard-contact-row { border-radius: var(--radius-control); min-height: 82px; box-shadow: var(--panel-highlight); }
+.app-shell .dashboard-workspace .dashboard-contact-row { border-radius: var(--radius-control); min-height: 82px; box-shadow: var(--elevation-card-sm); }
 .app-shell .dashboard-workspace .dashboard-section-state { border-radius: var(--radius-surface); border-style: dashed; font-size: .875rem; }
-.app-shell .module-card { border-radius: var(--radius-surface); background: linear-gradient(135deg, var(--surface-hover), var(--surface) 65%); box-shadow: var(--panel-highlight); overflow: hidden; }
+.app-shell .module-card { border-radius: var(--radius-surface); background: linear-gradient(135deg, var(--surface-hover), var(--surface) 65%); box-shadow: var(--elevation-card); overflow: hidden; }
 .app-shell .module-card .module-card__main { padding: 18px; }
 .app-shell .module-card .module-card__footer { background: var(--surface-subtle); }
 .app-shell .module-card .module-card__facts { padding-top: 12px; }
 .app-shell .module-card .module-card__facts dt { font-size: .75rem; }
 .app-shell .module-card .module-card__facts dd { font-size: .875rem; }
 .app-shell .traffic-summary { background: transparent; gap: 12px; border: 0; }
-.app-shell .traffic-summary > div { min-height: 112px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: linear-gradient(135deg, var(--surface-hover), var(--surface)); box-shadow: var(--panel-highlight); }
+.app-shell .traffic-summary > div { min-height: 112px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-surface); background: linear-gradient(135deg, var(--surface-hover), var(--surface)); box-shadow: var(--elevation-card); }
 .app-shell .traffic-summary small { font-size: .875rem; }
 .app-shell .traffic-summary strong { margin-top: 8px; font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; }
 .app-shell .traffic-summary .traffic-summary__icon { border-radius: var(--radius-control); }
@@ -138,7 +160,7 @@ dt, dd { font-size: .875rem; }
 body .dialer-panel { background: linear-gradient(180deg, var(--surface), var(--surface-subtle) 65%); border-radius: var(--radius-dialog); box-shadow: var(--shadow-lg); }
 body .dialer-panel--permanent { border-radius: 0; box-shadow: none; }
 body .dialer-panel .tool-header { min-height: 80px; background: rgb(255 255 255 / 2%); }
-body .dialer-panel .keypad__key { border: 1px solid var(--border); border-radius: var(--radius-dialog); background: linear-gradient(145deg, var(--surface-hover), var(--surface)); box-shadow: var(--panel-highlight); }
+body .dialer-panel .keypad__key { border: 1px solid var(--border); border-radius: var(--radius-dialog); background: linear-gradient(145deg, var(--surface-hover), var(--surface)); box-shadow: var(--elevation-card-sm); }
 body .dialer-panel .keypad__key:hover { border-color: var(--accent-border-strong); background: var(--surface-selected); }
 body .dialer-panel .keypad__key:active:not(:disabled) { color: var(--accent); transform: scale(.94); }
 body .dialer-panel .keypad__key strong { font-size: 1.75rem; font-weight: 500; }
@@ -154,11 +176,11 @@ body .dialer-panel .call-button--hangup:hover:not(:disabled) { background: var(-
 body .dialer-panel .dialer-number { font-variant-numeric: tabular-nums; letter-spacing: .025em; }
 
 /* Recordings and settings retain their existing actions and information layout. */
-.app-shell .recording-detail .recording-player { padding: 24px; min-height: 140px; border: 1px solid var(--accent-border); border-radius: var(--radius-dialog); background: linear-gradient(120deg, var(--accent-soft), var(--surface)); box-shadow: var(--panel-highlight); }
+.app-shell .recording-detail .recording-player { padding: 24px; min-height: 140px; border: 1px solid var(--accent-border); border-radius: var(--radius-dialog); background: linear-gradient(120deg, var(--accent-soft), var(--surface)); box-shadow: var(--elevation-card); }
 .app-shell .recording-audio-player .recording-audio-player__toggle { border-radius: var(--radius-surface); box-shadow: var(--signal-glow); }
 .app-shell .settings-nav { background: var(--surface-subtle); }
 .app-shell .settings-nav button, .app-shell .settings-nav a { border-radius: var(--radius-control); }
-.app-shell .settings-content .settings-card { border-radius: var(--radius-surface); box-shadow: var(--panel-highlight); }
+.app-shell .settings-content .settings-card { border-radius: var(--radius-surface); box-shadow: var(--elevation-card); }
 .app-shell .nas-preflight { background: linear-gradient(125deg, var(--accent-soft), var(--surface) 60%); border-color: var(--accent-border); border-radius: var(--radius-dialog); }
 .app-shell .nas-preflight .nas-preflight__summary { border-radius: 0 12px 12px 0; }
 
@@ -201,10 +223,12 @@ html:not([data-theme='light']) .setup-guard-notice { background: color-mix(in sr
 
 /* Palette derived from the user's HomeSIM frontend. Keep floating layers opaque. */
 :root {
-  --background: #0b101b; --surface: #151e30; --surface-subtle: #0f1626;
-  --surface-hover: #202c42; --surface-selected: #1a3150;
+  /* Direction B: the ground drops and the card surface lifts, so the gap
+     between them — not the border — is what separates a card from the page. */
+  --background: #05080f; --surface: #1a2740; --surface-subtle: #0c1322;
+  --surface-hover: #22304a; --surface-selected: #1c3557;
   --text: #e7ecf5; --muted: #a0adc2; --muted-strong: #c2cde0; --faint: #8597b2;
-  --border: #29364d; --border-strong: #415470;
+  --border: #2b3a54; --border-strong: #415470;
   --accent: #7dd3fc; --accent-strong: #bae6fd; --accent-soft: #172e48;
   --accent-border: #345d82; --accent-border-strong: #4787b8;
   --blue: #a5b4fc; --blue-soft: #242b50;
@@ -226,6 +250,11 @@ html[data-theme='light'] {
   --danger: #b32646; --danger-strong: #921f39; --danger-soft: #ffe8ed; --danger-border: #dca0ae; --danger-border-strong: #bc6077;
   --control-muted: #d4deea; --skeleton: #dfe7f0; --on-accent: #ffffff;
   --shadow: 0 16px 40px rgb(24 42 72 / 10%); --shadow-lg: 0 24px 80px rgb(24 42 72 / 18%);
+  /* Elevation reads inverted on a light ground: a soft coloured shadow does the
+     lifting and the white top highlight would be invisible, so it is dropped. */
+  --panel-highlight: inset 0 1px 0 rgb(255 255 255 / 70%);
+  --elevation: 0 12px 30px rgb(24 42 72 / 10%);
+  --elevation-sm: 0 4px 14px rgb(24 42 72 / 8%);
 }
 body .brand-mark > span, .login-brand > span { color: #ffffff; }
 .brand-mark img, .login-brand img { display: block; width: 100%; height: 100%; }
@@ -293,7 +322,12 @@ body .call-button--dismiss:hover:not(:disabled) { background: var(--surface-sele
 }
 @media (max-width: 560px) {
   .app-shell .shell-header { flex-wrap: wrap; }
-  .app-shell .shell-header .fixture-badge { order: 5; flex-basis: 100%; max-width: none; justify-content: center; }
+  /* The badge sits inside .shell-header__right, so flex-basis:100% wrapped it
+     within that box rather than onto its own header row — and .__right does not
+     shrink, so the badge ran off the screen. Let the right cluster take a full
+     row of its own and wrap inside it. */
+  .app-shell .shell-header__right { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; }
+  .app-shell .shell-header .fixture-badge { order: 5; flex: 1 1 100%; max-width: none; justify-content: center; }
   .app-shell .dashboard-workspace .dashboard-summary-card { min-height: 130px; padding: 14px; }
   .app-shell .traffic-summary > div { padding: 12px; gap: 10px; }
   .app-shell .traffic-summary strong { font-size: 1.125rem; }
@@ -311,3 +345,18 @@ body .call-button--dismiss:hover:not(:disabled) { background: var(--surface-sele
 .homesim-sim-notice label { display: flex; gap: 8px; align-items: center; }
 .homesim-sim-notice p { margin-top: 8px; }
 .message-bubble > span { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* --- phone-width overflow guards -------------------------------------------
+   Measured at 420px: the fixture badge, the call row's recording toggle and the
+   drilldown detail pane each pushed past the viewport, so the page clipped
+   content at its right edge. Flex and grid children default to min-width:auto,
+   which is what stops them shrinking. */
+.fixture-badge { min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.homesim-recording-toggle { min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; }
+.app-shell .homesim-call-recording { min-width: 0; }
+
+@media (max-width: 860px) {
+  /* Drilldown shows a single pane; a column gap here only offsets that pane. */
+  .app-shell .workspace-master-detail { column-gap: 0; }
+  .app-shell .workspace-master-detail > .detail-pane { min-width: 0; max-width: 100%; }
+}

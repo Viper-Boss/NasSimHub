@@ -388,7 +388,9 @@ const radioRows = computed(() => {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  /* A modem card is a card, so it takes the card radius; --radius-md is the
+     button/chip step and left this panel visibly squarer than its neighbours. */
+  border-radius: var(--radius-surface);
   transition:
     border-color var(--motion-base) var(--ease-standard),
     box-shadow var(--motion-base) var(--ease-standard),

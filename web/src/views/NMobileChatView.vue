@@ -9,6 +9,7 @@ import {
   type NKNChatMessage
 } from '../api/client'
 import PageContentFrame from '../components/PageContentFrame.vue'
+import { requestConfirmation } from '../state/confirmation'
 
 const { t } = useI18n()
 
@@ -187,7 +188,13 @@ const deleting = ref(false)
 async function clearConversation(): Promise<void> {
   const addr = activeLabel.value
   if (!addr || deleting.value) return
-  if (!window.confirm(t('homesim.nmobile.confirmDelete'))) return
+  const confirmed = await requestConfirmation({
+    title: t('homesim.nmobile.deleteConversation'),
+    message: t('homesim.nmobile.confirmDelete'),
+    confirmLabel: t('common.delete'),
+    tone: 'danger'
+  })
+  if (!confirmed) return
   deleting.value = true
   state.error = ''
   try {

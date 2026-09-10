@@ -25,7 +25,10 @@ defineProps<{
   color: var(--on-accent);
   background: var(--surface);
   border: 2px solid var(--faint);
-  border-radius: var(--radius-sm);
+  /* Pinned literal, not --radius-sm (6px): the 22px checkbox is drawn with a
+     5px corner so the 2px border reads as a square check target. Locked by
+     contract-tests/batch-selection-favorites.test.mjs. */
+  border-radius: 5px;
 }
 
 .selection-check-indicator.is-checked {

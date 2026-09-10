@@ -45,10 +45,9 @@ test('message navigation keeps line identities and phone numbers out of URLs', (
 })
 
 test('the app uses clean history routes and a geometry-stable auth transition', async () => {
-  const [router, app, main, styles] = await Promise.all([
+  const [router, app, styles] = await Promise.all([
     source('../src/router/index.ts'),
     source('../src/App.vue'),
-    source('../src/main.ts'),
     source('../src/style.css')
   ])
 

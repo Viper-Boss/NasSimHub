@@ -66,8 +66,8 @@ test('shared control CSS removes remaining browser decorations', async () => {
     assert.match(style, new RegExp(`\\.${primitive}\\s*\\{`), `missing .${primitive}`)
   }
 
-  assert.match(style, /input\[type="search"\]::\-webkit-search-cancel-button/)
-  assert.match(style, /input\[type="number"\]::\-webkit-inner-spin-button/)
-  assert.match(style, /\.ui-range::\-webkit-slider-thumb/)
-  assert.match(style, /\.ui-range::\-moz-range-thumb/)
+  assert.match(style, /input\[type="search"\]::-webkit-search-cancel-button/)
+  assert.match(style, /input\[type="number"\]::-webkit-inner-spin-button/)
+  assert.match(style, /\.ui-range::-webkit-slider-thumb/)
+  assert.match(style, /\.ui-range::-moz-range-thumb/)
 })

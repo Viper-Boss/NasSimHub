@@ -12,6 +12,19 @@ export default [
   js.configs.recommended,
   ...vuePlugin.configs['flat/essential'],
   {
+    // Node-side sources: contract tests, build scripts and this config itself.
+    // Without their globals every `URL`, `console` and `process` reads as
+    // no-undef, which buried the handful of findings that actually matter.
+    files: ['**/*.{js,mjs,cjs}'],
+    languageOptions: {
+      sourceType: 'module',
+      ecmaVersion: 'latest',
+      globals: {
+        ...globals.node
+      }
+    }
+  },
+  {
     files: ['src/**/*.{ts,vue}'],
     languageOptions: {
       parser: vueParser,

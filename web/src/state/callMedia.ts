@@ -459,7 +459,9 @@ async function attemptRestart(
   callMediaState.status = 'recovering'
   releasePeer()
 
-  let connected = false
+  // Assigned on every path that reaches the read below: the early return
+  // inside the try leaves the function before `connected` is used.
+  let connected: boolean
   try {
     const connection = await establishPeer(
       callID,
