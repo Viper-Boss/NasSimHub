@@ -137,8 +137,12 @@ func TestOnePeerOwnsConsumerCallUntilSessionCloses(t *testing.T) {
 	}
 	browser.applyAnswer(t, result.AnswerSDP)
 
-	_, err = core.Exchange(context.Background(), offer)
-	if !errors.Is(err, ErrCallInUse) {
+	// A second browser (a different owner token) must not take over a call whose
+	// owner still holds a live session.
+	conflicting := offer
+	conflicting.OwnerToken = "owner-call-exclusive-second"
+	conflicting.SDP = newTestBrowser(t).offer(t)
+	if _, err := core.Exchange(context.Background(), conflicting); !errors.Is(err, ErrCallInUse) {
 		t.Fatalf("second peer error = %v", err)
 	}
 	if got := opener.opens.Load(); got != 1 {
@@ -165,6 +169,53 @@ func TestOnePeerOwnsConsumerCallUntilSessionCloses(t *testing.T) {
 	}
 	if got := codecs.latest(t).closeCalls.Load(); got != 1 {
 		t.Fatalf("codec close calls = %d, want 1", got)
+	}
+}
+
+func TestSameOwnerExchangeReplacesMediaSession(t *testing.T) {
+	format := testFormat(8000)
+	core, opener, _ := testCore(t, format)
+	authorizeCall(t, core, "call-restart")
+
+	firstBrowser := newTestBrowser(t)
+	offer := testOffer("call-restart", firstBrowser.offer(t))
+	first, err := core.Exchange(context.Background(), offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstBrowser.applyAnswer(t, first.AnswerSDP)
+
+	// The same browser re-offering with the owner token it already holds is an
+	// ICE restart: the retired session must be replaced, not rejected, because
+	// rejecting it turns a recoverable transport break into a dropped call.
+	restart := offer
+	restart.SDP = newTestBrowser(t).offer(t)
+	second, err := core.Exchange(context.Background(), restart)
+	if err != nil {
+		t.Fatalf("same-owner re-exchange error = %v", err)
+	}
+
+	core.mu.Lock()
+	owner := core.owners["call-restart"]
+	replaced := owner != nil && owner.session == second.Session
+	core.mu.Unlock()
+	if !replaced {
+		t.Fatal("replacement session did not take over the call owner slot")
+	}
+
+	select {
+	case <-first.Session.Done():
+	case <-time.After(testTimeout):
+		t.Fatal("superseded media session was not retired")
+	}
+	if got := opener.opens.Load(); got != 1 {
+		t.Fatalf("endpoint opens = %d, want 1 after renegotiating the same call", got)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	if err := core.ReleaseOwner(ctx, "call-restart", offer.OwnerToken); err != nil {
+		t.Fatal(err)
 	}
 }
 

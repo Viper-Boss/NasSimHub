@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -667,21 +668,34 @@ func (c *Core) releaseHubWhenDone(callID string, entry *hubEntry, hub *mediaHub)
 	c.mu.Unlock()
 }
 
+// reserve claims the single browser media owner for a call. A browser that
+// already owns the call may exchange again with the same owner token: that is
+// what an ICE restart looks like from the server side (the browser rebuilds its
+// peer and re-offers), so the previous session is retired and replaced instead
+// of rejecting the renegotiation. Any other token is still a second client
+// trying to take the call and keeps its ErrCallInUse conflict.
 func (c *Core) reserve(
 	callID string,
 	ownerToken string,
 ) (*callLifetime, *mediaOwner, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		return nil, nil, ErrCoreClosed
-	}
-	if _, exists := c.owners[callID]; exists {
-		return nil, nil, ErrCallInUse
 	}
 	lifetime, err := c.activeLifetimeLocked(callID)
 	if err != nil {
+		c.mu.Unlock()
 		return nil, nil, err
+	}
+	var superseded *mediaOwner
+	if existing := c.owners[callID]; existing != nil {
+		if existing.token != ownerToken {
+			c.mu.Unlock()
+			return nil, nil, ErrCallInUse
+		}
+		superseded = existing
+		delete(c.owners, callID)
 	}
 	ownerContext, ownerCancel := context.WithCancel(c.ctx)
 	owner := &mediaOwner{
@@ -692,7 +706,31 @@ func (c *Core) reserve(
 	}
 	c.owners[callID] = owner
 	c.prepares.Add(1)
+	c.mu.Unlock()
+	if superseded != nil {
+		c.retireOwner(callID, superseded)
+	}
 	return lifetime, owner, nil
+}
+
+// retireOwner tears down a media owner that another exchange replaced. The
+// replacement already holds the call's owner slot, so the retired owner must
+// neither clear that slot nor publish a disconnected state for the call: the
+// session it is leaving is the old ICE transport, not the call itself.
+func (c *Core) retireOwner(callID string, owner *mediaOwner) {
+	if owner == nil {
+		return
+	}
+	slog.Info(
+		"call media owner superseded",
+		"component", "media",
+		"call_id", callID,
+	)
+	if owner.session != nil {
+		owner.session.stop(nil)
+	}
+	owner.cancel()
+	owner.finish()
 }
 
 func (c *Core) releaseReservation(callID string, owner *mediaOwner) {
