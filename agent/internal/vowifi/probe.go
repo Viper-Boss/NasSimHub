@@ -365,10 +365,17 @@ func ikeProbe(ctx context.Context, address string, port int, packet []byte, wait
 	}
 	buffer := make([]byte, 1024)
 	for {
-		if _, _, err := connection.ReadFromUDP(buffer); err != nil {
+		// The socket is unbound, so anything on the network can land in it.
+		// Only a datagram from the ePDG we probed proves the ePDG answered;
+		// keep reading until the deadline rather than trusting the first
+		// packet that happens to arrive.
+		_, from, err := connection.ReadFromUDP(buffer)
+		if err != nil {
 			return false
 		}
-		return true
+		if from != nil && from.IP.Equal(remote.IP) && from.Port == remote.Port {
+			return true
+		}
 	}
 }
 

@@ -116,8 +116,13 @@ func (p *Provider) terminateCall(
 	call domain.Call,
 	parsed ParsedObjects,
 ) error {
+	// An AT-driven call is owned by the line that carries the AT channel, which
+	// is not necessarily the line recorded on the call. The forced modem reset
+	// below has to target that same line, otherwise it resets the wrong modem —
+	// or finds no path at all and gives up while the call is still up.
 	lineID := call.LineID
-	if atLineID, isATCall := parsed.ATCallLines[call.ID]; isATCall {
+	atLineID, isATCall := parsed.ATCallLines[call.ID]
+	if isATCall {
 		lineID = atLineID
 		command := quectelHangupCall
 		if call.StateCode == 6 {
@@ -129,7 +134,7 @@ func (p *Provider) terminateCall(
 			operation,
 			command,
 		); err != nil {
-			return p.forceTerminateCall(ctx, operation, call, parsed, err)
+			return p.forceTerminateCall(ctx, operation, call, lineID, parsed, err)
 		}
 	} else if _, err := p.call(
 		ctx,
@@ -138,18 +143,14 @@ func (p *Provider) terminateCall(
 		operation,
 		"ModemManager failed to terminate the call",
 	); err != nil {
-		return p.forceTerminateCall(ctx, operation, call, parsed, err)
+		return p.forceTerminateCall(ctx, operation, call, lineID, parsed, err)
 	}
 
 	if err := p.verifyCallTerminated(ctx, operation, call, parsed); err != nil {
-		return p.forceTerminateCall(ctx, operation, call, parsed, err)
+		return p.forceTerminateCall(ctx, operation, call, lineID, parsed, err)
 	}
 
-	if _, isATCall := parsed.ATCallLines[call.ID]; isATCall {
-		p.publishChange()
-	} else {
-		p.publishChange()
-	}
+	p.publishChange()
 	return nil
 }
 
@@ -157,17 +158,18 @@ func (p *Provider) forceTerminateCall(
 	ctx context.Context,
 	operation string,
 	call domain.Call,
+	lineID string,
 	parsed ParsedObjects,
 	hangupErr error,
 ) error {
-	modemPath := parsed.LinePaths[call.LineID]
+	modemPath := parsed.LinePaths[lineID]
 	if !modemPath.IsValid() {
 		pathErr := errors.New("the call modem path is unavailable")
 		slog.Error(
 			"call hangup failed and forced modem reset was unavailable",
 			"component", "call_safety",
 			"call_id", call.ID,
-			"line_id", call.LineID,
+			"line_id", lineID,
 			"hangup_error", hangupErr,
 			"reset_error", pathErr,
 		)
@@ -182,7 +184,7 @@ func (p *Provider) forceTerminateCall(
 		"call hangup failed; forcing modem reset",
 		"component", "call_safety",
 		"call_id", call.ID,
-		"line_id", call.LineID,
+		"line_id", lineID,
 		"hangup_error", hangupErr,
 	)
 	resetContext, cancelReset := detachedTimeoutContext(
@@ -202,7 +204,7 @@ func (p *Provider) forceTerminateCall(
 			"forced modem reset after call hangup failure also failed",
 			"component", "call_safety",
 			"call_id", call.ID,
-			"line_id", call.LineID,
+			"line_id", lineID,
 			"hangup_error", hangupErr,
 			"reset_error", resetErr,
 		)
@@ -213,16 +215,18 @@ func (p *Provider) forceTerminateCall(
 		)
 	}
 
-	if line, found := findLine(parsed.Lines, call.LineID); found {
+	// The reset applied to lineID's modem, and the AT call runtime is keyed by
+	// that same line, so both have to be cleared for the resolved line.
+	if line, found := findLine(parsed.Lines, lineID); found {
 		p.deleteVoiceProbe(voiceProbeKey(parsed.ids, line, modemPath))
 	}
-	p.clearLineCallRuntime(call.LineID)
+	p.clearLineCallRuntime(lineID)
 	p.publishChange()
 	slog.Error(
 		"modem reset forced after call hangup failure",
 		"component", "call_safety",
 		"call_id", call.ID,
-		"line_id", call.LineID,
+		"line_id", lineID,
 	)
 	return domain.VerificationFailed(
 		operation,

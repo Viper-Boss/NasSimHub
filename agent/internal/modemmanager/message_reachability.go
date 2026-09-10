@@ -187,6 +187,22 @@ func messageLine(parsed ParsedObjects) (domain.Line, dbus.ObjectPath, bool) {
 	return domain.Line{}, "", false
 }
 
+// commandATBounded runs one reachability AT command under smsCommandTimeout.
+//
+// The reconciler's own attempt budget is minutes wide, and an AT command that
+// stalls holds the modem's write lock for that whole budget — which is how the
+// agent ends up reported as unavailable while nothing is actually wrong. Each
+// probe here is a single short read, so bound it on its own.
+func (p *Provider) commandATBounded(
+	ctx context.Context,
+	lineID string,
+	command string,
+) (string, error) {
+	commandContext, cancel := context.WithTimeout(ctx, smsCommandTimeout)
+	defer cancel()
+	return p.commandAT(commandContext, lineID, command)
+}
+
 // ReconcileSMSReachability recovers receptions ModemManager is not reporting,
 // and keeps the modem's SMS service domain usable on an LTE-only attach.
 func (p *Provider) ReconcileSMSReachability(ctx context.Context) error {
@@ -207,7 +223,7 @@ func (p *Provider) ReconcileSMSReachability(ctx context.Context) error {
 		)
 	}
 
-	response, err := p.commandAT(ctx, line.ID, smsStorageQuery)
+	response, err := p.commandATBounded(ctx, line.ID, smsStorageQuery)
 	if err != nil {
 		return fmt.Errorf("read modem message storage: %w", err)
 	}
@@ -238,7 +254,7 @@ func (p *Provider) ReconcileSMSReachability(ctx context.Context) error {
 // ensureSMSService repairs a modem left on a circuit-switched-only SMS domain,
 // which cannot be used on an LTE-only attach.
 func (p *Provider) ensureSMSService(ctx context.Context, lineID string) error {
-	response, err := p.commandAT(ctx, lineID, smsServiceQuery)
+	response, err := p.commandATBounded(ctx, lineID, smsServiceQuery)
 	if err != nil {
 		return err
 	}
@@ -246,7 +262,7 @@ func (p *Provider) ensureSMSService(ctx context.Context, lineID string) error {
 	if !known || service == smsExpectedService {
 		return nil
 	}
-	if _, err := p.commandAT(ctx, lineID, smsServiceWrite); err != nil {
+	if _, err := p.commandATBounded(ctx, lineID, smsServiceWrite); err != nil {
 		return err
 	}
 	slog.Warn(
