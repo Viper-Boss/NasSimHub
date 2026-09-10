@@ -55,6 +55,15 @@ const (
 	// firmware answers this query unreliably and there is no reason to probe
 	// it every pass.
 	urcPortCheckInterval = 10 * time.Minute
+	// urcBlindWriteInterval bounds how often the guard rewrites the port
+	// without being able to read it first. Measured on the QDC507: after the
+	// port was written to "all", the firmware answers every AT+QURCCFG?
+	// with "Unknown error" (across ModemManager restarts), so the guard
+	// cannot rely on reading — yet indications keep drifting back to the
+	// single "usbat" port (calls received hours after the write were lost
+	// again). The write is idempotent and cheap; the throttle just spares
+	// the modem's non-volatile memory.
+	urcBlindWriteInterval = 30 * time.Minute
 
 	// smsExpectedService is "packet switched preferred, circuit switched
 	// fallback". The QDC507 was found reporting 1 ("circuit switched only"),
@@ -87,14 +96,17 @@ const (
 // smsReachabilityState remembers what the previous pass saw about the modem's
 // message storage.
 type smsReachabilityState struct {
-	mu           sync.Mutex
-	used         int
-	known        int
-	observedAt   time.Time
-	suspectedAt  time.Time
-	lastCycleAt  time.Time
-	lastSentAt   time.Time
-	urcCheckedAt time.Time
+	mu                sync.Mutex
+	used              int
+	known             int
+	observedAt        time.Time
+	suspectedAt       time.Time
+	lastCycleAt       time.Time
+	lastSentAt        time.Time
+	urcCheckedAt      time.Time
+	urcBlindWroteAt   time.Time
+	urcCycleWroteLine string
+	urcCycleWroteAt   time.Time
 }
 
 func (state *smsReachabilityState) noteSent(at time.Time) {
@@ -119,6 +131,31 @@ func (state *smsReachabilityState) urcPortDue(at time.Time) bool {
 		return false
 	}
 	state.urcCheckedAt = at
+	return true
+}
+
+// urcBlindWriteDue reports and records whether the guard may rewrite the
+// indication port without a successful read first.
+func (state *smsReachabilityState) urcBlindWriteDue(at time.Time) bool {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if !state.urcBlindWroteAt.IsZero() && at.Sub(state.urcBlindWroteAt) < urcBlindWriteInterval {
+		return false
+	}
+	state.urcBlindWroteAt = at
+	return true
+}
+
+// urcCycleRewriteDue reports and records whether the indication port should
+// be rewritten right after a radio cycle on the given line.
+func (state *smsReachabilityState) urcCycleRewriteDue(lineID string, at time.Time) bool {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.urcCycleWroteLine == lineID && at.Sub(state.urcCycleWroteAt) < urcBlindWriteInterval {
+		return false
+	}
+	state.urcCycleWroteLine = lineID
+	state.urcCycleWroteAt = at
 	return true
 }
 
@@ -306,7 +343,7 @@ func (p *Provider) ReconcileSMSReachability(ctx context.Context) error {
 		"storage_used", used,
 		"reported", len(parsed.MessagePaths),
 	)
-	return p.cycleRadio(modemPath)
+	return p.cycleRadio(line.ID, modemPath)
 }
 
 // ensureSMSService repairs a modem left on a circuit-switched-only SMS domain,
@@ -337,10 +374,28 @@ func (p *Provider) ensureSMSService(ctx context.Context, lineID string) error {
 // (incoming-call RING, +CMTI, ...) to a single USB AT port instead of every
 // port. With the shipped "usbat" setting, incoming calls never reached
 // ModemManager at all on the QDC507.
+//
+// The firmware answers AT+QURCCFG? with "Unknown error" once the port is on
+// "all" (measured, across ModemManager restarts), so an unreadable query is
+// not evidence the port is wrong — the guard falls back to a throttled blind
+// rewrite, because indications measurably drift back to the single port.
 func (p *Provider) ensureURCPort(ctx context.Context, lineID string) error {
 	response, err := p.commandATBounded(ctx, lineID, urcPortQuery)
 	if err != nil {
-		return err
+		if !p.smsState.urcBlindWriteDue(time.Now()) {
+			return err
+		}
+		if _, writeErr := p.commandATBounded(ctx, lineID, urcPortWrite); writeErr != nil {
+			return errors.Join(err, writeErr)
+		}
+		slog.Warn(
+			"the modem indication port could not be read and has been rewritten unconditionally",
+			"component", "modemmanager",
+			"line_id", lineID,
+			"read_error", err,
+			"port", urcPortExpected,
+		)
+		return nil
 	}
 	port, known := urcPortValue(response)
 	if !known || port == urcPortExpected {
@@ -359,10 +414,25 @@ func (p *Provider) ensureURCPort(ctx context.Context, lineID string) error {
 	return nil
 }
 
+// rewriteURCPortAfterCycle rewrites the indication port right after a radio
+// cycle: re-enabling the modem is when the firmware resets its indication
+// routing, and a call received afterwards was measurably lost again until
+// the port was rewritten.
+func (p *Provider) rewriteURCPortAfterCycle(lineID string) {
+	if _, err := p.commandATBounded(context.Background(), lineID, urcPortWrite); err != nil {
+		slog.Warn(
+			"rewrite the modem indication port after the radio cycle",
+			"component", "modemmanager",
+			"line_id", lineID,
+			"error", err,
+		)
+	}
+}
+
 // cycleRadio disables and re-enables the modem, the same transition the
 // airplane mode switch performs, because that transition is what makes
 // ModemManager read the message storage again.
-func (p *Provider) cycleRadio(modemPath dbus.ObjectPath) error {
+func (p *Provider) cycleRadio(lineID string, modemPath dbus.ObjectPath) error {
 	cycleContext, cancel := context.WithTimeout(context.Background(), smsRadioCycleTimeout)
 	defer cancel()
 	var result error
@@ -377,6 +447,12 @@ func (p *Provider) cycleRadio(modemPath dbus.ObjectPath) error {
 		); err != nil {
 			result = errors.Join(result, err)
 		}
+	}
+	// The re-enabled modem resets its indication routing; put the port back
+	// on "all" before anything else can be missed.
+	if result == nil {
+		time.Sleep(3 * time.Second)
+		p.rewriteURCPortAfterCycle(lineID)
 	}
 	return result
 }

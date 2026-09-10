@@ -110,6 +110,43 @@ func TestSMSReachabilityStateIgnoresOwnSentCopiesAndRepeats(t *testing.T) {
 	}
 }
 
+func TestEnsureURCPortBlindWritesWhenUnreadable(t *testing.T) {
+	t.Parallel()
+
+	caller := newFakeCaller(emptyLineObjects(true, true))
+	caller.atCommandErrors[urcPortQuery] = errors.New("Unknown error")
+	provider := newTestProvider(caller)
+
+	if err := provider.ensureURCPort(context.Background(), "line-a"); err != nil {
+		t.Fatalf("ensureURCPort() error = %v", err)
+	}
+	writes := 0
+	for _, invocation := range caller.invocations() {
+		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
+			continue
+		}
+		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite {
+			writes++
+		}
+	}
+	if writes != 1 {
+		t.Fatalf("blind writes = %d, want 1", writes)
+	}
+
+	// The throttle holds a second immediate pass back.
+	if err := provider.ensureURCPort(context.Background(), "line-a"); err != nil {
+		t.Fatalf("second ensureURCPort() error = %v", err)
+	}
+	for _, invocation := range caller.invocations() {
+		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
+			continue
+		}
+		if command, ok := invocation.Args[0].(string); ok && command == urcPortWrite && writes > 1 {
+			t.Fatal("the blind write was not throttled")
+		}
+	}
+}
+
 func TestReconcileSMSReachabilityCyclesRadioForUnreportedStorage(t *testing.T) {
 	t.Parallel()
 
@@ -129,6 +166,28 @@ func TestReconcileSMSReachabilityCyclesRadioForUnreportedStorage(t *testing.T) {
 	invocations := caller.invocations()
 	if got := countMethod(invocations, modemInterface+".Enable"); got != 2 {
 		t.Fatalf("radio Enable calls = %d, want 2 (disable and enable): %#v", got, invocations)
+	}
+	// The indication port must be rewritten right after the cycle: re-enabling
+	// the modem is when the firmware resets its indication routing.
+	rewriteIndex, enableIndex := -1, -1
+	for index, invocation := range invocations {
+		if invocation.Method != modemInterface+".Command" || len(invocation.Args) == 0 {
+			continue
+		}
+		if command, ok := invocation.Args[0].(string); !ok {
+			continue
+		} else if command == urcPortWrite && rewriteIndex == -1 {
+			rewriteIndex = index
+		}
+		if invocation.Method == modemInterface+".Enable" {
+			enableIndex = index
+		}
+	}
+	if rewriteIndex == -1 {
+		t.Fatalf("the indication port was not rewritten after the cycle: %#v", invocations)
+	}
+	if rewriteIndex < enableIndex {
+		t.Fatal("the indication port was rewritten before the radio was re-enabled")
 	}
 }
 
