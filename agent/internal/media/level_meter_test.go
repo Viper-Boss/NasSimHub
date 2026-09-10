@@ -119,11 +119,15 @@ func TestLevelMeterReportsAndResetsEachWindow(t *testing.T) {
 		t.Fatalf("window at half interval = %d samples, want 3", meter.samples)
 	}
 
-	// Past the interval the window is reported and starts again.
+	// Past the interval the window is reported — the block that closed it
+	// belongs to the reported window — and the next window starts empty.
 	meter.clock = func() time.Time { return base.Add(levelMeterInterval) }
 	meter.observe(encodePCM(0))
-	if meter.samples != 1 {
-		t.Fatalf("reset window = %d samples, want only the new block", meter.samples)
+	if meter.samples != 0 {
+		t.Fatalf(
+			"reported window = %d samples, want a fresh window holding none",
+			meter.samples,
+		)
 	}
 	if meter.peak != 0 {
 		t.Fatalf("reset window peak = %d, want 0", meter.peak)

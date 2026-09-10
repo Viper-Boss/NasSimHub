@@ -55,12 +55,13 @@ func measurePCM(pcm []byte) (int64, float64, int) {
 	for index := 0; index+1 < len(pcm); index += 2 {
 		sample := int(int16(binary.LittleEndian.Uint16(pcm[index:])))
 		if sample < 0 {
-			// Negating the minimum value overflows, and it is an outlier
-			// anyway, so clamp it.
+			// Negating the minimum sample overflows, so clamp it to the
+			// largest magnitude it can represent.
 			if sample == math.MinInt16 {
-				sample = -math.MinInt16 - 1
+				sample = math.MaxInt16
+			} else {
+				sample = -sample
 			}
-			sample = -sample
 		}
 		if sample > peak {
 			peak = sample
