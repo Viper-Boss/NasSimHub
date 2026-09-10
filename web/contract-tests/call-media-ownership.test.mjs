@@ -32,29 +32,41 @@ test('one tab exclusively owns browser call media', () => {
   )
 })
 
-test('browser media only gives transient disconnection one fixed recovery window', () => {
+test('browser media renegotiates a broken transport instead of waiting out one window', () => {
   assert.match(callMedia, /const MEDIA_RECOVERY_TIMEOUT_MS = 15_000/)
+  // A broken transport is no longer a dead end. Both a transient disconnection
+  // and a failed candidate pair schedule a bounded renegotiation that keeps the
+  // owner token the browser already holds; the fixed window only stays as the
+  // fallback for when no renegotiation is possible at all.
   assert.match(
     callMedia,
-    /connection\.connectionState === 'disconnected'[\s\S]*?beginRecoveryWindow\(callID, token\)/
+    /if \(state === 'disconnected' \|\| state === 'failed'\) \{[\s\S]*?callMediaState\.status = 'recovering'/
+  )
+  assert.match(callMedia, /const MEDIA_MAX_CONSECUTIVE_RESTARTS = 3/)
+  assert.match(callMedia, /const MEDIA_MAX_TOTAL_RESTARTS = 12/)
+  assert.match(
+    callMedia,
+    /if \(iceConfiguration && microphonePipeline\) \{[\s\S]*?scheduleRestart\([\s\S]*?\} else \{\s*beginRecoveryWindow\(callID, token\)/
   )
   assert.match(
     callMedia,
-    /connection\.connectionState === 'failed'\) \{\s*failConnection\(/
+    /async function attemptRestart\([\s\S]*?consecutiveRestarts >= MEDIA_MAX_CONSECUTIVE_RESTARTS[\s\S]*?failConnection\(/
   )
+  assert.match(callMedia, /function releasePeer\(\): void \{[\s\S]*?connection\.close\(\)/)
+  assert.match(
+    callMedia,
+    /gateway\.exchangeCallMedia\([\s\S]*?ownership\.ownerToken[\s\S]*?offerSDP/
+  )
+  assert.match(
+    callMedia,
+    /if \(generation !== token \|\| currentCallID !== callID \|\| peer !== connection\) return/
+  )
+  assert.match(callMedia, /state === 'connected'[\s\S]*?clearRecoveryWindow\(\)/)
+  assert.match(callMedia, /state === 'closed'[\s\S]*?failConnection\(/)
   assert.doesNotMatch(
     callMedia,
-    /connection\.connectionState === 'failed'\) \{\s*beginRecoveryWindow\(/
+    /state === 'disconnected' \|\| state === 'failed'\) \{\s*failConnection\(/
   )
-  assert.match(
-    callMedia,
-    /connection\.connectionState === 'connected'[\s\S]*?clearRecoveryWindow\(\)/
-  )
-  assert.match(
-    callMedia,
-    /connection\.connectionState === 'closed'[\s\S]*?failConnection\(/
-  )
-  assert.doesNotMatch(callMedia, /restartIce|iceRestart/)
 })
 
 test('session changes release media before credentials are revoked', () => {

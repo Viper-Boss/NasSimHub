@@ -1,6 +1,6 @@
 import { reactive, watch } from 'vue'
 import { fixtureCallMediaPreview, gateway } from '../api/client'
-import type { CallSession } from '../api/types'
+import type { CallMediaICEConfiguration, CallSession } from '../api/types'
 import { ApiError } from '../api/types'
 import { translate } from '../i18n'
 import {
@@ -27,6 +27,10 @@ export type CallMediaStatus =
 
 const ICE_GATHERING_TIMEOUT_MS = 5000
 const MEDIA_RECOVERY_TIMEOUT_MS = 15_000
+const MEDIA_RESTART_GRACE_MS = 2000
+const MEDIA_RESTART_CONNECT_TIMEOUT_MS = 8000
+const MEDIA_MAX_CONSECUTIVE_RESTARTS = 3
+const MEDIA_MAX_TOTAL_RESTARTS = 12
 const MEDIA_LOCK_PREFIX = 'modemdeck-call-media:'
 
 export const callMediaState = reactive<{
@@ -55,6 +59,11 @@ let queuedInputDeviceID: string | undefined
 let inputSwitchPromise: Promise<void> | undefined
 let recoveryTimeoutID: number | undefined
 let mediaLockAbort: AbortController | undefined
+let iceConfiguration: CallMediaICEConfiguration | undefined
+let restartTimeoutID: number | undefined
+let peerRecovering = false
+let consecutiveRestarts = 0
+let totalRestarts = 0
 
 type MediaOwnership = {
   ownerToken: string
@@ -81,6 +90,12 @@ function clearRecoveryWindow(): void {
   if (recoveryTimeoutID === undefined) return
   window.clearTimeout(recoveryTimeoutID)
   recoveryTimeoutID = undefined
+}
+
+function clearRestartWindow(): void {
+  if (restartTimeoutID === undefined) return
+  window.clearTimeout(restartTimeoutID)
+  restartTimeoutID = undefined
 }
 
 function stopMicrophonePipeline(pipeline: MicrophonePipeline): void {
@@ -123,22 +138,31 @@ async function createMicrophonePipeline(
   }
 }
 
+function releasePeer(): void {
+  const connection = peer
+  if (!connection) return
+  peer = undefined
+  connection.onconnectionstatechange = null
+  connection.ontrack = null
+  connection.close()
+}
+
 function stopResources(): void {
   generation += 1
   inputReplaceGeneration += 1
   queuedInputDeviceID = undefined
   currentCallID = ''
   clearRecoveryWindow()
+  clearRestartWindow()
+  peerRecovering = false
+  iceConfiguration = undefined
+  consecutiveRestarts = 0
+  totalRestarts = 0
   mediaLockAbort?.abort()
   mediaLockAbort = undefined
   mediaOwnership?.release()
 
-  if (peer) {
-    peer.onconnectionstatechange = null
-    peer.ontrack = null
-    peer.close()
-    peer = undefined
-  }
+  releasePeer()
   if (microphonePipeline) {
     stopMicrophonePipeline(microphonePipeline)
     microphonePipeline = undefined
@@ -257,6 +281,216 @@ function beginRecoveryWindow(callID: string, token: number): void {
   }, MEDIA_RECOVERY_TIMEOUT_MS)
 }
 
+function iceServerList(configuration: CallMediaICEConfiguration) {
+  return configuration.ice_servers.map(server => ({
+    urls: server.urls,
+    ...(server.username ? { username: server.username } : {}),
+    ...(server.credential ? { credential: server.credential } : {})
+  }))
+}
+
+// establishPeer builds a peer for the call and completes one offer/answer
+// exchange with the server. It is shared by the first connection and by every
+// renegotiation: when ICE breaks, the only reliable recovery is a new transport
+// with fresh candidates, because waiting on a dead candidate pair never
+// recovers. The server tolerates the repeat exchange as long as the browser
+// presents the owner token it already holds.
+async function establishPeer(
+  callID: string,
+  token: number,
+  ownership: MediaOwnership,
+  configuration: CallMediaICEConfiguration,
+  pipeline: MicrophonePipeline,
+  signal: AbortSignal
+): Promise<RTCPeerConnection> {
+  const connection = new RTCPeerConnection({
+    iceServers: iceServerList(configuration),
+    iceTransportPolicy: configuration.ice_transport_policy
+  })
+  peer = connection
+
+  connection.ontrack = event => {
+    if (generation !== token || currentCallID !== callID || peer !== connection) return
+    const stream = event.streams[0] ?? new MediaStream([event.track])
+    remoteStream = stream
+    attachRemoteAudio(stream)
+  }
+  connection.onconnectionstatechange = () => {
+    if (generation !== token || currentCallID !== callID || peer !== connection) return
+    handleConnectionState(callID, token, ownership, signal, connection)
+  }
+
+  for (const track of pipeline.destination.stream.getAudioTracks()) {
+    connection.addTrack(track, pipeline.destination.stream)
+  }
+  const offer = await connection.createOffer()
+  await connection.setLocalDescription(offer)
+  await waitForICEGathering(connection)
+  if (generation !== token || currentCallID !== callID || peer !== connection) {
+    return connection
+  }
+
+  const offerSDP = connection.localDescription?.sdp
+  if (!offerSDP) throw new Error(translate('runtime.audioOfferMissing'))
+  ownership.claimed = true
+  const answerSDP = await gateway.exchangeCallMedia(
+    callID,
+    ownership.ownerToken,
+    offerSDP,
+    signal
+  )
+  if (generation !== token || currentCallID !== callID || peer !== connection) {
+    return connection
+  }
+  await connection.setRemoteDescription({ type: 'answer', sdp: answerSDP })
+  return connection
+}
+
+function handleConnectionState(
+  callID: string,
+  token: number,
+  ownership: MediaOwnership,
+  signal: AbortSignal,
+  connection: RTCPeerConnection
+): void {
+  const state = connection.connectionState
+  if (state === 'connected') {
+    peerRecovering = false
+    consecutiveRestarts = 0
+    clearRestartWindow()
+    clearRecoveryWindow()
+    callMediaState.status = 'active'
+    callMediaState.error = ''
+    return
+  }
+  if (state === 'connecting') {
+    callMediaState.status = peerRecovering ? 'recovering' : 'connecting'
+    return
+  }
+  if (state === 'disconnected' || state === 'failed') {
+    peerRecovering = true
+    clearRecoveryWindow()
+    callMediaState.status = 'recovering'
+    callMediaState.error = ''
+    if (iceConfiguration && microphonePipeline) {
+      scheduleRestart(
+        callID,
+        token,
+        ownership,
+        signal,
+        state === 'failed' ? 0 : MEDIA_RESTART_GRACE_MS
+      )
+    } else {
+      beginRecoveryWindow(callID, token)
+    }
+    return
+  }
+  if (state === 'closed') {
+    failConnection(
+      callID,
+      token,
+      new Error(translate('runtime.callAudioConnectionFailed'))
+    )
+  }
+}
+
+function scheduleRestart(
+  callID: string,
+  token: number,
+  ownership: MediaOwnership,
+  signal: AbortSignal,
+  delayMS: number
+): void {
+  if (restartTimeoutID !== undefined) return
+  restartTimeoutID = window.setTimeout(() => {
+    restartTimeoutID = undefined
+    void attemptRestart(callID, token, ownership, signal)
+  }, delayMS)
+}
+
+function waitForConnection(
+  connection: RTCPeerConnection,
+  timeoutMS: number
+): Promise<boolean> {
+  const state = connection.connectionState
+  if (state === 'connected') return Promise.resolve(true)
+  if (state === 'failed' || state === 'closed') return Promise.resolve(false)
+
+  return new Promise(resolve => {
+    const finish = (): void => {
+      window.clearTimeout(timeoutID)
+      connection.removeEventListener('connectionstatechange', onStateChange)
+      resolve(connection.connectionState === 'connected')
+    }
+    const onStateChange = (): void => {
+      const next = connection.connectionState
+      if (next === 'connected' || next === 'failed' || next === 'closed') finish()
+    }
+    const timeoutID = window.setTimeout(finish, timeoutMS)
+    connection.addEventListener('connectionstatechange', onStateChange)
+  })
+}
+
+async function attemptRestart(
+  callID: string,
+  token: number,
+  ownership: MediaOwnership,
+  signal: AbortSignal
+): Promise<void> {
+  if (generation !== token || currentCallID !== callID) return
+  const configuration = iceConfiguration
+  const pipeline = microphonePipeline
+  if (
+    !configuration ||
+    !pipeline ||
+    signal.aborted ||
+    consecutiveRestarts >= MEDIA_MAX_CONSECUTIVE_RESTARTS ||
+    totalRestarts >= MEDIA_MAX_TOTAL_RESTARTS
+  ) {
+    failConnection(
+      callID,
+      token,
+      new Error(translate('runtime.callAudioConnectionFailed'))
+    )
+    return
+  }
+  consecutiveRestarts += 1
+  totalRestarts += 1
+  callMediaState.status = 'recovering'
+  releasePeer()
+
+  let connected = false
+  try {
+    const connection = await establishPeer(
+      callID,
+      token,
+      ownership,
+      configuration,
+      pipeline,
+      signal
+    )
+    if (generation !== token || currentCallID !== callID || peer !== connection) return
+    connected = await waitForConnection(connection, MEDIA_RESTART_CONNECT_TIMEOUT_MS)
+  } catch {
+    connected = false
+  }
+  if (generation !== token || currentCallID !== callID) return
+  if (connected) {
+    consecutiveRestarts = 0
+    clearRecoveryWindow()
+    callMediaState.status = 'active'
+    callMediaState.error = ''
+    return
+  }
+  scheduleRestart(
+    callID,
+    token,
+    ownership,
+    signal,
+    MEDIA_RESTART_GRACE_MS * consecutiveRestarts
+  )
+}
+
 async function connect(
   callID: string,
   token: number,
@@ -270,10 +504,12 @@ async function connect(
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(translate('runtime.microphoneHTTPSRequired'))
     }
-    const rtcConfiguration = await gateway.getCallMediaICEConfiguration(
+    const configuration = await gateway.getCallMediaICEConfiguration(
       callID,
       signal
     )
+    if (generation !== token || currentCallID !== callID) return
+    iceConfiguration = configuration
     pendingMicrophone = await navigator.mediaDevices.getUserMedia({
       audio: selectedAudioInputConstraints(),
       video: false
@@ -291,64 +527,8 @@ async function connect(
     pendingPipeline = undefined
     markAudioInputActive()
 
-    const connection = new RTCPeerConnection({
-      iceServers: rtcConfiguration.ice_servers.map(server => ({
-        urls: server.urls,
-        ...(server.username ? { username: server.username } : {}),
-        ...(server.credential ? { credential: server.credential } : {})
-      })),
-      iceTransportPolicy: rtcConfiguration.ice_transport_policy
-    })
-    let recovering = false
-    peer = connection
-
-    connection.ontrack = event => {
-      if (generation !== token || currentCallID !== callID) return
-      const stream = event.streams[0] ?? new MediaStream([event.track])
-      remoteStream = stream
-      attachRemoteAudio(stream)
-    }
-    connection.onconnectionstatechange = () => {
-      if (generation !== token || currentCallID !== callID) return
-      if (connection.connectionState === 'connected') {
-        recovering = false
-        clearRecoveryWindow()
-        callMediaState.status = 'active'
-        callMediaState.error = ''
-      } else if (connection.connectionState === 'connecting') {
-        callMediaState.status = recovering ? 'recovering' : 'connecting'
-      } else if (connection.connectionState === 'disconnected') {
-        recovering = true
-        beginRecoveryWindow(callID, token)
-        callMediaState.status = 'recovering'
-        callMediaState.error = ''
-      } else if (connection.connectionState === 'failed') {
-        failConnection(callID, token, new Error(translate('runtime.callAudioConnectionFailed')))
-      } else if (connection.connectionState === 'closed') {
-        failConnection(callID, token, new Error(translate('runtime.callAudioConnectionFailed')))
-      }
-    }
-
-    for (const track of pipeline.destination.stream.getAudioTracks()) {
-      connection.addTrack(track, pipeline.destination.stream)
-    }
-    const offer = await connection.createOffer()
-    await connection.setLocalDescription(offer)
-    await waitForICEGathering(connection)
-    if (generation !== token || currentCallID !== callID) return
-
-    const offerSDP = connection.localDescription?.sdp
-    if (!offerSDP) throw new Error(translate('runtime.audioOfferMissing'))
     callMediaState.status = 'connecting'
-    ownership.claimed = true
-    const answerSDP = await gateway.exchangeCallMedia(
-      callID,
-      ownership.ownerToken,
-      offerSDP,
-      signal
-    )
-    if (generation !== token || currentCallID !== callID) return
-    await connection.setRemoteDescription({ type: 'answer', sdp: answerSDP })
+    await establishPeer(callID, token, ownership, configuration, pipeline, signal)
   } catch (error) {
     if (pendingPipeline) stopMicrophonePipeline(pendingPipeline)
     else for (const track of pendingMicrophone?.getTracks() || []) track.stop()
