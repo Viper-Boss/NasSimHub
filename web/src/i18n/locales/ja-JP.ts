@@ -1469,6 +1469,7 @@ export default {
     "callActionFailed": "コールアクションが失敗しました",
     "dtmfFailed": "キーパッドトーンを送信できません",
     "requestFailed": "リクエストが失敗しました",
+    "httpStatusFailed": "サービスが一時的に利用できません（HTTP {status}）。しばらくしてから再試行してください。",
     "capabilityNotLoaded": "通信機能がロードされていません",
     "hostCapabilityMissing": "ホストエージェントはこの機能を提供しません",
     "callControlOnly": "通話操作は利用できますが、ブラウザー音声は利用できません",

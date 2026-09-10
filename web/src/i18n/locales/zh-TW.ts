@@ -1492,6 +1492,7 @@ export default {
     callActionFailed: '通話操作失敗',
     dtmfFailed: '無法傳送按鍵音',
     requestFailed: '請求失敗',
+    httpStatusFailed: '服務暫時無法使用（HTTP {status}），請稍後重試',
     capabilityNotLoaded: '通訊能力尚未載入',
     hostCapabilityMissing: 'Host agent 未提供此能力',
     callControlOnly: '線路支援通話控制，但瀏覽器音訊不可用',

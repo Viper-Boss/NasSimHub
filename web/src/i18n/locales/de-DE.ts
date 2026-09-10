@@ -1469,6 +1469,7 @@ export default {
     "callActionFailed": "Anrufaktion fehlgeschlagen",
     "dtmfFailed": "Tastaturtöne können nicht gesendet werden",
     "requestFailed": "Die Anfrage ist fehlgeschlagen",
+    "httpStatusFailed": "Dienst vorübergehend nicht verfügbar (HTTP {status}). Bitte später erneut versuchen.",
     "capabilityNotLoaded": "Kommunikationsfunktionen wurden nicht geladen",
     "hostCapabilityMissing": "Der Host-Agent bietet diese Funktion nicht",
     "callControlOnly": "Anrufsteuerung ist verfügbar, Browser-Audio jedoch nicht",

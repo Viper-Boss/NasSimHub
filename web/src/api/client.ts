@@ -185,6 +185,7 @@ import type {
   UserAccount
 } from './types'
 import { ApiError } from './types'
+import { translate } from '../i18n'
 
 const API_ROOT = '/api/v1'
 const READ_REQUEST_TIMEOUT_MS = 15_000
@@ -317,6 +318,23 @@ function errorDetails(value: unknown): ApiErrorBody | undefined {
     detail: stringProperty(source, 'detail'),
     field: stringProperty(source, 'field')
   }
+}
+
+// A reverse proxy in front of the origin can answer with its own error page
+// (for example an nginx "502 Bad Gateway" document) instead of our JSON error
+// envelope. Such a body is markup, never something to show a user, so only
+// plain-text bodies are returned verbatim. Everything else is reported through
+// the localized HTTP status message instead.
+const MAX_TEXT_ERROR_LENGTH = 300
+
+function plainTextErrorBody(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  if (!text) return undefined
+  if (/^[<{]/.test(text)) return undefined
+  return text.length > MAX_TEXT_ERROR_LENGTH
+    ? `${text.slice(0, MAX_TEXT_ERROR_LENGTH)}…`
+    : text
 }
 
 function parseSIMAutoUnlockResponse(value: unknown): SIMAutoUnlock {
@@ -1073,7 +1091,8 @@ async function requestWithResponse(
     const message =
       details?.message ||
       details?.detail ||
-      (typeof body === 'string' && body.trim() ? body.trim() : `请求失败（${response.status}）`)
+      plainTextErrorBody(body) ||
+      translate('runtime.httpStatusFailed', { status: response.status })
     throw new ApiError(message, response.status, details?.code, details?.field)
   }
   if (!statusExpected) {

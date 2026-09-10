@@ -1543,6 +1543,7 @@ export default {
     callActionFailed: 'Call action failed',
     dtmfFailed: 'Unable to send keypad tones',
     requestFailed: 'Request failed',
+    httpStatusFailed: 'Service temporarily unavailable (HTTP {status}). Please try again.',
     capabilityNotLoaded: 'Communication capabilities have not loaded',
     hostCapabilityMissing: 'The host agent does not provide this capability',
     callControlOnly: 'Call control is available, but browser audio is unavailable',

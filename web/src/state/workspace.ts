@@ -27,6 +27,7 @@ import type {
 } from '../api/types'
 import { ApiError } from '../api/types'
 import { translate } from '../i18n'
+import { reconcileDeviceConfigurationLines } from './deviceConfiguration'
 import { formatPhoneNumber } from '../utils/format'
 import { playOutgoingMessageSound } from './browserSounds'
 import { normalizedPhoneIdentity } from '../utils/lineIdentity'
@@ -480,6 +481,10 @@ export function loadBootstrap(force = false): Promise<BootstrapResponse | null> 
   if (bootstrapLoad) return bootstrapLoad
   bootstrapLoad = load(bootstrapResource, () => gateway.getBootstrap()).finally(() => {
     bootstrapLoad = undefined
+    const loadedLines = bootstrapResource.data?.lines
+    if (loadedLines) {
+      reconcileDeviceConfigurationLines(loadedLines.map(line => lineKey(line)))
+    }
   })
   return bootstrapLoad
 }
@@ -495,6 +500,7 @@ export function acceptRuntimeCommunicationState(
     bootstrapResource.status = 'ready'
     bootstrapResource.error = ''
   }
+  reconcileDeviceConfigurationLines(state.lines.map(line => lineKey(line)))
   if (state.devices) {
     devicesResource.data = state.devices
     devicesResource.status = 'ready'
@@ -697,6 +703,10 @@ export async function refreshDeviceWorkspace(): Promise<void> {
     })
   }
   await Promise.all([bootstrapRefresh, devicesRefresh])
+  const refreshedLines = bootstrapResource.data?.lines
+  if (refreshedLines) {
+    reconcileDeviceConfigurationLines(refreshedLines.map(line => lineKey(line)))
+  }
 }
 
 export async function createDevice(input: CreateDeviceInput): Promise<Device> {

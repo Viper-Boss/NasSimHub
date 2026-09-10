@@ -1469,6 +1469,7 @@ export default {
     "callActionFailed": "Falló la acción de llamada",
     "dtmfFailed": "No se pueden enviar tonos del teclado",
     "requestFailed": "Solicitud fallida",
+    "httpStatusFailed": "Servicio no disponible temporalmente (HTTP {status}). Inténtalo de nuevo más tarde.",
     "capabilityNotLoaded": "Las capacidades de comunicación no se han cargado",
     "hostCapabilityMissing": "El agente anfitrión no proporciona esta capacidad.",
     "callControlOnly": "El control de llamadas está disponible, pero el audio del navegador no",

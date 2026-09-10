@@ -252,6 +252,28 @@ export function selectDeviceConfiguration(lineID: string): void {
   deviceConfigurationState.selectedLineID = lineID.trim()
 }
 
+// The selected line can disappear from the server's line list, for example
+// while the modem is being re-enumerated during a host restart or a hardware
+// repair. Keeping a dead selection means every subsequent request answers
+// "line was not found", so the selection is dropped here and the identifiers
+// that no longer exist are pruned from the per-line resource cache.
+export function reconcileDeviceConfigurationLines(availableLineIDs: readonly string[]): void {
+  const available = new Set(
+    availableLineIDs.map(lineID => lineID.trim()).filter(lineID => lineID !== '')
+  )
+  const selected = deviceConfigurationState.selectedLineID
+  if (selected && !available.has(selected)) {
+    deviceConfigurationState.selectedLineID = ''
+  }
+  for (const lineID of Object.keys(deviceConfigurationState.resources)) {
+    if (available.has(lineID)) continue
+    delete deviceConfigurationState.resources[lineID]
+    deviceConfigurationLoads.delete(lineID)
+    deviceConfigurationGenerations.delete(lineID)
+    unconfirmedDeviceRecoveries.delete(lineID)
+  }
+}
+
 export function selectedDeviceConfiguration(): DeviceConfigurationResource | null {
   const lineID = deviceConfigurationState.selectedLineID
   return lineID ? resourceFor(lineID) : null

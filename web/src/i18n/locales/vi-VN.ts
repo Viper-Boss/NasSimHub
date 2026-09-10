@@ -1469,6 +1469,7 @@ export default {
     "callActionFailed": "Hành động gọi không thành công",
     "dtmfFailed": "Không thể gửi âm bàn phím",
     "requestFailed": "Yêu cầu không thành công",
+    "httpStatusFailed": "Dịch vụ tạm thời không khả dụng (HTTP {status}). Vui lòng thử lại sau.",
     "capabilityNotLoaded": "Khả năng giao tiếp chưa được tải",
     "hostCapabilityMissing": "Tác nhân chủ không cung cấp khả năng này",
     "callControlOnly": "Có thể điều khiển cuộc gọi nhưng âm thanh trình duyệt không khả dụng",

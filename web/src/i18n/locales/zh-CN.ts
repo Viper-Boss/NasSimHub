@@ -1507,6 +1507,7 @@ export default {
     callActionFailed: '通话操作失败',
     dtmfFailed: '无法发送按键音',
     requestFailed: '请求失败',
+    httpStatusFailed: '服务暂时不可用（HTTP {status}），请稍后重试',
     capabilityNotLoaded: '通信能力尚未载入',
     hostCapabilityMissing: 'Host agent 未提供此能力',
     callControlOnly: '线路支持通话控制，但浏览器音频不可用',
