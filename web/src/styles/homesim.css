@@ -144,6 +144,13 @@ body .dialer-panel .keypad__key:active:not(:disabled) { color: var(--accent); tr
 body .dialer-panel .keypad__key strong { font-size: 1.75rem; font-weight: 500; }
 body .dialer-panel .keypad__key small { font-size: .75rem; font-weight: 500; letter-spacing: .09em; }
 body .dialer-panel .call-button { box-shadow: 0 5px 24px color-mix(in srgb, var(--accent) 24%, transparent); background: linear-gradient(135deg, var(--hs-gradient-start), var(--accent)); }
+/* The hangup button must stay red: this rule outranks `.call-button--hangup`,
+   so the accent gradient above would otherwise repaint it blue. */
+body .dialer-panel .call-button--hangup {
+  background: var(--danger);
+  box-shadow: 0 5px 24px color-mix(in srgb, var(--danger) 34%, transparent);
+}
+body .dialer-panel .call-button--hangup:hover:not(:disabled) { background: var(--danger-strong, var(--danger)); }
 body .dialer-panel .dialer-number { font-variant-numeric: tabular-nums; letter-spacing: .025em; }
 
 /* Recordings and settings retain their existing actions and information layout. */
@@ -254,6 +261,8 @@ button.brand-mark {
 }
 .app-shell .message-row--outgoing .message-bubble span { color: #e0edff; }
 body .dialer-panel .call-button { background: linear-gradient(135deg, var(--hs-gradient-start), var(--hs-gradient-end)); color: #ffffff; }
+/* Keep the hangup action red in this theme variant too. */
+body .dialer-panel .call-button--hangup { background: var(--danger); color: #ffffff; }
 body .dialer-panel .keypad__key { border-radius: 50%; }
 .app-shell .module-card.is-selected { box-shadow: inset 4px 0 var(--accent), 0 0 0 1px var(--accent); }
 .app-shell .settings-list .list-item { margin: 4px 8px; width: calc(100% - 16px); border-radius: var(--radius-surface); min-height: 64px; }

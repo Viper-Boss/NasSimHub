@@ -9,12 +9,12 @@ import {
   Mic,
   MicOff,
   PhoneCall,
-  PhoneOff,
   RefreshCw,
   Square,
   Volume2,
   X
 } from '@lucide/vue'
+import { PhoneHangup } from './PhoneHangupIcon'
 import {
   answerCall,
   callState,
@@ -546,7 +546,7 @@ onBeforeUnmount(() => {
               @click="rejectCall"
             >
               <LoaderCircle v-if="callState.pendingAction === 'reject'" class="spin" :size="25" />
-              <PhoneOff v-else :size="25" />
+              <PhoneHangup v-else :size="25" />
             </button>
             <small>{{ t('calls.reject') }}</small>
           </span>
@@ -578,7 +578,7 @@ onBeforeUnmount(() => {
               @click="hangupCall"
             >
               <LoaderCircle v-if="callState.pendingAction === 'hangup'" class="spin" :size="25" />
-              <PhoneOff v-else :size="25" />
+              <PhoneHangup v-else :size="25" />
             </button>
             <small>{{ t('calls.hangup') }}</small>
           </span>
