@@ -29,6 +29,14 @@ import (
 // divergence — the modem holds more messages than ModemManager reports — and
 // performs the same bounded radio cycle the user would perform by hand, only
 // automatically and only when a message would otherwise stay lost.
+//
+// Measured behaviour worth remembering: right after a radio cycle the modem's
+// new-message indications work again — one message was reported 24 seconds
+// after the network sent it — and the reception degrades again within roughly
+// half an hour (the next login code stayed in storage for 79 seconds until the
+// next cycle). Why indications stop reaching ModemManager in between is still
+// unknown; that is why the recovery is reactive and does not cycle the radio on
+// a schedule.
 const (
 	smsStorageQuery = "AT+CPMS?"
 	smsServiceQuery = "AT+CGSMS?"
@@ -50,13 +58,15 @@ const (
 	// smsStorageSettleDelay is how long a divergence has to persist before the
 	// radio is cycled. ModemManager ingests and deletes a message it did learn
 	// about within a second, so a divergence that survives this delay is not
-	// part of the healthy pipeline.
-	smsStorageSettleDelay = 30 * time.Second
+	// part of the healthy pipeline. Kept short because the message being
+	// recovered is usually a login code with a five minute lifetime, and
+	// because a radio cycle only costs about two seconds (measured).
+	smsStorageSettleDelay = 10 * time.Second
 	// smsSendQuietWindow suppresses the detection right after the agent sent a
 	// message itself: that path stores the modem's own copy, which ModemManager
-	// drops from its object list, and the modem may keep it. The copy is not a
-	// message the user is waiting for.
-	smsSendQuietWindow = 2 * time.Minute
+	// drops from its object list, and the modem may keep it. The copy shows up
+	// within seconds of the send, so a short window is enough.
+	smsSendQuietWindow = time.Minute
 )
 
 // smsReachabilityState remembers what the previous pass saw about the modem's

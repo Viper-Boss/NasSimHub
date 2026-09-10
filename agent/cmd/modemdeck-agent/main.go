@@ -524,7 +524,10 @@ type smsReachabilityReconciler interface {
 // repeated radio cycles.
 func runSMSReachabilityReconciler(ctx context.Context, provider smsReachabilityReconciler) {
 	const attemptTimeout = 2 * time.Minute
-	const interval = time.Minute
+	// A stuck message is usually a login code with a five minute lifetime, and a
+	// radio cycle costs about two seconds, so this polls faster than the other
+	// reconcilers: the message surfaces within about half a minute.
+	const interval = 20 * time.Second
 	reconcile := func() {
 		attemptContext, cancel := context.WithTimeout(ctx, attemptTimeout)
 		if err := provider.ReconcileSMSReachability(attemptContext); err != nil &&
