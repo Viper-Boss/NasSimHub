@@ -217,9 +217,14 @@ test('dashboard entity grids retain stable desktop columns and card widths', () 
       /\.dashboard-module-grid > :deep\(\.module-card\),\s*\.dashboard-detail-list > \.dashboard-contact-row\s*\{([^}]*)\}/
     )?.[1] || ''
 
+  // Was minmax(320px, 420px). auto-fill counts tracks from the MAXIMUM of a
+  // definite minmax, so that asked "how many 420s fit" and answered one for
+  // every grid width from 420 to 851px -- measured 108px of dead space beside
+  // a lone card at 1024 and 46px at 1440. A 1fr maximum counts from the
+  // minimum instead, which is what the device settings panel has always done.
   assert.match(
     entityGridBlock,
-    /grid-template-columns: repeat\(auto-fill, minmax\(320px, 420px\)\)/
+    /grid-template-columns: repeat\(auto-fill, minmax\(min\(320px, 100%\), 1fr\)\)/
   )
   assert.match(entityGridBlock, /justify-content: start/)
   assert.match(entityCardBlock, /width: 100%/)

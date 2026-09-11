@@ -118,10 +118,10 @@ func (m *levelMeter) observe(pcm []byte) {
 		"modem call audio level",
 		"component", "media",
 		"direction", m.label,
-		"window_seconds", math.Round(elapsed.Seconds()*10) / 10,
+		"window_seconds", math.Round(elapsed.Seconds()*10)/10,
 		"samples", samples,
 		"peak", peak,
-		"rms_dbfs", math.Round(dbfsOf(rms)*10) / 10,
+		"rms_dbfs", math.Round(dbfsOf(rms)*10)/10,
 		"silent", rms == 0,
 	)
 }

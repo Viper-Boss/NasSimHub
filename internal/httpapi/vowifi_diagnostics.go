@@ -12,16 +12,16 @@ import (
 // when the agent or its diagnostics provider is unreachable, so the UI can
 // render a degraded state instead of failing hard.
 type vowifiDiagnosticsResponse struct {
-	ObservedAt    string                        `json:"observed_at"`
-	PLMN          string                        `json:"plmn,omitempty"`
-	EpdgFQDN      string                        `json:"epdg_fqdn,omitempty"`
-	OperatorName  string                        `json:"operator_name,omitempty"`
-	DataConnected bool                          `json:"data_connected"`
-	CellularPath  vowifiPathResponse            `json:"cellular_path"`
-	BroadbandPath vowifiPathResponse            `json:"broadband_path"`
-	Egress        vowifiEgressResponse          `json:"egress"`
-	Available     bool                          `json:"available"`
-	Error         string                        `json:"error,omitempty"`
+	ObservedAt    string               `json:"observed_at"`
+	PLMN          string               `json:"plmn,omitempty"`
+	EpdgFQDN      string               `json:"epdg_fqdn,omitempty"`
+	OperatorName  string               `json:"operator_name,omitempty"`
+	DataConnected bool                 `json:"data_connected"`
+	CellularPath  vowifiPathResponse   `json:"cellular_path"`
+	BroadbandPath vowifiPathResponse   `json:"broadband_path"`
+	Egress        vowifiEgressResponse `json:"egress"`
+	Available     bool                 `json:"available"`
+	Error         string               `json:"error,omitempty"`
 }
 
 type vowifiPathResponse struct {

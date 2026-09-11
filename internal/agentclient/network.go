@@ -144,12 +144,23 @@ func validateProxyConfigurations(proxies []ProxyConfiguration) error {
 	listeners := make(map[string]struct{}, len(proxies))
 	for _, proxy := range proxies {
 		id := strings.TrimSpace(proxy.ID)
+		// The egress decides whether a line identity is required at all: a
+		// WireGuard egress is not tied to a SIM, so it is pushed with an empty
+		// line and the agent binds its interface instead.
+		switch strings.TrimSpace(proxy.Egress) {
+		case "", "line":
+			if lineID := strings.TrimSpace(proxy.LineID); lineID == "" ||
+				len(lineID) > maxProxyLineIDBytes ||
+				containsControl(lineID) {
+				return ErrInvalidRequest
+			}
+		case "wireguard":
+		default:
+			return ErrInvalidRequest
+		}
 		if id == "" ||
 			len(id) > maxProxyIDBytes ||
 			!validProxyIdentifier(id) ||
-			strings.TrimSpace(proxy.LineID) == "" ||
-			len(strings.TrimSpace(proxy.LineID)) > maxProxyLineIDBytes ||
-			containsControl(strings.TrimSpace(proxy.LineID)) ||
 			strings.TrimSpace(proxy.ListenAddress) == "" ||
 			proxy.ListenPort < 1024 {
 			return ErrInvalidRequest

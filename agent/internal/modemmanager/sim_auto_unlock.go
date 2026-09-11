@@ -24,11 +24,11 @@ import (
 //   - When ModemManager reports the remaining PIN retry count and that count
 //     is 1, the attempt is skipped for the same reason.
 const (
-	simAutoUnlockBaseDelay     = 15 * time.Second
-	simAutoUnlockMaxDelay      = 10 * time.Minute
-	simAutoUnlockMaxAttempts   = 1
+	simAutoUnlockBaseDelay      = 15 * time.Second
+	simAutoUnlockMaxDelay       = 10 * time.Minute
+	simAutoUnlockMaxAttempts    = 1
 	simAutoUnlockMinSafeRetries = 2
-	simAutoUnlockLockCode      = uint32(2) // MM_MODEM_LOCK_SIM_PIN
+	simAutoUnlockLockCode       = uint32(2) // MM_MODEM_LOCK_SIM_PIN
 )
 
 type simAutoUnlockEntry struct {

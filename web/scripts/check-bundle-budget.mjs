@@ -10,7 +10,10 @@ const limits = {
   // transport by renegotiating with the same owner token (r76); the measured
   // worst case is 240.2 KiB, and the extra headroom keeps this guard from
   // tripping on the next small change that also lands in the startup shell.
-  initialGzip: 246 * kibibyte,
+  // 2026-09-12: 246 -> 248, the DHT mesh card joined the dashboard shell
+  // beside the network globe (Claude's 00:52 patch); measured worst case is
+  // 246.0 KiB, twenty bytes under the old line.
+  initialGzip: 248 * kibibyte,
   javascriptGzip: 100 * kibibyte,
   stylesheetGzip: 20 * kibibyte
 }

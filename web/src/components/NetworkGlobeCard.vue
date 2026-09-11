@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Globe } from '@lucide/vue'
+import { globeScopeNote } from '../i18n/networkCardNotes'
 import {
   arcAltitude,
   arcOpacity,
@@ -27,7 +28,18 @@ import {
 // a globe full of animated traffic that corresponds to nothing is worse than
 // no globe at all.
 
-const { t } = useI18n()
+const i18n = useI18n()
+const { t } = i18n
+
+// The scope note is a paragraph in nine languages shown in one card. It loads
+// with the dashboard rather than with the app; see networkCardNotes.
+watch(
+  i18n.locale,
+  locale => {
+    i18n.mergeLocaleMessage(locale, { dashboard: { globeScopeNote: globeScopeNote(locale) } })
+  },
+  { immediate: true, flush: 'sync' }
+)
 
 const peers = ref<NKNNetworkPeers | null>(null)
 const dht = ref<DHTStatus | null>(null)
@@ -394,9 +406,12 @@ function metric(value: number | null | undefined): string {
   font-size: 13px;
 }
 
+/* The stage takes any height the row forces on this card, so the globe stays
+   optically centred instead of the slack collecting under the legend. */
 .globe-card__stage {
   position: relative;
   display: grid;
+  flex: 1 1 auto;
   place-items: center;
   padding: 4px 0;
 }

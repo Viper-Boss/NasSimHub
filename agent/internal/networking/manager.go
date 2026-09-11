@@ -345,6 +345,11 @@ func (manager *Manager) observeNetwork(
 		allLineIDs[lineID] = struct{}{}
 	}
 	for lineID := range extraLineIDs {
+		// A tunnel proxy has no line to observe; an empty id would otherwise
+		// surface as a fake "absent from discovery" line in every snapshot.
+		if lineID == "" {
+			continue
+		}
 		allLineIDs[lineID] = struct{}{}
 	}
 	lineIDs := make([]string, 0, len(allLineIDs))

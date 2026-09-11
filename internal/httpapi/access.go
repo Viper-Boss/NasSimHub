@@ -28,7 +28,17 @@ func (api *API) requireLineAccess(
 
 func canAccessLine(ctx context.Context, lineID string) bool {
 	principal, exists := auth.PrincipalFromContext(ctx)
-	return !exists || principal.CanAccessLine(strings.TrimSpace(lineID))
+	if !exists {
+		return true
+	}
+	lineID = strings.TrimSpace(lineID)
+	// A proxy bound to no line at all (a WireGuard tunnel egress) sits outside
+	// line scoping: no SIM audience can describe it, so it follows the
+	// administrator instead.
+	if lineID == "" {
+		return principal.IsAdmin()
+	}
+	return principal.CanAccessLine(lineID)
 }
 
 func (api *API) requireCallAccess(

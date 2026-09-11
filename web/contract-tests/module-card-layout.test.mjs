@@ -22,9 +22,12 @@ test('dashboard keeps stable module-card tracks', () => {
     '.dashboard-module-grid,\n.dashboard-detail-list'
   )
 
+  // Tracks are counted from the minimum, not a fixed 420px maximum; see the
+  // note in dashboard-card-alignment.test.mjs for the measurements. This now
+  // matches .module-grid in the device panel below.
   assert.match(
     dashboardGrid,
-    /grid-template-columns: repeat\(auto-fill, minmax\(320px, 420px\)\)/
+    /grid-template-columns: repeat\(auto-fill, minmax\(min\(320px, 100%\), 1fr\)\)/
   )
   assert.match(dashboardGrid, /justify-content: start/)
   assert.match(dashboardGrid, /gap: 12px/)

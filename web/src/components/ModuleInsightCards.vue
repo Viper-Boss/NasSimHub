@@ -461,9 +461,16 @@ const radioFacts = computed<RadioFact[]>(() => {
   color: var(--text);
 }
 
+/* The body owns whatever height the row's tallest card forces on this one, and
+   space-between hands that height to the gaps rather than leaving it stranded
+   under the last row of figures. A card with a chart in it gives the slack to
+   the chart instead, since that grows (see .insight-net__chart); a card
+   without one simply breathes. Either way nothing reads as unfinished. */
 .insight-card__body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  justify-content: space-between;
   gap: 12px;
 }
 

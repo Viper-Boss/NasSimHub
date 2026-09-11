@@ -1170,6 +1170,13 @@ func (s *Service) bindNetworkSnapshot(
 	publicProxies := make([]agentclient.NetworkProxy, 0, len(snapshot.Proxies))
 	for _, proxy := range snapshot.Proxies {
 		endpointID := strings.TrimSpace(proxy.LineID)
+		if endpointID == "" {
+			// A tunnel proxy carries no line, so there is no endpoint to bind.
+			// It must stay in the public snapshot: dropping it hid a running
+			// proxy from the status view and logged a warning on every poll.
+			publicProxies = append(publicProxies, proxy)
+			continue
+		}
 		lineID := lineIDByEndpoint[endpointID]
 		if lineID == "" {
 			// A proxy whose endpoint is not attached cannot be presented with a

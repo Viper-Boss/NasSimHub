@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,6 +90,27 @@ func (api *API) sendMessage(response http.ResponseWriter, request *http.Request)
 	}
 	if !api.requireLineAccess(response, request, lineID) {
 		return
+	}
+	// Same anti-fraud shape as dialling: many DIFFERENT numbers in one day is
+	// what spam looks like, so texting the same people repeatedly is never
+	// limited. The message names the dial-pad unlock, because a refusal the
+	// operator cannot act on is just a dead end.
+	if guard, ok := api.messageGuardStore(); ok {
+		if guard.Attempt(input.To) {
+			writeError(
+				response,
+				http.StatusForbidden,
+				"fraud_guard",
+				"Today's limit of "+strconv.Itoa(messageGuardDailyLimit)+
+					" new recipients has been reached. Texting numbers you have already "+
+					"messaged today still works. This software exists to receive "+
+					"verification codes and to help students abroad save roaming fees; "+
+					"it is not for bulk or nuisance messaging. If this is your own "+
+					"number, type \"unlock\" on the dial pad to lift the limit.",
+				"",
+			)
+			return
+		}
 	}
 	message, err := api.communications.SendMessage(request.Context(), communication.SendMessageInput{
 		RequestID: requestID,

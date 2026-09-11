@@ -34,6 +34,7 @@ import MessageThreadListItem from '../components/MessageThreadListItem.vue'
 import ModuleCard from '../components/ModuleCard.vue'
 import ModuleInsightCards from '../components/ModuleInsightCards.vue'
 import NetworkGlobeCard from '../components/NetworkGlobeCard.vue'
+import DHTMeshCard from '../components/DHTMeshCard.vue'
 import WireGuardTrafficCard from '../components/WireGuardTrafficCard.vue'
 import { wireGuardUnlockState } from '../state/wireguardUnlock'
 import ListSkeleton from '../components/ListSkeleton.vue'
@@ -1228,26 +1229,38 @@ onBeforeUnmount(() => {
                 <Inbox :size="17" />
                 {{ t('dashboard.noLines') }}
               </div>
-              <div v-else class="dashboard-module-grid">
-              <template v-for="line in moduleLines" :key="lineKey(line)">
-                <ModuleCard
-                  :line="line"
-                  :device="deviceFor(line)"
-                  :runtime="networkRuntime(line)"
-                  :selectable="!line.module_only"
-                  :default-line="lineKey(line) === defaultLineID"
-                  @select="openLineSettings(line)"
-                />
-                <ModuleInsightCards
-                  v-if="line === moduleLines[0]"
-                  :line="line"
-                />
-                <NetworkGlobeCard v-if="line === moduleLines[0]" />
-                <WireGuardTrafficCard
-                  v-if="line === moduleLines[0] && wireGuardUnlockState.unlocked"
-                />
+              <!-- Two grids, not one, and the split is the fix for a ragged
+                   dashboard rather than a reorganisation for its own sake.
+                   Cards in a grid row can either size to their content, which
+                   leaves the bottoms ragged, or stretch to the tallest in the
+                   row, which leaves a void under the short ones. Neither is
+                   acceptable while a 300px modem card and a 560px network card
+                   can land side by side. Separating them by height class means
+                   every row holds cards of one kind, so stretching costs
+                   nothing and the bottoms line up. -->
+              <template v-else>
+                <div class="dashboard-module-grid">
+                  <template v-for="line in moduleLines" :key="lineKey(line)">
+                    <ModuleCard
+                      :line="line"
+                      :device="deviceFor(line)"
+                      :runtime="networkRuntime(line)"
+                      :selectable="!line.module_only"
+                      :default-line="lineKey(line) === defaultLineID"
+                      @select="openLineSettings(line)"
+                    />
+                    <ModuleInsightCards
+                      v-if="line === moduleLines[0]"
+                      :line="line"
+                    />
+                  </template>
+                </div>
+                <div class="dashboard-module-grid dashboard-module-grid--tall">
+                  <NetworkGlobeCard />
+                  <DHTMeshCard />
+                  <WireGuardTrafficCard v-if="wireGuardUnlockState.unlocked" />
+                </div>
               </template>
-              </div>
             </LoadingSkeletonBoundary>
           </section>
             </div>
@@ -1447,24 +1460,53 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+/* auto-fill counts tracks using the MAXIMUM of a definite minmax, so
+   minmax(320px, 420px) asks "how many 420s fit" and answers 1 for any width
+   from 420 to 851 -- one column, and up to 431px of dead space beside it. A
+   1fr maximum asks "how many 320s fit" instead and then shares the row out
+   between them, so a 684px column area holds two 336px cards rather than one
+   420px card and a void. The min() guards the other end: below 320px of
+   available width a bare 320px minimum overflows the container.
+
+   This is the same track the device settings panel has always used. The
+   dashboard was the outlier. */
 .dashboard-module-grid,
 .dashboard-detail-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 420px));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   justify-content: start;
   gap: 12px;
 }
 
-/* Cards size to their content instead of being stretched to the tallest one in
-   the row. Stretching is what left large voids under the shorter cards. */
+/* Cards in a row share a height, so their bottom edges line up. This is only
+   safe because the grids above hold one height class each: stretching a 300px
+   card to match a 560px one is what left the voids this used to avoid by
+   giving up on alignment altogether. */
 .dashboard-module-grid {
-  align-items: start;
+  align-items: stretch;
+}
+
+/* The second grid follows the first with the same gap between them as between
+   the cards, so the two read as one field of cards rather than two sections. */
+.dashboard-module-grid--tall {
+  margin-top: 12px;
 }
 
 .dashboard-module-grid > :deep(.module-card),
 .dashboard-detail-list > .dashboard-contact-row {
   width: 100%;
   max-width: 420px;
+}
+
+/* Cards fill their track. The 420px cap each of these carries is right when
+   the card stands on its own, but the track is already sized to fit the row,
+   so inside this grid a cap only leaves a hole to the right of a lone card --
+   which is what a single-column layout looked like at 1024 and 1440. */
+.dashboard-module-grid > :deep(.module-card),
+.dashboard-module-grid :deep(.insight-card),
+.dashboard-module-grid > :deep(.globe-card),
+.dashboard-module-grid > :deep(.mesh-card) {
+  max-width: none;
 }
 
 .dashboard-detail-list {

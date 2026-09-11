@@ -238,6 +238,10 @@ html:not([data-theme='light']) .setup-guard-notice { background: color-mix(in sr
   --blue: #a5b4fc; --blue-soft: #242b50;
   --hs-gradient-start: #0369a1; --hs-gradient-end: #4f46e5;
   --on-accent: #0b1726;
+  /* The DHT's own hue. It has to stay clearly apart from --accent, because the
+     two decentralised paths sit side by side and a reader must never have to
+     work out which card is which. */
+  --dht-hue: #b07cff;
 }
 html[data-theme='light'] {
   color-scheme: light;
@@ -253,6 +257,9 @@ html[data-theme='light'] {
   --favorite: #855500; --favorite-border: #b69039;
   --danger: #b32646; --danger-strong: #921f39; --danger-soft: #ffe8ed; --danger-border: #dca0ae; --danger-border-strong: #bc6077;
   --control-muted: #d4deea; --skeleton: #dfe7f0; --on-accent: #ffffff;
+  /* Darkened for a light ground: the dark theme's violet is too pale to read
+     as a line or a small dot on white. */
+  --dht-hue: #7c3aed;
   --shadow: 0 16px 40px rgb(24 42 72 / 10%); --shadow-lg: 0 24px 80px rgb(24 42 72 / 18%);
   /* Elevation reads inverted on a light ground: a soft coloured shadow does the
      lifting and the white top highlight would be invisible, so it is dropped. */

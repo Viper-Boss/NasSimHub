@@ -352,6 +352,8 @@ type API struct {
 	homeSIMNetworkSwitchesMu   sync.Mutex
 	callGuardOnce              sync.Once
 	callGuardInstance          *callGuard
+	messageGuardOnce           sync.Once
+	messageGuardInstance       *callGuard
 	simAutoUnlockMu            sync.Mutex
 	contactBackupDirectory     string
 	settingsSecrets            SecretBox

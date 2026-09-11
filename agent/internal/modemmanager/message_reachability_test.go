@@ -14,7 +14,7 @@ func TestSMSStorageUsageSkipsStatusReportStorage(t *testing.T) {
 		"+CPMS: \"ME\",0,23,\"ME\",0,23,\"ME\",0,23": 0,
 		// The first triple is the status report storage: a delivery report is
 		// not a reception, and ModemManager tracks it separately.
-		"+CPMS: \"SR\",4,5,\"ME\",1,23,\"ME\",1,23": 1,
+		"+CPMS: \"SR\",4,5,\"ME\",1,23,\"ME\",1,23":  1,
 		"+CPMS: \"ME\",2,23,\"ME\",2,23,\"ME\",2,23": 2,
 		"+CPMS: \"SM\",3,20,\"ME\",1,23,\"ME\",1,23": 3,
 	} {

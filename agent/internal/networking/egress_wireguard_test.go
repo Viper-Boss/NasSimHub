@@ -9,10 +9,10 @@ import (
 
 func wireGuardProxy() domain.ProxyConfiguration {
 	return domain.ProxyConfiguration{
-		ID:              "proxy-wg",
-		LineID:          "line-a",
-		Enabled:         true,
-		Mode:            domain.ProxyModeSOCKS5,
+		ID:      "proxy-wg",
+		LineID:  "line-a",
+		Enabled: true,
+		Mode:    domain.ProxyModeSOCKS5,
 		// A proxy listening on the LAN must require authentication; the
 		// normalizer enforces that, and this fixture has to honour it.
 		ListenAddress:   "192.168.1.10",
@@ -187,3 +187,26 @@ var errInterfaceMissingForTest = errTestInterfaceMissing{}
 type errTestInterfaceMissing struct{}
 
 func (errTestInterfaceMissing) Error() string { return "interface does not exist" }
+
+// A tunnel proxy is not tied to a SIM: it is pushed with an empty line_id, and
+// the normalizer must accept that instead of demanding a line it will never
+// use. The reverse still holds — a line proxy without a line is invalid.
+func TestWireGuardEgressCarriesNoLine(t *testing.T) {
+	input := wireGuardProxy()
+	input.LineID = ""
+
+	normalized, err := normalizeProxyConfiguration(input)
+	if err != nil {
+		t.Fatalf("a WireGuard egress with no line was rejected: %v", err)
+	}
+	if normalized.LineID != "" {
+		t.Fatalf("line_id = %q; want empty", normalized.LineID)
+	}
+
+	lineProxy := wireGuardProxy()
+	lineProxy.Egress = domain.ProxyEgressLine
+	lineProxy.LineID = ""
+	if _, err := normalizeProxyConfiguration(lineProxy); err == nil {
+		t.Fatal("a line proxy with no line was accepted")
+	}
+}

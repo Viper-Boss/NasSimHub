@@ -376,11 +376,11 @@ type ProxyInstanceRecord struct {
 	Egress          string
 	EgressInterface string
 	EgressDNS       []string
-	Revision           int64
-	AppliedRevision    int64
-	DesiredDeleted     bool
-	CreatedAt          string
-	UpdatedAt          string
+	Revision        int64
+	AppliedRevision int64
+	DesiredDeleted  bool
+	CreatedAt       string
+	UpdatedAt       string
 }
 
 type ProxyApplyToken struct {

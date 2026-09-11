@@ -316,3 +316,34 @@ func TestNetworkAllowsConnectedLineWithBearerErrorAndNoUsableInterface(t *testin
 		t.Fatalf("snapshot = %+v", snapshot)
 	}
 }
+
+// A WireGuard egress is pushed with an empty line_id (it is not tied to a SIM),
+// so validation must not demand one; a line egress still must have a line.
+func TestPutProxiesAcceptsTunnelProxyWithoutLine(t *testing.T) {
+	t.Parallel()
+
+	tunnel := ProxyConfiguration{
+		ID:              "proxy-wg",
+		Mode:            ProxyModeSOCKS5,
+		ListenAddress:   "127.0.0.1",
+		ListenPort:      1080,
+		Egress:          "wireguard",
+		EgressInterface: "wg-nassim",
+		EgressDNS:       []string{"10.77.0.2"},
+	}
+	if err := validateProxyConfigurations([]ProxyConfiguration{tunnel}); err != nil {
+		t.Fatalf("validateProxyConfigurations() rejected a tunnel proxy: %v", err)
+	}
+
+	lineless := tunnel
+	lineless.Egress = ""
+	if err := validateProxyConfigurations([]ProxyConfiguration{lineless}); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("validateProxyConfigurations() accepted a line proxy with no line: %v", err)
+	}
+
+	bogus := tunnel
+	bogus.Egress = "starlink"
+	if err := validateProxyConfigurations([]ProxyConfiguration{bogus}); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("validateProxyConfigurations() accepted an unknown egress: %v", err)
+	}
+}

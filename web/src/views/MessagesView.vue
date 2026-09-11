@@ -14,6 +14,8 @@ import {
   X
 } from '@lucide/vue'
 import BatchActionBar from '../components/BatchActionBar.vue'
+import { ApiError } from '../api/types'
+import { messageGuardMessages } from '../i18n/messageGuardMessages'
 import type { Contact, LineSummary, MessageThread } from '../api/types'
 import ContactHeaderIdentity from '../components/ContactHeaderIdentity.vue'
 import ContactNumberActions from '../components/ContactNumberActions.vue'
@@ -130,7 +132,8 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const i18n = useI18n()
+const { t } = i18n
 const search = ref('')
 const signatureFilter = ref('')
 const senderGroups = computed(() => signatureGroups(threadsResource.data))
@@ -153,7 +156,24 @@ const composeContextLineKey = ref(props.contextLineKey)
 const lineFilterKey = ref('all')
 const draft = ref('')
 const sending = ref(false)
+// The guard's copy loads with this view rather than with the app, and is
+// flushed synchronously so the first render has it rather than briefly
+// painting raw key names.
+watch(
+  i18n.locale,
+  locale => {
+    i18n.mergeLocaleMessage(locale, {
+      homesim: { fraudGuard: messageGuardMessages(locale) }
+    })
+  },
+  { immediate: true, flush: 'sync' }
+)
+
 const sendError = ref('')
+// The anti-fraud guard gets its own explanation rather than the raw server
+// string: the API answers in English for logs and other clients, and a refusal
+// the operator cannot read or act on is just a dead end.
+const smsGuardBlocked = ref(false)
 const threadDeleteError = ref('')
 const deletingThreadKey = ref('')
 const messagesViewport = ref<HTMLElement | null>(null)
@@ -420,6 +440,7 @@ watch(
       lineSelectionOverridden = false
       syncComposeLine(true)
       sendError.value = ''
+  smsGuardBlocked.value = false
       return
     }
     composingNew.value = false
@@ -629,6 +650,7 @@ function chooseThread(key: string): void {
   composeReturnThreadKey = ''
   draft.value = ''
   sendError.value = ''
+  smsGuardBlocked.value = false
   void router.push(messageThreadRoute(key, messageFilterQuery()))
 }
 
@@ -764,6 +786,7 @@ function startMessage(): void {
   syncComposeLine(true)
   draft.value = ''
   sendError.value = ''
+  smsGuardBlocked.value = false
   void router.push(
     messageComposeRoute(
       { recipient: '', name: '', lineKey: '' },
@@ -792,6 +815,7 @@ function backToList(): void {
   if (embedded.value) {
     draft.value = ''
     sendError.value = ''
+  smsGuardBlocked.value = false
     emit('close')
     return
   }
@@ -809,12 +833,14 @@ function viewExistingRecipientThread(): void {
 function changeSendingLine(): void {
   if (composingNew.value) lineSelectionOverridden = true
   sendError.value = ''
+  smsGuardBlocked.value = false
 }
 
 async function submit(): Promise<void> {
   if (sendDisabledReason.value || sending.value) return
   sending.value = true
   sendError.value = ''
+  smsGuardBlocked.value = false
   try {
     const replyKey = replyThreadKey.value
     const result = await sendMessage({
@@ -838,7 +864,15 @@ async function submit(): Promise<void> {
     }
     scrollToEnd()
   } catch (error) {
-    sendError.value = error instanceof Error ? error.message : t('messages.sendFailed')
+    if (error instanceof ApiError && error.code === 'fraud_guard') {
+      // The notice replaces the raw error rather than joining it: the server
+      // answers in English for logs and other clients, and showing both would
+      // say the same thing twice, once unreadably.
+      smsGuardBlocked.value = true
+      sendError.value = ''
+    } else {
+      sendError.value = error instanceof Error ? error.message : t('messages.sendFailed')
+    }
   } finally {
     sending.value = false
   }
@@ -1412,6 +1446,15 @@ onBeforeUnmount(() => {
           <p v-if="messageWriteUnavailable" class="unavailable-note">
             {{ messageWriteUnavailable }}
           </p>
+          <div v-else-if="smsGuardBlocked" class="sms-guard" role="alert">
+            <strong>{{ t('homesim.fraudGuard.smsTitle') }}</strong>
+            <p>{{ t('homesim.fraudGuard.smsBody') }}</p>
+            <p>{{ t('homesim.fraudGuard.smsDetail') }}</p>
+            <p class="sms-guard__hint">{{ t('homesim.fraudGuard.unlockHint') }}</p>
+            <button type="button" class="secondary-button" @click="smsGuardBlocked = false">
+              {{ t('homesim.fraudGuard.ack') }}
+            </button>
+          </div>
           <p v-else-if="sendError" class="field-error">{{ sendError }}</p>
         </footer>
         <footer v-else class="message-composer message-composer--readonly">
@@ -1551,4 +1594,37 @@ onBeforeUnmount(() => {
   }
 }
 
+/* The guard is an explanation, not an error: it reads as a notice rather than
+   a failure, because nothing went wrong -- the software did what it is for. */
+.sms-guard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-subtle);
+  font-size: 12px;
+}
+
+.sms-guard strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.sms-guard p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.sms-guard__hint {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.sms-guard button {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 </style>

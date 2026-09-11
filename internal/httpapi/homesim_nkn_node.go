@@ -44,10 +44,10 @@ const (
 	// http://host.docker.internal:30003 (host-gateway); plain-host installs
 	// keep the loopback default.
 	nknNodeRPCAddressEnv = "HOMESIM_NKN_NODE_RPC"
-	nknNodeLogCap       = 400
-	nknNodeRestartDelay = 5 * time.Second
-	nknNodeStopGrace    = 8 * time.Second
-	nknWebSource        = "/usr/local/lib/nkn/web"
+	nknNodeLogCap        = 400
+	nknNodeRestartDelay  = 5 * time.Second
+	nknNodeStopGrace     = 8 * time.Second
+	nknWebSource         = "/usr/local/lib/nkn/web"
 
 	nknNodeStateUnavailable = "unavailable"
 	nknNodeStateStopped     = "stopped"

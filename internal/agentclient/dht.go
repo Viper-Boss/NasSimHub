@@ -37,12 +37,12 @@ type DHTConfig struct {
 }
 
 type DHTStatus struct {
-	State               DHTState  `json:"state"`
-	PeerID              string    `json:"peer_id,omitempty"`
-	Addresses           []string  `json:"addresses,omitempty"`
-	ConnectedPeers      int       `json:"connected_peers"`
-	RoutingPeers        int       `json:"routing_peers"`
-	BootstrapConfigured bool `json:"bootstrap_configured"`
+	State               DHTState `json:"state"`
+	PeerID              string   `json:"peer_id,omitempty"`
+	Addresses           []string `json:"addresses,omitempty"`
+	ConnectedPeers      int      `json:"connected_peers"`
+	RoutingPeers        int      `json:"routing_peers"`
+	BootstrapConfigured bool     `json:"bootstrap_configured"`
 	// LANDiscovery and LANPeers explain a lot about why a node did or did not
 	// find anybody, which is otherwise invisible.
 	LANDiscovery bool      `json:"lan_discovery"`

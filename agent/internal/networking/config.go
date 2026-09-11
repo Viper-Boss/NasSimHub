@@ -101,8 +101,7 @@ func normalizeProxyConfiguration(
 		)
 	}
 	configuration.LineID = strings.TrimSpace(configuration.LineID)
-	if configuration.LineID == "" ||
-		len(configuration.LineID) > maxLineIDLength ||
+	if len(configuration.LineID) > maxLineIDLength ||
 		containsControl(configuration.LineID) {
 		return domain.ProxyConfiguration{}, fmt.Errorf(
 			"line_id must be 1-%d printable characters",
@@ -155,6 +154,14 @@ func normalizeProxyConfiguration(
 		return domain.ProxyConfiguration{}, fmt.Errorf("egress must be line or wireguard")
 	}
 	if configuration.Egress == domain.ProxyEgressLine {
+		// A line proxy is nothing without its line; a tunnel proxy arrives
+		// with none by design.
+		if configuration.LineID == "" {
+			return domain.ProxyConfiguration{}, fmt.Errorf(
+				"line_id must be 1-%d printable characters",
+				maxLineIDLength,
+			)
+		}
 		configuration.EgressInterface = ""
 		configuration.EgressDNS = nil
 	}

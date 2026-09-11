@@ -13,14 +13,14 @@ const APNTypeDefault uint32 = 1 << 1
 type DeviceConfigurationOperation string
 
 const (
-	DeviceConfigurationSetRadioEnabled DeviceConfigurationOperation = "set_radio_enabled"
-	DeviceConfigurationConnectData     DeviceConfigurationOperation = "connect_data"
-	DeviceConfigurationDisconnectData  DeviceConfigurationOperation = "disconnect_data"
-	DeviceConfigurationSetVoLTEPolicy  DeviceConfigurationOperation = "set_volte_policy"
-	DeviceConfigurationReprobeVoice    DeviceConfigurationOperation = "reprobe_voice"
-	DeviceConfigurationRestartModem    DeviceConfigurationOperation = "restart_modem"
-	DeviceConfigurationResetUSB        DeviceConfigurationOperation = "reset_usb"
-	DeviceConfigurationRepairVoiceUSB  DeviceConfigurationOperation = "repair_voice_usb"
+	DeviceConfigurationSetRadioEnabled    DeviceConfigurationOperation = "set_radio_enabled"
+	DeviceConfigurationConnectData        DeviceConfigurationOperation = "connect_data"
+	DeviceConfigurationDisconnectData     DeviceConfigurationOperation = "disconnect_data"
+	DeviceConfigurationSetVoLTEPolicy     DeviceConfigurationOperation = "set_volte_policy"
+	DeviceConfigurationReprobeVoice       DeviceConfigurationOperation = "reprobe_voice"
+	DeviceConfigurationRestartModem       DeviceConfigurationOperation = "restart_modem"
+	DeviceConfigurationResetUSB           DeviceConfigurationOperation = "reset_usb"
+	DeviceConfigurationRepairVoiceUSB     DeviceConfigurationOperation = "repair_voice_usb"
 	DeviceConfigurationReleaseHijackedUSB DeviceConfigurationOperation = "release_hijacked_usb"
 )
 
