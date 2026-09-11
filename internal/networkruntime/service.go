@@ -21,12 +21,17 @@ import (
 )
 
 const (
-	DefaultInterval       = 5 * time.Second
-	DefaultApplyAttempts  = 3
-	maxProxyCount         = 64
-	maxProxyIDLength      = 64
-	maxProxyNameRunes     = 100
-	maxLineIDLength       = 128
+	DefaultInterval          = 5 * time.Second
+	DefaultApplyAttempts     = 3
+	maxProxyCount            = 64
+	maxProxyIDLength         = 64
+	maxProxyNameRunes        = 100
+	maxLineIDLength          = 128
+	maxInterfaceNameLength   = 15
+	maxProxyEgressDNSServers = 4
+
+	proxyEgressLine       = "line"
+	proxyEgressWireGuard  = "wireguard"
 	maxUsernameBytes      = 128
 	maxPasswordBytes      = 512
 	maxSOCKS5SecretBytes  = 255
@@ -119,6 +124,9 @@ type Proxy struct {
 	AuthEnabled     bool                  `json:"auth_enabled"`
 	Username        string                `json:"username"`
 	HasPassword     bool                  `json:"has_password"`
+	Egress          string                `json:"egress"`
+	EgressInterface string                `json:"egress_interface,omitempty"`
+	EgressDNS       []string              `json:"egress_dns,omitempty"`
 	Revision        int64                 `json:"revision"`
 	AppliedRevision int64                 `json:"applied_revision"`
 	ApplyState      ProxyApplyState       `json:"apply_state"`
@@ -146,6 +154,10 @@ type CreateInput struct {
 	AuthEnabled   bool
 	Username      string
 	Password      string
+
+	Egress          string
+	EgressInterface string
+	EgressDNS       []string
 }
 
 type UpdateInput struct {
@@ -159,6 +171,10 @@ type UpdateInput struct {
 	AuthEnabled   *bool
 	Username      *string
 	Password      *string
+
+	Egress          *string
+	EgressInterface *string
+	EgressDNS       *[]string
 }
 
 type ApplyStatus string
@@ -619,15 +635,18 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (ProxyMutation,
 	}
 
 	record, err := s.buildRecord(id, store.ProxyInstanceRecord{}, proxyFields{
-		Name:          input.Name,
-		LineID:        input.LineID,
-		Enabled:       input.Enabled,
-		Mode:          input.Mode,
-		ListenAddress: input.ListenAddress,
-		ListenPort:    input.ListenPort,
-		AuthEnabled:   input.AuthEnabled,
-		Username:      input.Username,
-		Password:      &input.Password,
+		Name:            input.Name,
+		LineID:          input.LineID,
+		Enabled:         input.Enabled,
+		Mode:            input.Mode,
+		ListenAddress:   input.ListenAddress,
+		ListenPort:      input.ListenPort,
+		AuthEnabled:     input.AuthEnabled,
+		Username:        input.Username,
+		Password:        &input.Password,
+		Egress:          input.Egress,
+		EgressInterface: input.EgressInterface,
+		EgressDNS:       input.EgressDNS,
 	})
 	if err != nil {
 		return ProxyMutation{}, err
@@ -695,15 +714,27 @@ func (s *Service) Update(
 		)
 	}
 	fields := proxyFields{
-		Name:          current.Name,
-		LineID:        current.LineID,
-		Enabled:       current.Enabled,
-		Mode:          agentclient.ProxyMode(current.Mode),
-		ListenAddress: current.ListenAddress,
-		ListenPort:    current.ListenPort,
-		AuthEnabled:   current.AuthEnabled,
-		Username:      current.Username,
-		Password:      input.Password,
+		Name:            current.Name,
+		LineID:          current.LineID,
+		Enabled:         current.Enabled,
+		Mode:            agentclient.ProxyMode(current.Mode),
+		ListenAddress:   current.ListenAddress,
+		ListenPort:      current.ListenPort,
+		AuthEnabled:     current.AuthEnabled,
+		Username:        current.Username,
+		Password:        input.Password,
+		Egress:          current.Egress,
+		EgressInterface: current.EgressInterface,
+		EgressDNS:       current.EgressDNS,
+	}
+	if input.Egress != nil {
+		fields.Egress = *input.Egress
+	}
+	if input.EgressInterface != nil {
+		fields.EgressInterface = *input.EgressInterface
+	}
+	if input.EgressDNS != nil {
+		fields.EgressDNS = *input.EgressDNS
 	}
 	if input.Name != nil {
 		fields.Name = *input.Name
@@ -788,6 +819,10 @@ type proxyFields struct {
 	AuthEnabled   bool
 	Username      string
 	Password      *string
+
+	Egress          string
+	EgressInterface string
+	EgressDNS       []string
 }
 
 func (s *Service) buildRecord(
@@ -805,14 +840,70 @@ func (s *Service) buildRecord(
 		)
 	}
 	lineID := strings.TrimSpace(fields.LineID)
-	if lineID == "" || len(lineID) > maxLineIDLength || containsControl(lineID) {
-		return store.ProxyInstanceRecord{}, invalid("line_id", "Line ID is invalid")
-	}
 	if fields.Mode != agentclient.ProxyModeSOCKS5 &&
 		fields.Mode != agentclient.ProxyModeHTTP {
 		return store.ProxyInstanceRecord{}, invalid(
 			"mode",
 			"Proxy mode must be socks5 or http",
+		)
+	}
+	egress := strings.ToLower(strings.TrimSpace(fields.Egress))
+	if egress == "" {
+		egress = proxyEgressLine
+	}
+	egressInterface := strings.TrimSpace(fields.EgressInterface)
+	egressDNS := make([]string, 0, len(fields.EgressDNS))
+	switch egress {
+	case proxyEgressLine:
+		if lineID == "" || len(lineID) > maxLineIDLength || containsControl(lineID) {
+			return store.ProxyInstanceRecord{}, invalid("line_id", "Line ID is invalid")
+		}
+		// A line proxy keeps no tunnel settings, so a stale interface name
+		// cannot be resurrected by a later edit.
+		egressInterface = ""
+		egressDNS = nil
+	case proxyEgressWireGuard:
+		// A tunnel proxy is not tied to a SIM, so it carries no line. Requiring
+		// one would put a meaningless "which SIM?" choice in front of the
+		// operator and make the proxy fail whenever that SIM went away.
+		lineID = ""
+		if egressInterface == "" || len(egressInterface) > maxInterfaceNameLength ||
+			containsControl(egressInterface) || strings.ContainsAny(egressInterface, " /") {
+			return store.ProxyInstanceRecord{}, invalid(
+				"egress_interface",
+				"WireGuard interface name is invalid",
+			)
+		}
+		// Name lookups have to leave through the tunnel too. A resolver that is
+		// only reachable on the modem side would reveal what the LAN device is
+		// browsing even while its traffic went through the tunnel, so this is
+		// required rather than defaulted.
+		if len(fields.EgressDNS) == 0 {
+			return store.ProxyInstanceRecord{}, invalid(
+				"egress_dns",
+				"A WireGuard egress needs its own DNS servers so lookups go through the tunnel",
+			)
+		}
+		if len(fields.EgressDNS) > maxProxyEgressDNSServers {
+			return store.ProxyInstanceRecord{}, invalid(
+				"egress_dns",
+				"At most 4 DNS servers",
+			)
+		}
+		for _, server := range fields.EgressDNS {
+			server = strings.TrimSpace(server)
+			if net.ParseIP(server) == nil {
+				return store.ProxyInstanceRecord{}, invalid(
+					"egress_dns",
+					"Each DNS server must be an IP address",
+				)
+			}
+			egressDNS = append(egressDNS, server)
+		}
+	default:
+		return store.ProxyInstanceRecord{}, invalid(
+			"egress",
+			"Proxy egress must be line or wireguard",
 		)
 	}
 	if fields.ListenPort < 1024 {
@@ -838,12 +929,15 @@ func (s *Service) buildRecord(
 	record := current
 	record.ID = id
 	record.Name = name
-	record.LineID = lineID
 	record.Enabled = fields.Enabled
 	record.Mode = string(fields.Mode)
 	record.ListenAddress = listenIP.String()
 	record.ListenPort = fields.ListenPort
 	record.AuthEnabled = fields.AuthEnabled
+	record.LineID = lineID
+	record.Egress = egress
+	record.EgressInterface = egressInterface
+	record.EgressDNS = egressDNS
 
 	if !fields.AuthEnabled {
 		if strings.TrimSpace(fields.Username) != "" ||
@@ -941,23 +1035,32 @@ func (s *Service) desiredProxy(
 	ctx context.Context,
 	record store.ProxyInstanceRecord,
 ) (agentclient.ProxyConfiguration, error) {
-	endpointID, err := s.repository.ResolveLineEndpoint(ctx, record.LineID)
-	if err != nil {
-		return agentclient.ProxyConfiguration{}, fmt.Errorf(
-			"resolve proxy %q line endpoint: %w",
-			record.ID,
-			err,
-		)
+	endpointID := ""
+	// A WireGuard proxy has no line to resolve. Looking one up anyway would make
+	// the whole proxy sync fail on a record that never needed a SIM.
+	if record.Egress != proxyEgressWireGuard {
+		resolved, err := s.repository.ResolveLineEndpoint(ctx, record.LineID)
+		if err != nil {
+			return agentclient.ProxyConfiguration{}, fmt.Errorf(
+				"resolve proxy %q line endpoint: %w",
+				record.ID,
+				err,
+			)
+		}
+		endpointID = resolved
 	}
 	proxy := agentclient.ProxyConfiguration{
-		ID:            record.ID,
-		LineID:        endpointID,
-		Enabled:       record.Enabled,
-		Mode:          agentclient.ProxyMode(record.Mode),
-		ListenAddress: record.ListenAddress,
-		ListenPort:    record.ListenPort,
-		AuthEnabled:   record.AuthEnabled,
-		Username:      record.Username,
+		ID:              record.ID,
+		LineID:          endpointID,
+		Enabled:         record.Enabled,
+		Mode:            agentclient.ProxyMode(record.Mode),
+		ListenAddress:   record.ListenAddress,
+		ListenPort:      record.ListenPort,
+		AuthEnabled:     record.AuthEnabled,
+		Username:        record.Username,
+		Egress:          record.Egress,
+		EgressInterface: record.EgressInterface,
+		EgressDNS:       record.EgressDNS,
 	}
 	if !record.AuthEnabled {
 		return proxy, nil
@@ -1264,6 +1367,9 @@ func publicProxy(record store.ProxyInstanceRecord) Proxy {
 		AuthEnabled:     record.AuthEnabled,
 		Username:        record.Username,
 		HasPassword:     len(record.PasswordNonce) > 0 && len(record.PasswordCiphertext) > 0,
+		Egress:          record.Egress,
+		EgressInterface: record.EgressInterface,
+		EgressDNS:       record.EgressDNS,
 		Revision:        record.Revision,
 		AppliedRevision: record.AppliedRevision,
 		ApplyState:      proxyApplyState(record),

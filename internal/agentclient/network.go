@@ -44,6 +44,12 @@ type ProxyConfiguration struct {
 	AuthEnabled   bool      `json:"auth_enabled"`
 	Username      string    `json:"username,omitempty"`
 	Password      string    `json:"password,omitempty"`
+
+	// Egress selects the outbound path: "line" (a modem data bearer, the
+	// default and the only option before WireGuard) or "wireguard".
+	Egress          string   `json:"egress,omitempty"`
+	EgressInterface string   `json:"egress_interface,omitempty"`
+	EgressDNS       []string `json:"egress_dns,omitempty"`
 }
 
 type NetworkLine struct {

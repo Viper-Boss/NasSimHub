@@ -433,6 +433,10 @@ CREATE TABLE modemdeck_proxy_instances (
 			username TEXT NOT NULL DEFAULT '',
 			password_nonce BLOB NOT NULL DEFAULT X'',
 			password_ciphertext BLOB NOT NULL DEFAULT X'',
+			egress TEXT NOT NULL DEFAULT 'line'
+				CHECK (egress IN ('line', 'wireguard')),
+			egress_interface TEXT NOT NULL DEFAULT '',
+			egress_dns TEXT NOT NULL DEFAULT '',
 			revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
 			applied_revision INTEGER NOT NULL DEFAULT 0
 				CHECK (applied_revision >= 0 AND applied_revision <= revision),

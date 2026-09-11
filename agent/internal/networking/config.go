@@ -19,6 +19,7 @@ const (
 	maxProxyCount         = 64
 	maxProxyIDLength      = 64
 	maxLineIDLength       = 128
+	maxEgressDNSServers   = 4
 	maxUsernameLength     = 128
 	maxPasswordLength     = 512
 	apnTypeDefault        = domain.APNTypeDefault
@@ -107,6 +108,55 @@ func normalizeProxyConfiguration(
 			"line_id must be 1-%d printable characters",
 			maxLineIDLength,
 		)
+	}
+
+	// Egress: empty means a modem line, so every configuration written before
+	// WireGuard existed keeps its old behaviour.
+	configuration.Egress = domain.ProxyEgress(
+		strings.ToLower(strings.TrimSpace(string(configuration.Egress))),
+	)
+	switch configuration.Egress {
+	case "":
+		configuration.Egress = domain.ProxyEgressLine
+	case domain.ProxyEgressLine:
+	case domain.ProxyEgressWireGuard:
+		configuration.EgressInterface = strings.TrimSpace(configuration.EgressInterface)
+		if err := validateInterfaceName(configuration.EgressInterface); err != nil {
+			return domain.ProxyConfiguration{}, fmt.Errorf("egress_interface is invalid: %w", err)
+		}
+		// A resolver that is only reachable on the modem side would send every
+		// lookup out the wrong path while the traffic itself goes through the
+		// tunnel, which leaks what the LAN device is browsing. So there is no
+		// default: the operator has to say which resolver lives past the tunnel.
+		if len(configuration.EgressDNS) == 0 {
+			return domain.ProxyConfiguration{}, fmt.Errorf(
+				"egress_dns is required for a WireGuard egress: name lookups must go through the tunnel too",
+			)
+		}
+		if len(configuration.EgressDNS) > maxEgressDNSServers {
+			return domain.ProxyConfiguration{}, fmt.Errorf(
+				"egress_dns accepts at most %d servers",
+				maxEgressDNSServers,
+			)
+		}
+		cleaned := make([]string, 0, len(configuration.EgressDNS))
+		for _, server := range configuration.EgressDNS {
+			server = strings.TrimSpace(server)
+			if net.ParseIP(server) == nil {
+				return domain.ProxyConfiguration{}, fmt.Errorf(
+					"egress_dns entry %q is not an IP address",
+					server,
+				)
+			}
+			cleaned = append(cleaned, server)
+		}
+		configuration.EgressDNS = cleaned
+	default:
+		return domain.ProxyConfiguration{}, fmt.Errorf("egress must be line or wireguard")
+	}
+	if configuration.Egress == domain.ProxyEgressLine {
+		configuration.EgressInterface = ""
+		configuration.EgressDNS = nil
 	}
 
 	configuration.Mode = domain.ProxyMode(
@@ -486,4 +536,35 @@ func containsControl(value string) bool {
 		}
 	}
 	return false
+}
+
+// sameProxyConfiguration reports whether two configurations are identical.
+//
+// This used to be a plain `==`, which the compiler allowed only while every
+// field was comparable. It is spelled out here so that adding a field forces a
+// decision about whether a change to it should restart the proxy — silently
+// skipping a new field would leave a running proxy on stale settings.
+func sameProxyConfiguration(a domain.ProxyConfiguration, b domain.ProxyConfiguration) bool {
+	if a.ID != b.ID ||
+		a.LineID != b.LineID ||
+		a.Enabled != b.Enabled ||
+		a.Mode != b.Mode ||
+		a.ListenAddress != b.ListenAddress ||
+		a.ListenPort != b.ListenPort ||
+		a.AuthEnabled != b.AuthEnabled ||
+		a.Username != b.Username ||
+		a.Password != b.Password ||
+		a.Egress != b.Egress ||
+		a.EgressInterface != b.EgressInterface {
+		return false
+	}
+	if len(a.EgressDNS) != len(b.EgressDNS) {
+		return false
+	}
+	for index := range a.EgressDNS {
+		if a.EgressDNS[index] != b.EgressDNS[index] {
+			return false
+		}
+	}
+	return true
 }

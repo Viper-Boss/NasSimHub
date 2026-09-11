@@ -163,7 +163,7 @@ func (manager *Manager) ApplyProxySet(
 		if resolution.connected &&
 			current != nil &&
 			current.state == domain.ProxyStateRunning &&
-			current.configuration == configuration &&
+			sameProxyConfiguration(current.configuration, configuration) &&
 			current.bearer.fingerprint() == resolution.bearer.fingerprint() &&
 			current.runner != nil &&
 			current.runner.Running() &&
@@ -374,6 +374,31 @@ func (manager *Manager) resolveDesiredBearers(
 	result := make(map[string]bearerResolution, len(configurations))
 	for _, configuration := range configurations {
 		if !configuration.Enabled {
+			continue
+		}
+		// A WireGuard egress does not depend on a modem line at all: the
+		// interface either exists and is up, or the proxy waits. Routing it
+		// through the line lookup would make a tunnel proxy fail whenever the
+		// SIM happened to be offline, which is precisely the case it exists for.
+		if configuration.Egress == domain.ProxyEgressWireGuard {
+			tunnel := bearer{
+				ConnectionID: "wireguard:" + configuration.EgressInterface,
+				Interface:    configuration.EgressInterface,
+				DNS:          configuration.EgressDNS,
+				IPv4Expected: true,
+			}
+			tunnelResolution := bearerResolution{}
+			if err := manager.interfaceReadiness(tunnel); err != nil {
+				tunnelResolution.waitReason = fmt.Sprintf(
+					"WireGuard interface %q is not ready: %v",
+					configuration.EgressInterface,
+					err,
+				)
+			} else {
+				tunnelResolution.bearer = tunnel
+				tunnelResolution.connected = true
+			}
+			result[configuration.ID] = tunnelResolution
 			continue
 		}
 		resolution, exists := byLine[configuration.LineID]

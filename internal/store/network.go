@@ -21,6 +21,7 @@ func (s *Store) ProxyInstances(ctx context.Context) ([]ProxyInstanceRecord, erro
 		ctx,
 		`SELECT id, name, line_id, enabled, mode, listen_address, listen_port,
 		        auth_enabled, username, password_nonce, password_ciphertext,
+		        egress, egress_interface, egress_dns,
 		        revision, applied_revision, desired_deleted, created_at, updated_at
 		 FROM modemdeck_proxy_instances
 		 ORDER BY lower(name), id`,
@@ -53,6 +54,7 @@ func (s *Store) ProxyInstance(ctx context.Context, id string) (ProxyInstanceReco
 		ctx,
 		`SELECT id, name, line_id, enabled, mode, listen_address, listen_port,
 		        auth_enabled, username, password_nonce, password_ciphertext,
+		        egress, egress_interface, egress_dns,
 		        revision, applied_revision, desired_deleted, created_at, updated_at
 		 FROM modemdeck_proxy_instances
 		 WHERE id = ?`,
@@ -78,9 +80,10 @@ func (s *Store) CreateProxyInstance(
 		ctx,
 		`INSERT INTO modemdeck_proxy_instances (
 				id, name, line_id, enabled, mode, listen_address, listen_port,
-				auth_enabled, username, password_nonce, password_ciphertext, revision,
+				auth_enabled, username, password_nonce, password_ciphertext,
+				egress, egress_interface, egress_dns, revision,
 				applied_revision, desired_deleted, created_at, updated_at
-			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
+			 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0,
 			           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
 		instance.ID,
 		instance.Name,
@@ -93,6 +96,9 @@ func (s *Store) CreateProxyInstance(
 		instance.Username,
 		nonNilBlob(instance.PasswordNonce),
 		nonNilBlob(instance.PasswordCiphertext),
+		normalizedEgress(instance.Egress),
+		instance.EgressInterface,
+		joinEgressDNS(instance.EgressDNS),
 	)
 	if err != nil {
 		return ProxyInstanceRecord{}, fmt.Errorf("create proxy instance: %w", err)
@@ -124,6 +130,9 @@ func (s *Store) UpdateProxyInstance(
 		     username = ?,
 		     password_nonce = ?,
 		     password_ciphertext = ?,
+		     egress = ?,
+		     egress_interface = ?,
+		     egress_dns = ?,
 		     revision = revision + 1,
 		     updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND revision = ?`,
@@ -137,6 +146,9 @@ func (s *Store) UpdateProxyInstance(
 		instance.Username,
 		nonNilBlob(instance.PasswordNonce),
 		nonNilBlob(instance.PasswordCiphertext),
+		normalizedEgress(instance.Egress),
+		instance.EgressInterface,
+		joinEgressDNS(instance.EgressDNS),
 		id,
 		expectedRevision,
 	)
@@ -462,6 +474,7 @@ func scanProxyInstance(scanner proxyInstanceScanner) (ProxyInstanceRecord, error
 		listenPort, revision, appliedRev    sql.NullInt64
 		createdAt, updatedAt                sql.NullString
 		passwordNonce, passwordCipher       []byte
+		egress, egressInterface, egressDNS  sql.NullString
 	)
 	if err := scanner.Scan(
 		&instance.ID,
@@ -475,6 +488,9 @@ func scanProxyInstance(scanner proxyInstanceScanner) (ProxyInstanceRecord, error
 		&instance.Username,
 		&passwordNonce,
 		&passwordCipher,
+		&egress,
+		&egressInterface,
+		&egressDNS,
 		&revision,
 		&appliedRev,
 		&desiredDelete,
@@ -486,6 +502,12 @@ func scanProxyInstance(scanner proxyInstanceScanner) (ProxyInstanceRecord, error
 	instance.Enabled = boolValue(enabled)
 	instance.ListenPort = uint16(intValue(listenPort))
 	instance.AuthEnabled = boolValue(authEnabled)
+	instance.Egress = strings.TrimSpace(egress.String)
+	if instance.Egress == "" {
+		instance.Egress = "line"
+	}
+	instance.EgressInterface = strings.TrimSpace(egressInterface.String)
+	instance.EgressDNS = splitEgressDNS(egressDNS.String)
 	instance.PasswordNonce = append([]byte(nil), passwordNonce...)
 	instance.PasswordCiphertext = append([]byte(nil), passwordCipher...)
 	instance.Revision = intValue(revision)
@@ -671,4 +693,50 @@ func nonNilBlob(value []byte) []byte {
 		return []byte{}
 	}
 	return value
+}
+
+// Egress resolvers are stored as a comma-separated list in one column. Blank
+// entries are dropped rather than kept as empty strings, so a trailing comma in
+// stored data cannot turn into a resolver named "".
+func splitEgressDNS(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	servers := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			servers = append(servers, part)
+		}
+	}
+	if len(servers) == 0 {
+		return nil
+	}
+	return servers
+}
+
+func joinEgressDNS(servers []string) string {
+	cleaned := make([]string, 0, len(servers))
+	for _, server := range servers {
+		server = strings.TrimSpace(server)
+		if server != "" {
+			cleaned = append(cleaned, server)
+		}
+	}
+	return strings.Join(cleaned, ",")
+}
+
+// normalizedEgress keeps the column within the values the schema's CHECK
+// constraint allows. An unknown value becomes "line" rather than failing the
+// write, because "line" is what the row would have done before this column
+// existed.
+func normalizedEgress(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "wireguard":
+		return "wireguard"
+	default:
+		return "line"
+	}
 }

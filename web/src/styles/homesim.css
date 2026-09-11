@@ -66,7 +66,11 @@ button:focus-visible, a:focus-visible {
    Search is the element that was collapsing until its placeholder was clipped,
    so it gets a floor and the line strip yields first. */
 .shell-header .global-search { min-width: 208px; }
-.app-shell .shell-header__loc { flex: 0 1 auto; overflow: hidden; }
+/* This must NOT clip: the quota and NKN popovers are positioned inside it, and
+   `overflow: hidden` here hid both of them completely. The width guard belongs
+   on the chip whose text can grow, not on the popovers' ancestor. */
+.app-shell .shell-header__loc { flex: 0 1 auto; }
+.app-shell .shell-header__loc > .line-status { min-width: 0; overflow: hidden; }
 .app-shell .shell-location strong { max-width: 14ch; }
 .shell-header__right { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 12px; }
 .shell-header__controls { gap: 8px; }

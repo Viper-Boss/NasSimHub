@@ -371,6 +371,11 @@ type ProxyInstanceRecord struct {
 	Username           string
 	PasswordNonce      []byte
 	PasswordCiphertext []byte
+	// Egress is "line" (a modem data bearer) or "wireguard" (a tunnel
+	// interface). Empty rows from before this existed read as "line".
+	Egress          string
+	EgressInterface string
+	EgressDNS       []string
 	Revision           int64
 	AppliedRevision    int64
 	DesiredDeleted     bool

@@ -21,6 +21,19 @@ const (
 	ProxyStateError            ProxyState = "error"
 )
 
+// ProxyEgress says where a proxy's outbound traffic leaves from. The empty
+// value means a modem line, which is what every proxy did before WireGuard
+// existed, so old configurations keep working untouched.
+type ProxyEgress string
+
+const (
+	// ProxyEgressLine sends traffic out a modem data bearer, selected by LineID.
+	ProxyEgressLine ProxyEgress = "line"
+	// ProxyEgressWireGuard sends traffic out a WireGuard interface, which is how
+	// a LAN device reaches the far side of a NAS-to-NAS tunnel.
+	ProxyEgressWireGuard ProxyEgress = "wireguard"
+)
+
 type ProxyConfiguration struct {
 	ID            string    `json:"id"`
 	LineID        string    `json:"line_id"`
@@ -31,6 +44,17 @@ type ProxyConfiguration struct {
 	AuthEnabled   bool      `json:"auth_enabled"`
 	Username      string    `json:"username"`
 	Password      string    `json:"password"`
+
+	// Egress selects the outbound path. Empty means ProxyEgressLine.
+	Egress ProxyEgress `json:"egress,omitempty"`
+	// EgressInterface is the WireGuard interface name when Egress is
+	// ProxyEgressWireGuard.
+	EgressInterface string `json:"egress_interface,omitempty"`
+	// EgressDNS are the resolvers to use through the tunnel. There is no
+	// default: a resolver that is only reachable on the modem side would send
+	// every lookup out the wrong path while the traffic itself went through the
+	// tunnel, which leaks what the LAN device is browsing.
+	EgressDNS []string `json:"egress_dns,omitempty"`
 }
 
 type ProxyDesiredSet struct {

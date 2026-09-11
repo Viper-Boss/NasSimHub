@@ -290,6 +290,16 @@ func migrateSchema(ctx context.Context, database *sql.DB) error {
 			return err
 		}
 	}
+	migratedProxyEgress, err := migrateProxyEgressSchema(ctx, database, actual)
+	if err != nil {
+		return err
+	}
+	if migratedProxyEgress {
+		actual, err = readSchemaShape(ctx, database)
+		if err != nil {
+			return err
+		}
+	}
 	droppedOrphanApplePush, err := dropEmptyOrphanApplePushDeliverySchema(
 		ctx,
 		database,
