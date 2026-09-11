@@ -292,6 +292,48 @@ func removeProjectedATCalls(parsed *ParsedObjects, line *domain.Line) {
 	line.CallIDs = callIDs
 }
 
+// atRecordCanBeTheDialledCall decides whether a CLCC record is the call that
+// was just dialled on this line.
+//
+// The number is a positive identification: no other record can echo back the
+// digits that were dialled, so a match claims the call whatever state it is in.
+//
+// A BLANK number is the awkward case, and it has to be allowed because some
+// modems report a freshly dialled call before echoing the number -- without
+// that, an outgoing call on those modems could never be matched at all. But a
+// blank number is also what a PHANTOM looks like, and phantoms are why this
+// function exists.
+//
+// Measured on a QDC507 at idle, with nobody on a call:
+//
+//	+CLCC: 1,0,0,0,0,"",128
+//	+CLCC: 2,0,0,0,0,"",128
+//
+// Two entries, voice mode, state 0 (active), no number. The module leaves them
+// behind. Before this check, the first CLCC poll after ATD handed the new
+// call's ID to the phantom at index 1 and consumed the pending entry -- so the
+// server believed the call was index 1 and already active, pointed the media
+// activation and the hangup at it, and the real call arrived later at its own
+// index as a separate call nobody was listening to. The call connected
+// instantly and was silent in both directions.
+//
+// The state is what separates the two. A call that has only just been dialled
+// cannot be ACTIVE: it passes through dialing or alerting first. So a blank
+// number may claim the pending call only from a pre-connection state, which is
+// exactly the case the allowance was written for, and which a phantom -- always
+// reported active -- can never be in.
+func atRecordCanBeTheDialledCall(pending atCallLifecycle, record atCallRecord) bool {
+	if record.number != "" {
+		return atNumbersEqual(pending.number, record.number)
+	}
+	switch record.stateCode {
+	case callStateDialing, callStateRingingOut:
+		return true
+	default:
+		return false
+	}
+}
+
 func (p *Provider) projectKnownATCalls(
 	parsed *ParsedObjects,
 	line *domain.Line,
@@ -315,8 +357,9 @@ func (p *Provider) projectKnownATCalls(
 		lifecycle, found := lineCalls[record.index]
 		if !found || atCallRecordStartsNewLifecycle(lifecycle, record) {
 			lifecycle = p.newATCallLifecycle(line.ID, record, now)
-			if pending, pendingFound := p.atPendingCalls[line.ID]; pendingFound && record.direction == "outgoing" &&
-				(record.number == "" || atNumbersEqual(pending.number, record.number)) {
+			if pending, pendingFound := p.atPendingCalls[line.ID]; pendingFound &&
+				record.direction == "outgoing" &&
+				atRecordCanBeTheDialledCall(pending, record) {
 				lifecycle.id = pending.id
 				delete(p.atPendingCalls, line.ID)
 			}

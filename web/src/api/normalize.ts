@@ -307,7 +307,18 @@ export function parseCallRecord(value: unknown): CallRecord {
     id: requiredString(source, 'call', 'id'),
     line_id: requiredString(source, 'call', 'line_id'),
     direction: directionValue(source, 'call'),
-    remote_number: requiredString(source, 'call', 'remote_number'),
+    // A call can legitimately have NO number, and requiring one here took the
+    // whole history page down whenever it happened: one row with an empty
+    // remote_number threw "call 缺少 remote_number" and the list rendered as an
+    // error instead of as calls.
+    //
+    // Two ways it happens, both normal. An inbound call with the caller ID
+    // withheld has no number to record. And the module's phantom CLCC entries
+    // -- reported active, voice mode, no number, type 128, with nobody on a
+    // call -- are recorded the same way. Neither is a malformed response, so
+    // neither should be treated as one: the display falls back to
+    // calls.unknownNumber.
+    remote_number: stringValue(source, 'remote_number'),
     display_name: stringValue(source, 'contact_name') || undefined,
     contact_id: stringValue(source, 'contact_id') || undefined,
     started_at: timestamp(source, 'call', 'started_at'),

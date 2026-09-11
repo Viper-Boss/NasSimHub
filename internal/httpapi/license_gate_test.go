@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,11 @@ func licensedAPI(t *testing.T) (*API, ed25519.PrivateKey, string) {
 		disableAuthentication:  true,
 		ContactBackupDirectory: filepath.Join(root, "backups", "contacts"),
 		IssuerPublicKey:        base64.StdEncoding.EncodeToString(public),
+		// A working message path, so the guard can be exercised over HTTP
+		// rather than only through featureDecision. Without it the handler
+		// answers 503 before it reaches any limit, and a test asserting "not
+		// 200" would pass on the wrong refusal.
+		Communications: &fakeCommunications{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -89,18 +95,74 @@ func writeCertificate(t *testing.T, directory string, signed license.Signed, rel
 	}
 }
 
-// Outbound calling is paid, and the refusal has to say what to buy. A paywall
-// that does not name what is missing is just a wall.
-func TestDiallingWithoutALicenceSaysWhatIsMissing(t *testing.T) {
+// Dialling out is never refused for want of a licence, and nothing on that
+// path may offer to sell one.
+//
+// An earlier version had this backwards: outbound calling was entirely paid, so
+// every call without a certificate came back 402 with "send us your licence ID
+// and we will turn it on". That put a call paywall on the dial pad, and it
+// locked dialling on the owner's own gateway. The feature is free within the
+// anti-fraud guard's daily limit; a licence lifts that guard.
+func TestDiallingIsNeverRefusedForWantOfALicence(t *testing.T) {
 	api, _, _ := licensedAPI(t)
 
-	decision, _ := api.featureDecision(context.Background(), license.FeatureCallDial)
-	if decision.Allowed {
-		t.Fatal("outbound calling was allowed with no certificate")
+	decision := api.featureDecision(context.Background(), license.FeatureCallDial)
+	if !decision.Allowed {
+		t.Fatal(
+			"outbound calling was refused with no certificate; the call site then has " +
+				"a refusal to render and the dial pad shows a paywall",
+		)
 	}
-	message := licenseDenial(decision)
-	if !strings.Contains(message, "模组授权") {
-		t.Fatalf("the refusal does not name the module licence: %q", message)
+	if decision.Licensed {
+		t.Fatal("an installation with no certificate reported as licensed")
+	}
+	if decision.Limit != nil {
+		t.Fatalf("dialling is metered by the catalogue: %+v", decision.Limit)
+	}
+}
+
+// And the dial handler itself must contain no purchase path at all.
+//
+// A source check rather than a behavioural one, deliberately. The requirement
+// is about what copy can EVER reach that screen, and the failure mode is
+// somebody adding a licence gate back to this handler -- which no response
+// assertion would catch unless it happened to exercise the exact state that
+// triggers it. Reading the handler catches the re-introduction itself.
+func TestTheDialHandlerOffersNoLicencePurchase(t *testing.T) {
+	source, err := os.ReadFile("communications.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := strings.Index(string(source), "func (api *API) startCall(")
+	if start < 0 {
+		t.Fatal("startCall is gone; this test is guarding nothing")
+	}
+	body := string(source)[start:]
+	if end := strings.Index(body, "\nfunc "); end > 0 {
+		body = body[:end]
+	}
+	for _, forbidden := range []string{
+		"licenseDenial",
+		"StatusPaymentRequired",
+		"license_required",
+		"license_quota",
+		"授权",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf(
+				"the dial handler contains %q; outbound calling must never show a "+
+					"licence refusal or a purchase prompt",
+				forbidden,
+			)
+		}
+	}
+	// It must still be guarded, or this test would pass on a handler with no
+	// limit at all.
+	if !strings.Contains(body, "callGuardStore") {
+		t.Fatal("the dial handler no longer applies the anti-fraud guard")
+	}
+	if !strings.Contains(body, "licensedFeature") {
+		t.Fatal("the dial handler no longer lets a licence lift the guard")
 	}
 }
 
@@ -109,11 +171,11 @@ func TestDiallingWithoutALicenceSaysWhatIsMissing(t *testing.T) {
 // the wrong thing.
 func TestWireGuardWithoutALicenceNamesTheMachineLicence(t *testing.T) {
 	api, _, _ := licensedAPI(t)
-	decision, _ := api.featureDecision(context.Background(), license.FeatureWireGuard)
+	decision := api.featureDecision(context.Background(), license.FeatureWireGuard)
 	if decision.Allowed {
 		t.Fatal("WireGuard was allowed with no certificate")
 	}
-	message := licenseDenial(decision)
+	message := api.licenseDenial(decision)
 	if !strings.Contains(message, "本机授权") {
 		t.Fatalf("the refusal does not name the machine licence: %q", message)
 	}
@@ -127,7 +189,7 @@ func TestWireGuardWithoutALicenceNamesTheMachineLicence(t *testing.T) {
 func TestReceivingIsNeverGated(t *testing.T) {
 	api, _, _ := licensedAPI(t)
 	for _, feature := range []license.Feature{license.FeatureSMSForward, license.FeatureCallAnswer} {
-		decision, _ := api.featureDecision(context.Background(), feature)
+		decision := api.featureDecision(context.Background(), feature)
 		if !decision.Allowed {
 			t.Fatalf("%s was gated", feature)
 		}
@@ -137,24 +199,27 @@ func TestReceivingIsNeverGated(t *testing.T) {
 	}
 }
 
-// Sending SMS is free for a few a day. The number comes from the catalogue, so
-// this asserts the free tier exists rather than hardcoding the policy twice.
-func TestSendingSMSIsFreeUpToTheCatalogueLimit(t *testing.T) {
+// Sending SMS is free too, with the message guard as its only limit.
+//
+// This replaced a test for a metered free tier of three sends a day. That
+// counter sat on top of the guard, counted MESSAGES rather than recipients, and
+// could not be lifted by the dial-pad unlock -- so an operator who had
+// unlocked the guard still hit a wall at three messages with no way past it.
+func TestSendingSMSIsFreeAndGuardedRatherThanMetered(t *testing.T) {
 	api, _, _ := licensedAPI(t)
-	decision, usage := api.featureDecision(context.Background(), license.FeatureSMSSend)
+	decision := api.featureDecision(context.Background(), license.FeatureSMSSend)
 	if !decision.Allowed {
-		t.Fatal("the free SMS tier was refused entirely")
+		t.Fatal("sending SMS was refused entirely")
 	}
-	if decision.Limit == nil || decision.Limit.Count < 1 {
-		t.Fatalf("no free SMS allowance: %+v", decision.Limit)
+	if decision.Limit != nil {
+		t.Fatalf(
+			"sending is metered by the catalogue (%+v); the daily limit is the message "+
+				"guard, and a counter here is one the dial-pad unlock cannot lift",
+			decision.Limit,
+		)
 	}
-	for used := 0; used < decision.Limit.Count; used++ {
-		if !usage.Consume(license.FeatureSMSSend, decision) {
-			t.Fatalf("free send %d was refused", used+1)
-		}
-	}
-	if usage.Consume(license.FeatureSMSSend, decision) {
-		t.Fatal("a send beyond the free allowance was permitted")
+	if decision.Licensed {
+		t.Fatal("an installation with no certificate reported as licensed")
 	}
 }
 
@@ -174,14 +239,11 @@ func TestACertificateForAnAbsentModuleUnlocksNothing(t *testing.T) {
 	}
 	writeCertificate(t, directory, signed, filepath.Join("license", "modules", "869999999999999.json"))
 
-	decision, _ := api.featureDecision(context.Background(), license.FeatureCallDial)
-	if decision.Allowed {
-		t.Fatal("a certificate for a module that is not attached unlocked dialling")
+	if api.featureDecision(context.Background(), license.FeatureCallDial).Licensed {
+		t.Fatal("a certificate for a module that is not attached lifted the dial guard")
 	}
-	// And the SMS allowance stays at the free tier rather than going unlimited.
-	send, _ := api.featureDecision(context.Background(), license.FeatureSMSSend)
-	if send.Limit == nil {
-		t.Fatal("an absent module's certificate lifted the free SMS allowance")
+	if api.featureDecision(context.Background(), license.FeatureSMSSend).Licensed {
+		t.Fatal("a certificate for a module that is not attached lifted the message guard")
 	}
 }
 
@@ -201,35 +263,53 @@ func TestAnExpiredCertificateStopsUnlocking(t *testing.T) {
 	}
 	writeCertificate(t, directory, signed, filepath.Join("license", "machine", "certificate.json"))
 
-	decision, _ := api.featureDecision(context.Background(), license.FeatureWireGuard)
+	decision := api.featureDecision(context.Background(), license.FeatureWireGuard)
 	if decision.Allowed {
 		t.Fatal("an expired certificate still unlocked WireGuard")
 	}
 }
 
-// The HTTP surface has to answer 402 rather than 403, so a client can tell
-// "you have not paid for this" apart from "you are not allowed to do this".
-func TestAnUnlicensedSendAnswers402(t *testing.T) {
-	api, _, directory := licensedAPI(t)
-	// Exhaust the free allowance directly, so the request hits the quota
-	// branch rather than the not-allowed branch.
-	usage := license.NewUsageCounter(directory)
-	entitlements := license.Entitlements{}
-	decision := entitlements.Check(license.FeatureSMSSend)
-	for used := 0; used < decision.Limit.Count; used++ {
-		usage.Consume(license.FeatureSMSSend, decision)
+// A send past the guard answers 403 fraud_guard, not 402.
+//
+// The code matters to the client: 402 means "you have not paid", and this
+// refusal is not that. It is an abuse limit the operator can lift themselves,
+// so the response has to send them to the dial-pad unlock rather than to a
+// purchase.
+func TestASendPastTheGuardAnswersTheFraudGuard(t *testing.T) {
+	api, _, _ := licensedAPI(t)
+	guard, ok := api.messageGuardStore()
+	if !ok {
+		t.Fatal("the message guard is unavailable")
+	}
+	// Exhaust the distinct-recipient budget for today.
+	for recipient := 0; recipient < messageGuardDailyLimit; recipient++ {
+		if guard.Attempt("1380013800" + strconv.Itoa(recipient)) {
+			t.Fatalf("recipient %d was refused inside the budget", recipient)
+		}
 	}
 
-	body := strings.NewReader(`{"line_id":"line-1","to":"13800138000","content":"hi"}`)
+	body := strings.NewReader(`{"line_id":"line-1","to":"13900139000","content":"hi"}`)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/messages", body)
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	api.ServeHTTP(recorder, request)
 
-	// 402 or a service-unavailable from the missing communications backend are
-	// both acceptable here; what must not happen is 200.
 	if recorder.Code == http.StatusOK {
-		t.Fatalf("an over-quota send succeeded: %s", recorder.Body.String())
+		t.Fatalf("a send past the guard succeeded: %s", recorder.Body.String())
+	}
+	if recorder.Code == http.StatusPaymentRequired {
+		t.Fatalf(
+			"a send past the anti-fraud guard answered 402; that tells the client the "+
+				"operator has not paid, when what happened is an abuse limit they can "+
+				"lift themselves: %s",
+			recorder.Body.String(),
+		)
+	}
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "unlock") {
+		t.Fatalf("the refusal does not tell the operator how to lift it: %s", recorder.Body.String())
 	}
 }
 
@@ -246,7 +326,7 @@ func TestNoIssuerKeyRunsUnlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, feature := range []license.Feature{license.FeatureCallDial, license.FeatureSMSSend, license.FeatureWireGuard} {
-		decision, _ := api.featureDecision(context.Background(), feature)
+		decision := api.featureDecision(context.Background(), feature)
 		if !decision.Allowed {
 			t.Fatalf("%v was gated although no issuer key is configured", feature)
 		}

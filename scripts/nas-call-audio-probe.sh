@@ -71,24 +71,93 @@ echo 'If AT+QCFG="pcmclk" reports 0, that alone explains silence in both'
 echo 'directions. Tell me the value either way -- if it answers something this'
 echo 'script did not anticipate, the code deliberately leaves it alone rather'
 echo 'than writing a guessed number into a clock register.'
+echo
+echo 'Every line above reading "Unknown error" does NOT mean the module is'
+echo 'broken: mmcli on this build swallows the AT response. The agent reads the'
+echo 'same values over its own D-Bus path and succeeds, so check the snapshot'
+echo 'voice_verification field and the agent log rather than trusting this'
+echo 'section when it comes back empty.'
 
 # ----------------------------------------------------------- C: the route
 say "C. Are the VoLTE route mixers actually connected"
 # The vendor daemon hardcodes the CS-voice UCM verb and never selects the VoLTE
 # one, so on a VoLTE call -- every call on a modern network -- these two stay
 # off unless this software forces them.
+# The agent runs its own adb server on a unix socket rather than the default
+# TCP port, so a bare `adb` here reports "failed to start daemon" and the
+# section printed nothing at all. Reported from the first real run of this
+# script; ADB_SERVER_SOCKET is what makes it talk to the running server instead
+# of trying to start a second one.
+ADB_SOCKET=${ADB_SOCKET:-localfilesystem:/tmp/qdc507-adb/server.sock}
 for control in \
     'SEC_AUX_PCM_RX_Voice Mixer VoLTE' \
     'VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE'
 do
     printf '%-44s ' "$control"
-    docker exec "$HW_CONTAINER" sh -c \
-        "adb shell \"amix '$control'\" 2>/dev/null | tr -d '\r' | tail -1" \
-        2>/dev/null || echo "(adb unavailable)"
+    docker exec -e "ADB_SERVER_SOCKET=$ADB_SOCKET" "$HW_CONTAINER" sh -c \
+        "adb shell \"amix '$control'\" 2>&1 | tr -d '\r' | tail -1" \
+        2>&1 || echo "(adb unavailable)"
 done
 echo
 echo "Both must read on. One off in the Tx direction means the far end hears"
 echo "nothing while you may still hear them, which is the asymmetric case."
+
+# ------------------------------------------------- C2: the other front end
+say "C2. Is the voice session also connected to the AFE PCM front end"
+# A lead from cellbridge-mac, which drives the SAME module and the SAME PCM
+# bridge binary (identical sha256). Alongside the UCM VoLTE verb -- which
+# enables the SEC_AUX_PCM controls section C just read -- it additionally
+# connects the voice session to AFE_PCM, for all four session types.
+#
+# Why that might matter here: the bridge opens hw:0,4. If that device is fed by
+# AFE_PCM rather than the secondary AUX PCM, then connecting only SEC_AUX_PCM
+# leaves the bridge reading a front end nothing is written to -- zeros in both
+# directions, with every control this script reads in section C reporting "on".
+#
+# This is a HYPOTHESIS, not a finding, which is why this section only reads.
+# Nothing is written to the module on a guess: if these come back 1 the idea is
+# dead and no harm was done, and if they come back 0 it is worth one experiment.
+for control in \
+    'AFE_PCM_RX_Voice Mixer VoLTE' \
+    'AFE_PCM_RX_Voice Mixer CSVoice' \
+    'VoLTE_Tx Mixer AFE_PCM_TX_VoLTE' \
+    'Voice_Tx Mixer AFE_PCM_TX_Voice'
+do
+    printf '%-44s ' "$control"
+    docker exec -e "ADB_SERVER_SOCKET=$ADB_SOCKET" "$HW_CONTAINER" sh -c \
+        "adb shell \"amix '$control'\" 2>&1 | tr -d '\r' | tail -1" \
+        2>&1 || echo "(adb unavailable)"
+done
+echo
+echo "A control this firmware does not have will report an error rather than a"
+echo "value, and that is an answer too: it would mean this front end is not"
+echo "reachable on this build and the idea can be dropped."
+
+# --------------------------------------------- C3: the one-shot route session
+say "C3. How long has the route session been running, and how many calls has it carried"
+# The module's PCM bridge establishes a route session that carries exactly ONE
+# call: afterwards the DSP stops writing to hw:0,4 and every call is silent in
+# both directions. Measured by cellbridge-mac on this same binary; the control
+# experiment was to restart only the bridge, which recovered the next call.
+#
+# The reason this is invisible is that the bridge stays alive and keeps
+# reporting a healthy session, so the two numbers below are the whole diagnosis:
+# a bridge whose start time predates your last call has already been used.
+docker exec -e "ADB_SERVER_SOCKET=$ADB_SOCKET" "$HW_CONTAINER" sh -c \
+    "adb shell 'pidof mavo-pcm-bridge.armv7 || pidof mavo-pcm-bridge' 2>&1 | tr -d '\r'" 2>&1 \
+    | sed 's/^/bridge pid: /'
+docker exec -e "ADB_SERVER_SOCKET=$ADB_SOCKET" "$HW_CONTAINER" sh -c \
+    "adb shell 'p=\$(pidof mavo-pcm-bridge.armv7 || pidof mavo-pcm-bridge); test -n \"\$p\" && ls -ld /proc/\$p' 2>&1 | tr -d '\r'" 2>&1 \
+    | sed 's/^/bridge started: /'
+echo "agent re-arm activity (empty means the agent has never restarted it):"
+docker logs --since 24h "$HW_CONTAINER" 2>&1 \
+    | grep -E 're-arm(ed)? (the )?QDC507 VoLTE route session' \
+    | tail -8 \
+    || echo "  (none)"
+echo
+echo "If the bridge start time is older than your most recent call and there is"
+echo "no re-arm line above, that call ran on a used session and was silent for"
+echo "that reason alone."
 
 # --------------------------------------------------- D: the decisive measurement
 say "D. Is there audio at the agent boundary (make a call NOW)"

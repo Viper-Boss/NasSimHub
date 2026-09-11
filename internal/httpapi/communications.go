@@ -92,51 +92,34 @@ func (api *API) sendMessage(response http.ResponseWriter, request *http.Request)
 	if !api.requireLineAccess(response, request, lineID) {
 		return
 	}
-	// Same anti-fraud shape as dialling: many DIFFERENT numbers in one day is
-	// what spam looks like, so texting the same people repeatedly is never
-	// limited. The message names the dial-pad unlock, because a refusal the
-	// operator cannot act on is just a dead end.
-	if guard, ok := api.messageGuardStore(); ok {
-		if guard.Attempt(input.To) {
-			writeError(
-				response,
-				http.StatusForbidden,
-				"fraud_guard",
-				"Today's limit of "+strconv.Itoa(messageGuardDailyLimit)+
-					" new recipients has been reached. Texting numbers you have already "+
-					"messaged today still works. This software exists to receive "+
-					"verification codes and to help students abroad save roaming fees; "+
-					"it is not for bulk or nuisance messaging. If this is your own "+
-					"number, type \"unlock\" on the dial pad to lift the limit.",
-				"",
-			)
-			return
-		}
-	}
-	// The free tier allows a few sends a day; a module certificate lifts it.
+	// Sending is FREE, with one limit: the anti-fraud guard. Many DIFFERENT
+	// numbers in one day is what spam looks like, so texting the same people
+	// repeatedly is never limited.
 	//
-	// This is a SEPARATE counter from the fraud guard above, and deliberately
-	// so: that one limits how many DIFFERENT numbers may be reached and is
-	// lifted by typing "unlock" on the dial pad. If the unlock lifted this one
-	// too, the paywall would come off by typing a word into the dial pad. See
-	// internal/license/allowance.go.
-	sendDecision, usage := api.featureDecision(request.Context(), license.FeatureSMSSend)
-	if !sendDecision.Allowed {
-		writeError(response, http.StatusPaymentRequired, "license_required", licenseDenial(sendDecision), "")
-		return
-	}
-	// Consumed BEFORE the send, so two concurrent requests cannot both take the
-	// last slot. Refunded below if the send does not happen.
-	if !usage.Consume(license.FeatureSMSSend, sendDecision) {
-		writeError(
-			response,
-			http.StatusPaymentRequired,
-			"license_quota",
-			"今天的免费短信条数已用完（每天 "+strconv.Itoa(sendDecision.Limit.Count)+
-				" 条）。给模组开通授权后不限条数。",
-			"",
-		)
-		return
+	// A licence lifts the guard rather than unlocking the feature, which is why
+	// this asks whether the line is licensed instead of whether the send is
+	// allowed. There used to be a second, separate daily counter here that only
+	// a certificate could lift -- three SENDS a day, not three recipients --
+	// and it was wrong twice over: nobody asked for it, and three messages a
+	// day makes the product useless. One limit, in one place.
+	if !api.licensedFeature(request.Context(), license.FeatureSMSSend) {
+		if guard, ok := api.messageGuardStore(); ok {
+			if guard.Attempt(input.To) {
+				writeError(
+					response,
+					http.StatusForbidden,
+					"fraud_guard",
+					"Today's limit of "+strconv.Itoa(messageGuardDailyLimit)+
+						" new recipients has been reached. Texting numbers you have already "+
+						"messaged today still works. This software exists to receive "+
+						"verification codes and to help students abroad save roaming fees; "+
+						"it is not for bulk or nuisance messaging. If this is your own "+
+						"number, type \"unlock\" on the dial pad to lift the limit.",
+					"",
+				)
+				return
+			}
+		}
 	}
 
 	message, err := api.communications.SendMessage(request.Context(), communication.SendMessageInput{
@@ -145,12 +128,6 @@ func (api *API) sendMessage(response http.ResponseWriter, request *http.Request)
 		Number:    input.To,
 		Text:      input.Content,
 	})
-	if err != nil {
-		// The message never left, so the allowance is given back. Charging a
-		// day's quota for a send the modem refused is a small unfairness that
-		// gets remembered.
-		usage.Refund(license.FeatureSMSSend)
-	}
 	if err != nil {
 		api.writeCommunicationError(response, request, "send message", err)
 		return
@@ -528,26 +505,38 @@ func (api *API) startCall(response http.ResponseWriter, request *http.Request) {
 	if !api.requireLineAccess(response, request, input.LineID) {
 		return
 	}
-	// Outbound calling is paid, and the licence is checked BEFORE the fraud
-	// guard. The order matters: an unlicensed caller must be told they need a
-	// licence, not told they have used up an allowance they never had -- and
-	// the guard would otherwise spend one of its daily slots on a call that
-	// was never going to be placed.
-	dialDecision, _ := api.featureDecision(request.Context(), license.FeatureCallDial)
-	if !dialDecision.Allowed {
-		writeError(response, http.StatusPaymentRequired, "license_required", licenseDenial(dialDecision), "")
-		return
-	}
-	if guard, ok := api.callGuardStore(); ok {
-		if guard.Attempt(input.Number) {
-			writeError(
-				response,
-				http.StatusForbidden,
-				"fraud_guard",
-				"This software exists to receive verification codes and to help students abroad save roaming fees; it is not intended for harassing or fraudulent calls.",
-				"",
-			)
-			return
+	// Dialling out is FREE, with one limit: the anti-fraud guard, five distinct
+	// numbers a day, lifted by typing "unlock" on the dial pad.
+	//
+	// A licence lifts the same guard, so a licensed line never meets it. It is
+	// asked as "is this licensed" and NOT as "is this allowed", and the
+	// difference is the whole point of this block: there is deliberately no
+	// licence refusal on this path and no purchase copy anywhere near it. The
+	// only thing an operator over the limit is ever shown is the anti-fraud
+	// notice below, which tells them what the software is for and how to lift
+	// the limit themselves.
+	//
+	// An earlier version made outbound calling entirely paid, so every call
+	// without a certificate was refused with "send us your licence ID". That
+	// put a call paywall on the screen, which is not what this feature is, and
+	// it locked dialling on the owner's own gateway.
+	if !api.licensedFeature(request.Context(), license.FeatureCallDial) {
+		if guard, ok := api.callGuardStore(); ok {
+			if guard.Attempt(input.Number) {
+				writeError(
+					response,
+					http.StatusForbidden,
+					"fraud_guard",
+					"Today's limit of "+strconv.Itoa(callGuardDailyLimit)+
+						" new numbers has been reached. Calling numbers you have already "+
+						"dialled today still works. This software exists to receive "+
+						"verification codes and to help students abroad save roaming fees; "+
+						"it is not intended for harassing or fraudulent calls. If these are "+
+						"your own numbers, type \"unlock\" on the dial pad to lift the limit.",
+					"",
+				)
+				return
+			}
 		}
 	}
 	owner, err := api.callLeaseOwner(request.Context())

@@ -79,9 +79,13 @@ let landBits: Uint8Array | null = null
 
 function maskBytes(): Uint8Array {
   if (landBits) return landBits
-  const binary = typeof atob === 'function'
-    ? atob(LAND_MASK_BASE64)
-    : Buffer.from(LAND_MASK_BASE64, 'base64').toString('binary')
+  // atob, not Buffer. The Buffer fallback that used to stand here was written
+  // so the contract tests could call isLand outside a browser, and it was two
+  // mistakes at once: atob has been a global in Node since 16 so the branch
+  // was never taken, and naming Buffer in browser code is a type error
+  // (TS2591) that would have been a runtime crash in any environment that
+  // actually reached it.
+  const binary = atob(LAND_MASK_BASE64)
   const bytes = new Uint8Array(binary.length)
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
   landBits = bytes

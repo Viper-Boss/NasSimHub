@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -108,5 +111,46 @@ func TestMessageGuardReportsWhatIsLeft(t *testing.T) {
 	}
 	if guard.Attempt("13900000000") {
 		t.Fatal("an unlocked guard still blocked a new recipient")
+	}
+}
+
+// One "unlock" lifts BOTH channels.
+//
+// The operator is telling the software who they are, not which feature they
+// want, and a partial unlock would leave them re-tripping a guard they thought
+// they had lifted. Asserted through the HTTP endpoint rather than the guard
+// objects because the shared part lives in the handler: each guard has its own
+// file and its own Unlock, and it is the handler that calls both.
+func TestTheDialPadUnlockLiftsCallsAndMessagesTogether(t *testing.T) {
+	api, _, _ := licensedAPI(t)
+	calls, ok := api.callGuardStore()
+	if !ok {
+		t.Fatal("the dial guard is unavailable")
+	}
+	messages, ok := api.messageGuardStore()
+	if !ok {
+		t.Fatal("the message guard is unavailable")
+	}
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/calls/guard",
+		strings.NewReader(`{"action":"unlock"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	api.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unlock answered %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	if _, unlocked := calls.Remaining(); !unlocked {
+		t.Fatal("the dial guard was not lifted")
+	}
+	if _, unlocked := messages.Remaining(); !unlocked {
+		t.Fatal(
+			"the message guard was not lifted; the operator unlocked on the dial pad " +
+				"and would still be blocked from texting a new number",
+		)
 	}
 }

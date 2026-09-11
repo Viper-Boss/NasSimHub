@@ -1090,10 +1090,39 @@ function parseProxyInstance(value: unknown, path: string): ProxyInstance {
   if (appliedRevision > revision) {
     throw new Error(`${path}.applied_revision 不能大于 revision`)
   }
+  // The egress decides whether a line is meaningful, and this parser has to
+  // agree with the server about that or the page cannot load at all.
+  //
+  // A tunnel proxy leaves through a WireGuard interface and is deliberately
+  // stored with NO line: requiring one would put a meaningless "which SIM?"
+  // choice in front of the operator and would break the proxy whenever that
+  // SIM went away. The server enforces exactly that (see
+  // internal/networkruntime/proxy_egress_test.go). This parser did not, so the
+  // first tunnel proxy anyone created made the whole collection fail to parse
+  // and the network page showed "proxy_collection.proxies[0] 缺少 line_id"
+  // instead of the list -- one unlisted row taking down every other proxy with
+  // it.
+  //
+  // The three egress fields are read here for a second reason: without them
+  // the editor loads a saved tunnel proxy with egress undefined, which reads as
+  // 'line', so opening a tunnel proxy and saving it silently converted it back
+  // to a line proxy and dropped its interface. Records written before the
+  // egress existed have no field and correctly read as 'line'.
+  const egress = source.egress === 'wireguard' ? 'wireguard' : 'line'
+  const egressDNS = Array.isArray(source.egress_dns)
+    ? source.egress_dns.filter((server): server is string => typeof server === 'string')
+    : []
   return {
     id: requiredString(source, path, 'id'),
     name: requiredString(source, path, 'name'),
-    line_id: requiredString(source, path, 'line_id'),
+    line_id: requiredString(source, path, 'line_id', egress === 'wireguard'),
+    egress,
+    ...(egress === 'wireguard'
+      ? {
+          egress_interface: optionalString(source, 'egress_interface') ?? '',
+          egress_dns: egressDNS
+        }
+      : {}),
     enabled: requiredBoolean(source, path, 'enabled'),
     mode: proxyMode(source, path),
     listen_address: requiredString(source, path, 'listen_address'),

@@ -269,10 +269,10 @@ func (api *API) wireGuardRuntimeStatus(
 		// at read, so an unlicensed installation can still see its own
 		// configuration and what it would take to turn it on -- hiding the
 		// settings page would leave nothing to explain the lock with.
-		decision, _ := api.featureDecision(ctx, license.FeatureWireGuard)
+		decision := api.featureDecision(ctx, license.FeatureWireGuard)
 		if !decision.Allowed {
 			status.State = "unavailable"
-			status.Error = licenseDenial(decision)
+			status.Error = api.licenseDenial(decision)
 			return status
 		}
 		live, err = api.wireGuardService.ApplyWireGuard(ctx, config)

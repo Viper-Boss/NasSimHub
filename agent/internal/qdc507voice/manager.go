@@ -143,6 +143,13 @@ type Manager struct {
 	reconcileMu sync.Mutex
 	mu          sync.RWMutex
 	states      map[string]lineState
+
+	// arming tracks the VoLTE route session across calls. See route_rearm.go:
+	// the session the module's PCM bridge establishes carries exactly one call,
+	// and every check the reconciler makes still passes afterwards.
+	arming routeArming
+	// rearmDelay overrides routeRearmDelay in tests. Zero means the constant.
+	rearmDelay time.Duration
 }
 
 func New(options Options) (*Manager, error) {

@@ -121,7 +121,10 @@ function displayName(recording: RecordingEntry): string {
   return (
     recording.call.display_name ||
     contactForNumber(recording.call.remote_number)?.display_name ||
-    recordingDisplayNumber(recording)
+    recordingDisplayNumber(recording) ||
+    // A withheld caller ID has no number to show, and a row with no label at
+    // all reads as a rendering fault rather than as an anonymous call.
+    t('calls.unknownNumber')
   )
 }
 

@@ -125,6 +125,48 @@ func (p *Provider) projectVoiceCapabilities(
 
 	p.projectATCalls(ctx, operation, parsed)
 	p.projectQuectelMediaState(parsed)
+	p.observeVoiceRouteActivity(parsed)
+}
+
+// observeVoiceRouteActivity tells the module voice runtime which lines have a
+// live call, so it can restart the module's route session between calls.
+//
+// Why the snapshot path is the right place for this: the session the module's
+// PCM bridge establishes carries exactly one call, and after that call every
+// health signal the runtime can read still says the path is fine (see
+// QDC507VoiceRouteObserver). So the restart cannot be driven by anything the
+// runtime observes on the module -- it has to be driven by the transition, and
+// this is where the transition is known.
+//
+// Every probed line is reported on every snapshot, including the ones with no
+// calls at all. That is the point: "no calls now" is precisely the observation
+// that a call has ended, and reporting only the lines that have calls would
+// mean the runtime never learns a call finished.
+func (p *Provider) observeVoiceRouteActivity(parsed *ParsedObjects) {
+	if parsed == nil {
+		return
+	}
+	observer, supported := p.qdc507Voice.(QDC507VoiceRouteObserver)
+	if !supported || observer == nil {
+		return
+	}
+	live := make(map[string]bool, len(parsed.Lines))
+	for _, call := range parsed.Calls {
+		// A terminated call is a record of one that has finished, not a call in
+		// progress, so it must not hold the line open -- otherwise the re-arm
+		// waits for the record to be swept and the next call gets a used
+		// session.
+		if call.State == "terminated" {
+			continue
+		}
+		live[call.LineID] = true
+	}
+	for _, line := range parsed.Lines {
+		if !requiresQuectelPCMProbe(line) {
+			continue
+		}
+		observer.ObserveCallActivity(line, live[line.ID])
+	}
 }
 
 func projectVoiceProbeResult(line *domain.Line, result voiceProbeResult) {

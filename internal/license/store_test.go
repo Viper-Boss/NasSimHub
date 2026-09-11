@@ -48,8 +48,15 @@ func TestABuildWithNoIssuerKeyLocksPaidFeaturesAndKeepsFreeOnes(t *testing.T) {
 	if entitlements.Check(FeatureWireGuard).Allowed {
 		t.Fatal("WireGuard was allowed with no issuer key")
 	}
-	if entitlements.Check(FeatureCallDial).Allowed {
-		t.Fatal("outbound calling was allowed with no issuer key")
+	// Outbound calling is free and guarded, so a missing issuer key leaves it
+	// working within the guard's daily limit rather than refused -- but
+	// unlicensed, so the guard still applies.
+	dial := entitlements.Check(FeatureCallDial)
+	if !dial.Allowed {
+		t.Fatal("outbound calling was refused because of a missing issuer key")
+	}
+	if dial.Licensed {
+		t.Fatal("outbound calling reported as licensed with no issuer key")
 	}
 	// Receiving must keep working: it is what makes the product useful at all.
 	if !entitlements.Check(FeatureSMSForward).Allowed {
@@ -101,13 +108,13 @@ func TestAModuleCertificateOnlyCountsWhileItsModuleIsPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	present := store.Entitlements("machine-1", []string{"SN-AAA"}, time.Now())
-	if !present.Check(FeatureCallDial).Allowed {
-		t.Fatal("outbound calling was locked with its module attached")
+	if !present.Check(FeatureCallDial).Licensed {
+		t.Fatal("the guard was not lifted with the licensed module attached")
 	}
 	// Module pulled out. The cache must not keep answering yes.
 	absent := store.Entitlements("machine-1", []string{"SN-BBB"}, time.Now())
-	if absent.Check(FeatureCallDial).Allowed {
-		t.Fatal("outbound calling stayed unlocked after the module was removed")
+	if absent.Check(FeatureCallDial).Licensed {
+		t.Fatal("the guard stayed lifted after the licensed module was removed")
 	}
 }
 
@@ -179,127 +186,5 @@ func TestTheActivationFingerprintIsNeverOverwritten(t *testing.T) {
 	}
 	if stored.MachineID != "aaaa1111" || stored.Sources["emmc-cid-mmcblk0"] != "original" {
 		t.Fatalf("the activation fingerprint was overwritten: %+v", stored)
-	}
-}
-
-// The free allowance and the fraud guard are different counters. This is the
-// test that stops them being merged later: the fraud guard is lifted by typing
-// "unlock" on the dial pad, and if that lifted the free allowance the paywall
-// would be bypassed by a word typed into the dial pad.
-func TestTheFreeAllowanceHasNoUnlockOfAnyKind(t *testing.T) {
-	allowance := NewUsageCounter(t.TempDir())
-	entitlements := Entitlements{granted: map[Scope]map[Feature]bool{}}
-	decision := entitlements.Check(FeatureSMSSend)
-	if decision.Limit == nil || decision.Limit.Count != 3 {
-		t.Fatalf("the free SMS allowance is %+v; expected 3 per day", decision.Limit)
-	}
-
-	for attempt := 1; attempt <= 3; attempt++ {
-		if !allowance.Consume(FeatureSMSSend, decision) {
-			t.Fatalf("send %d of the free allowance was refused", attempt)
-		}
-	}
-	if allowance.Consume(FeatureSMSSend, decision) {
-		t.Fatal("a fourth free send was allowed")
-	}
-	if remaining := allowance.Remaining(FeatureSMSSend, decision); remaining != 0 {
-		t.Fatalf("remaining = %d after exhausting the allowance", remaining)
-	}
-}
-
-func TestALicensedModuleLiftsTheAllowanceEntirely(t *testing.T) {
-	store, sign := newTestStore(t)
-	if err := store.Save(sign(moduleCertificate("SN-AAA", string(FeatureSMSSend))), time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	entitlements := store.Entitlements("machine-1", []string{"SN-AAA"}, time.Now())
-	decision := entitlements.Check(FeatureSMSSend)
-	if !decision.Allowed || decision.Limit != nil {
-		t.Fatalf("a licensed module still has a limit: %+v", decision)
-	}
-	// Unlimited must read as unlimited, not as zero remaining.
-	allowance := NewUsageCounter(t.TempDir())
-	if remaining := allowance.Remaining(FeatureSMSSend, decision); remaining != -1 {
-		t.Fatalf("unlimited reported %d remaining; -1 means unlimited", remaining)
-	}
-	for attempt := 0; attempt < 50; attempt++ {
-		if !allowance.Consume(FeatureSMSSend, decision) {
-			t.Fatalf("a licensed send was refused after %d", attempt)
-		}
-	}
-}
-
-// The allowance is consumed before the action, so a failed send has to be
-// refundable. Charging a day's allowance for a message that never left is a
-// small unfairness that gets remembered.
-func TestAFailedSendCanBeRefunded(t *testing.T) {
-	allowance := NewUsageCounter(t.TempDir())
-	entitlements := Entitlements{granted: map[Scope]map[Feature]bool{}}
-	decision := entitlements.Check(FeatureSMSSend)
-
-	if !allowance.Consume(FeatureSMSSend, decision) {
-		t.Fatal("the first send was refused")
-	}
-	if used := allowance.Used(FeatureSMSSend); used != 1 {
-		t.Fatalf("used = %d", used)
-	}
-	allowance.Refund(FeatureSMSSend)
-	if used := allowance.Used(FeatureSMSSend); used != 0 {
-		t.Fatalf("used = %d after a refund", used)
-	}
-	// A refund must not go negative, or a caller that refunds twice grants
-	// itself extra sends.
-	allowance.Refund(FeatureSMSSend)
-	if used := allowance.Used(FeatureSMSSend); used != 0 {
-		t.Fatalf("a refund below zero produced used = %d", used)
-	}
-}
-
-// Retrying at the boundary must not get through, and the count must stay
-// truthful while it is refused.
-//
-// This test replaced one that asserted refused attempts were COUNTED, on the
-// theory that it stopped boundary retries. It does not: once the count reaches
-// the limit every further attempt is refused anyway. The old version passed
-// with the behaviour either way, which is how the bad reasoning survived --
-// found by sabotaging Consume and watching the test not fail.
-func TestRetryingAtTheBoundaryIsRefusedAndNotCounted(t *testing.T) {
-	allowance := NewUsageCounter(t.TempDir())
-	entitlements := Entitlements{granted: map[Scope]map[Feature]bool{}}
-	decision := entitlements.Check(FeatureSMSSend)
-	for attempt := 0; attempt < 3; attempt++ {
-		allowance.Consume(FeatureSMSSend, decision)
-	}
-	for attempt := 0; attempt < 10; attempt++ {
-		if allowance.Consume(FeatureSMSSend, decision) {
-			t.Fatal("retrying at the boundary got through")
-		}
-	}
-	// 3 of 3, not 13 of 3. A Used() that counts refusals cannot be shown to
-	// anybody and makes Refund guess which uses were real.
-	if used := allowance.Used(FeatureSMSSend); used != 3 {
-		t.Fatalf("used = %d after 10 refused retries; want 3", used)
-	}
-}
-
-func TestTheAllowanceResetsOnANewDay(t *testing.T) {
-	directory := t.TempDir()
-	allowance := NewUsageCounter(directory)
-	base := time.Date(2026, 3, 1, 23, 0, 0, 0, time.UTC)
-	allowance.now = func() time.Time { return base }
-	entitlements := Entitlements{granted: map[Scope]map[Feature]bool{}}
-	decision := entitlements.Check(FeatureSMSSend)
-	for attempt := 0; attempt < 3; attempt++ {
-		allowance.Consume(FeatureSMSSend, decision)
-	}
-	if allowance.Consume(FeatureSMSSend, decision) {
-		t.Fatal("the allowance did not run out")
-	}
-
-	// A fresh process on the next day reads the same file.
-	tomorrow := NewUsageCounter(directory)
-	tomorrow.now = func() time.Time { return base.Add(2 * time.Hour) }
-	if !tomorrow.Consume(FeatureSMSSend, decision) {
-		t.Fatal("the allowance did not reset overnight")
 	}
 }

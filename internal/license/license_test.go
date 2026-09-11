@@ -192,9 +192,15 @@ func TestFreeFeaturesNeedNoCertificate(t *testing.T) {
 	}
 }
 
-// Sending is free up to a daily allowance and unlimited once licensed. A
-// boolean answer could not express that, which is why Decision carries a limit.
-func TestSendingSMSIsCappedUntilTheModuleIsLicensed(t *testing.T) {
+// Sending is free, and a licence lifts the anti-fraud guard rather than
+// unlocking the feature. So the observable difference a certificate makes is
+// Licensed, not Allowed.
+//
+// This test used to assert a metered free tier of three sends a day. That was a
+// second counter on top of the guard -- three MESSAGES, not three recipients,
+// and one the dial-pad unlock could not lift. It has been removed; the guard is
+// the only limit.
+func TestSendingSMSIsFreeAndALicenceLiftsTheGuard(t *testing.T) {
 	public, private := issuer(t)
 	identity := Identity{MachineID: "aaaa1111", ModuleSNs: []string{"SN123"}}
 
@@ -202,39 +208,44 @@ func TestSendingSMSIsCappedUntilTheModuleIsLicensed(t *testing.T) {
 	if !unlicensed.Allowed {
 		t.Fatal("sending SMS must be allowed without a licence")
 	}
-	if unlicensed.Limit == nil || unlicensed.Limit.Count != 3 || unlicensed.Limit.Period != PeriodDay {
-		t.Fatalf("expected 3 per day free, got %s", unlicensed)
+	if unlicensed.Limit != nil {
+		t.Fatalf("sending carries a metered limit of %+v; the guard is the limit", unlicensed.Limit)
 	}
 	if unlicensed.Licensed {
-		t.Fatal("the free tier must not report as licensed")
+		t.Fatal("the free tier must not report as licensed, or the guard would never apply")
 	}
 
 	signed, _ := Sign(moduleCert("SN123", string(FeatureSMSSend)), private)
 	licensed := Evaluate([]Signed{signed}, public, identity, time.Now()).Check(FeatureSMSSend)
-	if !licensed.Allowed || licensed.Limit != nil || !licensed.Licensed {
-		t.Fatalf("a module licence should lift the cap, got %s", licensed)
+	if !licensed.Allowed || !licensed.Licensed {
+		t.Fatalf("a module licence should lift the guard, got %s", licensed)
 	}
 }
 
-// Dialling out and WireGuard are paid, and are scoped differently: the SIM
-// carries calling, the box carries tunnels.
+// Entitlements are scoped differently: the SIM carries calling, the box carries
+// tunnels. WireGuard is genuinely paid and is refused without a licence;
+// dialling is free and guarded, so it is never refused and a licence only shows
+// up as Licensed.
 func TestPaidFeaturesAreScopedToWhatTheyBelongTo(t *testing.T) {
 	public, private := issuer(t)
 	identity := Identity{MachineID: "aaaa1111", ModuleSNs: []string{"SN123"}}
 
 	none := Evaluate(nil, public, identity, time.Now())
-	if none.Check(FeatureCallDial).Allowed {
-		t.Fatal("dialling out was allowed with no licence")
+	if none.Check(FeatureCallDial).Licensed {
+		t.Fatal("dialling out reported as licensed with no licence")
+	}
+	if !none.Check(FeatureCallDial).Allowed {
+		t.Fatal("dialling out was refused instead of guarded")
 	}
 	if none.Check(FeatureWireGuard).Allowed {
 		t.Fatal("WireGuard was allowed with no licence")
 	}
 
-	// A module licence unlocks dialling but must not unlock tunnels.
+	// A module licence covers dialling but must not unlock tunnels.
 	moduleOnly, _ := Sign(moduleCert("SN123", string(FeatureCallDial), string(FeatureWireGuard)), private)
 	withModule := Evaluate([]Signed{moduleOnly}, public, identity, time.Now())
-	if !withModule.Check(FeatureCallDial).Allowed {
-		t.Fatal("a module licence did not unlock dialling")
+	if !withModule.Check(FeatureCallDial).Licensed {
+		t.Fatal("a module licence did not cover dialling")
 	}
 	if withModule.Check(FeatureWireGuard).Allowed {
 		t.Fatal("a module certificate unlocked a machine-scoped feature")
@@ -272,7 +283,7 @@ func TestAModuleLicenceOnlyCountsWhileItsModuleIsAttached(t *testing.T) {
 	signed, _ := Sign(moduleCert("SN123", string(FeatureCallDial)), private)
 
 	absent := Evaluate([]Signed{signed}, public, Identity{MachineID: "aaaa1111"}, time.Now())
-	if absent.Check(FeatureCallDial).Allowed {
+	if absent.Check(FeatureCallDial).Licensed {
 		t.Fatal("a module licence applied with the module absent")
 	}
 
@@ -280,7 +291,7 @@ func TestAModuleLicenceOnlyCountsWhileItsModuleIsAttached(t *testing.T) {
 		MachineID: "totally-different-box",
 		ModuleSNs: []string{"SN123"},
 	}, time.Now())
-	if !elsewhere.Check(FeatureCallDial).Allowed {
+	if !elsewhere.Check(FeatureCallDial).Licensed {
 		t.Fatal("a module licence did not follow its module to another gateway")
 	}
 }

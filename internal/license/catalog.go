@@ -64,9 +64,14 @@ type Allowance struct {
 }
 
 var (
-	free      = Allowance{Unlimited: true}
-	paid      = Allowance{}
-	perDay    = func(n int) Allowance { return Allowance{Count: n, Period: PeriodDay} }
+	free = Allowance{Unlimited: true}
+	paid = Allowance{}
+	// guarded is free as far as this catalogue is concerned: the feature is not
+	// metered here, and its daily limit is the anti-fraud guard at the call
+	// site. Spelled as its own name rather than reusing free so the table says
+	// which of the two it means -- "no licence needed" against "no limit at
+	// all" -- without the reader having to go and look.
+	guarded   = Allowance{Unlimited: true}
 	unlimited = Allowance{Unlimited: true}
 )
 
@@ -88,13 +93,27 @@ type rule struct {
 var catalog = map[Feature]rule{
 	FeatureSMSForward: {Free: free, Licensed: free},
 	FeatureCallAnswer: {Free: free, Licensed: free},
+	// The two outbound features are FREE here, and that is not an oversight.
+	//
+	// Their limit is the anti-fraud guard -- five distinct numbers a day for
+	// calls, three for messages, both lifted by typing "unlock" on the dial pad
+	// -- and it lives at the call site in internal/httpapi/call_guard.go
+	// because it is about abuse, not about money. A licence lifts that guard,
+	// so what a certificate buys is "no daily limit", and an unlicensed
+	// installation is fully functional within the limit rather than refused.
+	//
+	// Expressing it this way means Check() never refuses either feature, so no
+	// call site can accidentally render a paywall for them: the only thing an
+	// operator over the limit can be shown is the anti-fraud notice. Licensed
+	// is still declared, because Decision.Licensed is what the call sites read
+	// to decide whether the guard applies at all.
 	FeatureSMSSend: {
-		Free:     perDay(3),
+		Free:     guarded,
 		Licensed: unlimited,
 		Requires: []Scope{ScopeModule},
 	},
 	FeatureCallDial: {
-		Free:     paid,
+		Free:     guarded,
 		Licensed: unlimited,
 		Requires: []Scope{ScopeModule},
 	},

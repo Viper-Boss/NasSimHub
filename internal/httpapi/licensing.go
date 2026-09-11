@@ -26,7 +26,6 @@ import (
 // licenseRuntime is the resolved licence state for this process.
 type licenseRuntime struct {
 	store   *license.Store
-	usage   *license.UsageCounter
 	once    sync.Once
 	machine string
 	// machineError records why the identity could not be resolved. A board with
@@ -49,7 +48,6 @@ func (api *API) licensing() *licenseRuntime {
 		}
 		api.licenseRuntimeInstance = &licenseRuntime{
 			store: license.NewStore(directory, api.issuerPublicKey),
-			usage: license.NewUsageCounter(directory),
 		}
 	})
 	return api.licenseRuntimeInstance
@@ -113,38 +111,65 @@ func (api *API) moduleSerials(ctx context.Context) []string {
 }
 
 // entitlements evaluates the licence state for the current hardware.
-func (api *API) entitlements(ctx context.Context) (license.Entitlements, *license.UsageCounter) {
+func (api *API) entitlements(ctx context.Context) license.Entitlements {
 	runtime := api.licensing()
 	if runtime == nil {
 		// No data directory: fixture mode, or storage that is not configured.
 		// An empty Entitlements grants exactly the free tier, which is the
 		// right answer -- it is what an installation with no certificates has.
-		return license.Entitlements{}, nil
+		return license.Entitlements{}
 	}
 	machine, _ := runtime.machineID()
-	return runtime.store.Entitlements(machine, api.moduleSerials(ctx), time.Now()), runtime.usage
+	return runtime.store.Entitlements(machine, api.moduleSerials(ctx), time.Now())
 }
 
 // featureDecision is the one call every gate makes.
 func (api *API) featureDecision(
 	ctx context.Context,
 	feature license.Feature,
-) (license.Decision, *license.UsageCounter) {
+) license.Decision {
 	if !api.licenseEnforced {
-		// Test builds only; see Options.disableLicenseEnforcement. Granting
-		// unlimited rather than the free tier, so a test exercising a paid path
-		// is not silently metered.
-		return license.Decision{Allowed: true, Licensed: true}, nil
+		// Test builds only; see Options.disableLicenseEnforcement.
+		return license.Decision{Allowed: true, Licensed: true}
 	}
-	entitlements, usage := api.entitlements(ctx)
-	return entitlements.Check(feature), usage
+	return api.entitlements(ctx).Check(feature)
+}
+
+// licensedFeature reports whether a certificate covers this feature.
+//
+// This is the question the two outbound paths ask, and it is deliberately NOT
+// "may I". Calling and texting are free within the anti-fraud guard's daily
+// limit, and what a licence buys is that the guard does not apply. A path that
+// asked "may I" would have somewhere to render a refusal, and for outbound
+// calling there must be no refusal to render: the guard's own notice is the
+// only thing an operator over the limit is shown.
+func (api *API) licensedFeature(ctx context.Context, feature license.Feature) bool {
+	return api.featureDecision(ctx, feature).Licensed
 }
 
 // licenseDenial renders a refusal the operator can act on.
 //
-// The message names what would have to be licensed rather than saying "not
-// permitted", because a paywall that does not say what to buy is just a wall.
-func licenseDenial(decision license.Decision) string {
+// It is a method because the right message depends on something the decision
+// cannot know: whether this build can verify a certificate at all. With
+// MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY unset the store holds no issuer key, so
+// NO certificate can ever verify and every paid feature is locked -- and the
+// message below would tell the operator to send us their machine ID, which
+// would achieve exactly nothing. That misdirection is expensive: it sends
+// somebody who has already paid to the wrong place, and it hides a broken
+// deployment behind a plausible paywall. So the two cases are named
+// separately.
+func (api *API) licenseDenial(decision license.Decision) string {
+	if runtime := api.licensing(); runtime == nil || !runtime.store.Configured() {
+		return "此功能需要授权，但本机安装缺少授权公钥（MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY），" +
+			"因此任何证书都无法校验。请先把公钥配置进部署环境，再申请授权。"
+	}
+	return licenseDenialText(decision)
+}
+
+// licenseDenialText names what would have to be licensed rather than saying
+// "not permitted", because a paywall that does not say what to buy is just a
+// wall.
+func licenseDenialText(decision license.Decision) string {
 	scopes := make([]string, 0, len(decision.Missing))
 	for _, scope := range decision.Missing {
 		switch scope {

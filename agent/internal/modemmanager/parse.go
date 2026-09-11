@@ -307,7 +307,19 @@ func cellularVoiceBearer(state, existingBearer string, accessTechnologies uint32
 	}
 }
 
-const callStateTerminated int32 = 7
+// The ModemManager call states this code names. Only the ones it actually
+// reasons about are declared; the rest stay as the numbers callStateName maps.
+const (
+	// callStateDialing and callStateRingingOut are the two PRE-CONNECTION
+	// states an outgoing call passes through. A call that has only just been
+	// dialled is in one of them and cannot yet be active, which is what lets a
+	// blank-number CLCC record be told apart from a phantom -- see
+	// atRecordCanBeTheDialledCall.
+	callStateDialing    int32 = 1
+	callStateRingingOut int32 = 2
+
+	callStateTerminated int32 = 7
+)
 
 func parseCall(path dbus.ObjectPath, lineID string, properties Properties, ids *instanceIDs) domain.Call {
 	stateCode, _ := int32Property(properties, "State")
