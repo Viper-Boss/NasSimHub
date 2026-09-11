@@ -275,7 +275,6 @@ func validatedNetworkSnapshot(wire networkSnapshotWire) (NetworkSnapshot, error)
 		proxy.RuntimeEpoch = strings.TrimSpace(proxy.RuntimeEpoch)
 		proxy.LastError = strings.TrimSpace(proxy.LastError)
 		if proxy.ID == "" ||
-			proxy.LineID == "" ||
 			!validProxyMode(proxy.Mode) ||
 			net.ParseIP(proxy.ListenAddress) == nil ||
 			proxy.ListenPort == 0 ||

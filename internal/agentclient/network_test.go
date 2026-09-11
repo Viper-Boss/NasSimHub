@@ -347,3 +347,45 @@ func TestPutProxiesAcceptsTunnelProxyWithoutLine(t *testing.T) {
 		t.Fatalf("validateProxyConfigurations() accepted an unknown egress: %v", err)
 	}
 }
+
+// The agent echoes a tunnel proxy with an empty line_id (it has no line), and
+// the snapshot must still parse: rejecting it turned every poll into a
+// protocol error the moment a WireGuard egress proxy existed.
+func TestNetworkAcceptsTunnelProxyWithoutLine(t *testing.T) {
+	t.Parallel()
+
+	client := newUnixTestClient(t, http.HandlerFunc(func(
+		response http.ResponseWriter,
+		_ *http.Request,
+	) {
+		_, _ = response.Write([]byte(`{
+			"boot_epoch":"boot-1",
+			"observed_at":"2026-07-24T00:00:00Z",
+			"lines":[],
+			"proxies":[{
+				"id":"proxy-wg",
+				"line_id":"",
+				"state":"waiting_for_bearer",
+				"running":false,
+				"mode":"socks5",
+				"listen_address":"127.0.0.1",
+				"listen_port":1088,
+				"interface":"",
+				"runtime_epoch":"",
+				"started_at":null,
+				"bytes_up":0,
+				"bytes_down":0,
+				"connections":0,
+				"active_connections":0,
+				"last_error":""
+			}]
+		}`))
+	}))
+	snapshot, err := client.Network(context.Background())
+	if err != nil {
+		t.Fatalf("Network() rejected a tunnel proxy snapshot: %v", err)
+	}
+	if len(snapshot.Proxies) != 1 || snapshot.Proxies[0].LineID != "" {
+		t.Fatalf("snapshot proxies = %+v; want one tunnel proxy with empty line", snapshot.Proxies)
+	}
+}

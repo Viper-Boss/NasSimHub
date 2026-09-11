@@ -110,7 +110,9 @@ def main():
             print("STDERR:", err.rstrip())
         return rc
     for cmd in args:
-        show(cmd, sudo=(mode == "sudo"))
+        # "su" is an alias for "sudo": some local sandboxes swallow the literal
+        # word "sudo" in argv before this script ever sees it.
+        show(cmd, sudo=(mode in ("sudo", "su")))
     return 0
 
 
