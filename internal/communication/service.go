@@ -2363,8 +2363,15 @@ func (s *Service) recordRefreshFailure(operation string, cause error) (Status, e
 		// the matching recovery state even when the modem data itself is unchanged.
 		s.runtimeProjection = runtimeProjection{}
 	}
-	status := cloneStatus(s.status)
 	s.mu.Unlock()
+	// The returned operationError deliberately hides the cause from the client,
+	// so log it here or the real database/projection fault is invisible and the
+	// generic wording is all an operator ever gets.
+	s.logger.Warn("host agent refresh failed",
+		"component", "communication",
+		"operation", operation,
+		"cause", cause,
+	)
 	if changed && s.runtime != nil {
 		s.runtime.Publish(runtimeevents.Change{
 			ObservedAt: s.now().UTC(),
@@ -2372,6 +2379,7 @@ func (s *Service) recordRefreshFailure(operation string, cause error) (Status, e
 				runtimeevents.SectionCalls,
 		})
 	}
+	status := cloneStatus(s.status)
 	return status, operationError(CodeUnavailable, operation, "live hardware state is unavailable", cause)
 }
 
