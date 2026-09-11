@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/human-agent65535/modemdeck/agent/internal/dht"
 	"github.com/human-agent65535/modemdeck/agent/internal/diagnostics"
 	"github.com/human-agent65535/modemdeck/agent/internal/domain"
 	"github.com/human-agent65535/modemdeck/agent/internal/media"
@@ -36,6 +37,7 @@ type handler struct {
 	agentVersion         string
 	media                *media.Manager
 	wireGuard            *wireguard.Manager
+	dht                  *dht.Service
 }
 
 type healthResponse struct {
@@ -77,6 +79,7 @@ type Options struct {
 	NetworkSelection     domain.NetworkSelectionProvider
 	DiagnosticLogs       diagnostics.LogSource
 	WireGuard            *wireguard.Manager
+	DHT                  *dht.Service
 }
 
 func NewWithOptions(
@@ -100,6 +103,7 @@ func NewWithOptions(
 		agentVersion:         agentVersion,
 		media:                options.Media,
 		wireGuard:            options.WireGuard,
+		dht:                  options.DHT,
 	}
 	h.changes, _ = provider.(domain.ChangeSource)
 	h.telemetry, _ = provider.(domain.TelemetryProvider)
@@ -120,6 +124,10 @@ func NewWithOptions(
 	mux.HandleFunc("GET /v1/wireguard", h.getWireGuard)
 	mux.HandleFunc("PUT /v1/wireguard", h.putWireGuard)
 	mux.HandleFunc("POST /v1/wireguard/peer-endpoint", h.postWireGuardEndpoint)
+	mux.HandleFunc("GET /v1/dht", h.getDHT)
+	mux.HandleFunc("PUT /v1/dht", h.putDHT)
+	mux.HandleFunc("GET /v1/dht/identity", h.getDHTIdentity)
+	mux.HandleFunc("POST /v1/dht/dial", h.postDHTDial)
 	mux.HandleFunc("GET /v1/lines/{id}/configuration", h.getDeviceConfiguration)
 	mux.HandleFunc("PATCH /v1/lines/{id}/configuration", h.patchDeviceConfiguration)
 	mux.HandleFunc("GET /v1/lines/{id}/sim", h.getSIMStatus)

@@ -173,14 +173,101 @@ function barTone(percent: number): string {
 }
 
 interface RadioFact { label: string; value: string }
+// Raw dBm means nothing to most people. These are the standard LTE bands for
+// judging a serving cell, so the card can say "good" instead of making the
+// reader remember where -94 dBm falls.
+type SignalGrade = 'excellent' | 'good' | 'fair' | 'poor'
+
+interface SignalMeter {
+  label: string
+  value: number
+  unit: string
+  grade: SignalGrade
+  /** 0-1 position on the meter track. */
+  fill: number
+  hint: string
+}
+
+function grade(value: number, excellent: number, good: number, fair: number): SignalGrade {
+  if (value >= excellent) return 'excellent'
+  if (value >= good) return 'good'
+  if (value >= fair) return 'fair'
+  return 'poor'
+}
+
+function fillRatio(value: number, floor: number, ceiling: number): number {
+  if (ceiling <= floor) return 0
+  return Math.max(0, Math.min(1, (value - floor) / (ceiling - floor)))
+}
+
+const signalMeters = computed<SignalMeter[]>(() => {
+  const cell = cellular.value
+  if (!cell) return []
+  return [
+    {
+      label: 'RSRP',
+      value: cell.rsrp,
+      unit: 'dBm',
+      grade: grade(cell.rsrp, -80, -90, -100),
+      fill: fillRatio(cell.rsrp, -120, -70),
+      hint: t('dashboard.signalRsrpHint')
+    },
+    {
+      label: 'RSRQ',
+      value: cell.rsrq,
+      unit: 'dB',
+      grade: grade(cell.rsrq, -10, -15, -20),
+      fill: fillRatio(cell.rsrq, -25, -5),
+      hint: t('dashboard.signalRsrqHint')
+    },
+    {
+      label: 'SINR',
+      value: cell.sinr,
+      unit: 'dB',
+      grade: grade(cell.sinr, 20, 13, 0),
+      fill: fillRatio(cell.sinr, -10, 30),
+      hint: t('dashboard.signalSinrHint')
+    }
+  ]
+})
+
+function gradeLabel(value: SignalGrade): string {
+  return t(`dashboard.signalGrade_${value}`)
+}
+
+// Throughput history for the data-interface card. The samples are already
+// collected by the shared poller, so drawing them costs no extra requests.
+const RATE_CHART_WIDTH = 268
+const RATE_CHART_HEIGHT = 42
+
+function ratePath(pick: (sample: SystemMetricsSample) => number): string {
+  const samples = systemMetricsState.history.slice(-40)
+  if (samples.length < 2) return ''
+  const peak = Math.max(1, ...samples.map(pick))
+  const step = RATE_CHART_WIDTH / (samples.length - 1)
+  return samples
+    .map((sample, index) => {
+      const x = index * step
+      const y = RATE_CHART_HEIGHT - (pick(sample) / peak) * (RATE_CHART_HEIGHT - 3) - 1.5
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+}
+
+const rxPath = computed(() => ratePath(sample => sample.rxRate))
+const txPath = computed(() => ratePath(sample => sample.txRate ?? 0))
+const hasRateHistory = computed(() => systemMetricsState.history.length >= 2)
+
+// Serving-cell identifiers. The signal strength itself is shown as meters
+// above; repeating the same numbers as a flat list is what made this card and
+// the module card look like duplicates of each other.
 const radioFacts = computed<RadioFact[]>(() => {
   const cell = cellular.value
   if (!cell) return []
   const facts: RadioFact[] = [
-    { label: 'RSRP', value: `${cell.rsrp} dBm` },
-    { label: 'RSRQ', value: `${cell.rsrq} dB` },
+    { label: t('dashboard.radioBand'), value: `${cell.band} · ${cell.frequency_mhz} MHz` },
+    { label: t('dashboard.signalBandwidth'), value: `↓${cell.downlink_bandwidth_mhz} · ↑${cell.uplink_bandwidth_mhz} MHz` },
     { label: 'RSSI', value: `${cell.rssi} dBm` },
-    { label: 'SINR', value: `${cell.sinr} dB` },
     { label: 'PCI', value: String(cell.pci) },
     { label: 'EARFCN', value: String(cell.earfcn) }
   ]
@@ -213,6 +300,17 @@ const radioFacts = computed<RadioFact[]>(() => {
             <strong>{{ formatRate(latestSample?.txRate) }}</strong>
           </div>
         </div>
+        <div v-if="hasRateHistory" class="insight-net__chart" aria-hidden="true">
+          <svg :viewBox="`0 0 ${RATE_CHART_WIDTH} ${RATE_CHART_HEIGHT}`" preserveAspectRatio="none">
+            <path :d="rxPath" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" />
+            <path :d="txPath" fill="none" stroke="var(--success)" stroke-width="1.6" stroke-linejoin="round" />
+          </svg>
+          <span class="insight-net__chart-legend">
+            <em class="is-rx">↓ {{ t('dashboard.downlinkRate') }}</em>
+            <em class="is-tx">↑ {{ t('dashboard.uplinkRate') }}</em>
+          </span>
+        </div>
+
         <dl class="insight-net__totals">
           <div><dt>{{ t('dashboard.rxTotal') }}</dt><dd>{{ formatBytes(netInterface.rx_bytes) }}</dd></div>
           <div><dt>{{ t('dashboard.txTotal') }}</dt><dd>{{ formatBytes(netInterface.tx_bytes) }}</dd></div>
@@ -297,15 +395,35 @@ const radioFacts = computed<RadioFact[]>(() => {
         <h4>{{ t('dashboard.cellCard') }}</h4>
       </header>
       <div v-if="radioFacts.length" class="insight-card__body">
+        <div class="insight-signal">
+          <div
+            v-for="meter in signalMeters"
+            :key="meter.label"
+            class="insight-signal__row"
+            :class="`is-${meter.grade}`"
+            :title="meter.hint"
+          >
+            <span class="insight-signal__label">{{ meter.label }}</span>
+            <span class="insight-signal__track">
+              <span class="insight-signal__fill" :style="{ width: `${Math.round(meter.fill * 100)}%` }" />
+            </span>
+            <span class="insight-signal__value">{{ meter.value }}<em>{{ meter.unit }}</em></span>
+            <span class="insight-signal__grade">{{ gradeLabel(meter.grade) }}</span>
+          </div>
+        </div>
+
         <dl class="insight-radio">
           <div v-for="fact in radioFacts" :key="fact.label">
             <dt>{{ fact.label }}</dt>
             <dd>{{ fact.value }}</dd>
           </div>
         </dl>
+
         <p class="insight-radio__note">
           <Radio :size="12" />
-          {{ cellular?.plmn }} · {{ cellular?.band }} · {{ cellular?.frequency_mhz }} MHz · {{ cellular?.downlink_bandwidth_mhz }} MHz
+          {{ cellular?.plmn }} · {{ cellular?.rat }}
+          <template v-if="cellular?.cell_id_hex">· Cell {{ cellular.cell_id_hex }}</template>
+          <template v-if="cellular?.tac_hex">· TAC {{ cellular.tac_hex }}</template>
         </p>
       </div>
       <p v-else class="insight-card__empty">{{ t('dashboard.noCellular') }}</p>
@@ -473,7 +591,7 @@ const radioFacts = computed<RadioFact[]>(() => {
   height: 100%;
   background: var(--accent);
   border-radius: var(--radius-pill);
-  transition: width 0.5s ease;
+  transition: width var(--motion-slow) var(--ease-emphasized);
 }
 
 .insight-run__bar i.is-warn { background: var(--warning, #fbbf24); }
@@ -561,4 +679,95 @@ const radioFacts = computed<RadioFact[]>(() => {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* ---- data interface throughput ---- */
+.insight-net__chart {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 56px;
+  align-content: end;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+}
+
+.insight-net__chart svg {
+  display: block;
+  width: 100%;
+  height: 42px;
+}
+
+.insight-net__chart-legend {
+  display: flex;
+  gap: 12px;
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.insight-net__chart-legend em { font-style: normal; }
+.insight-net__chart-legend .is-rx { color: var(--accent); }
+.insight-net__chart-legend .is-tx { color: var(--success); }
+
+/* ---- serving-cell quality ---- */
+.insight-signal {
+  display: grid;
+  gap: 9px;
+}
+
+.insight-signal__row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+}
+
+.insight-signal__label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.insight-signal__track {
+  height: 6px;
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.insight-signal__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: currentcolor;
+  transition: width var(--motion-slow) var(--ease-emphasized);
+}
+
+.insight-signal__value {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-signal__value em {
+  margin-left: 2px;
+  color: var(--faint);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.insight-signal__grade {
+  min-width: 34px;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+/* The row carries the colour; the bar and the verdict both inherit it, so a
+   weak signal reads the same way in every element of the row. */
+.insight-signal__row.is-excellent { color: var(--success); }
+.insight-signal__row.is-good { color: var(--accent); }
+.insight-signal__row.is-fair { color: var(--warning); }
+.insight-signal__row.is-poor { color: var(--danger); }
 </style>

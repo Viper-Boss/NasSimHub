@@ -408,7 +408,6 @@ func run(
 	api.StartHomeSIMForwarderWorker(signals)
 	api.StartHomeSIMNKNWorker(signals)
 	api.StartHomeSIMNKNOptionalServices(signals)
-	api.StartHomeSIMNKNMetrics(signals)
 	tlsMaintenanceDone := make(chan struct{})
 	go func() {
 		defer close(tlsMaintenanceDone)

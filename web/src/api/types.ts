@@ -552,6 +552,11 @@ export type ProxyInstance = {
   auth_enabled: boolean
   username: string
   has_password: boolean
+  // 'line' leaves through a modem bearer, 'wireguard' through a tunnel
+  // interface. Records written before this existed read as 'line'.
+  egress?: 'line' | 'wireguard'
+  egress_interface?: string
+  egress_dns?: string[]
   revision: number
   applied_revision: number
   apply_state: ProxyApplyState
@@ -569,6 +574,9 @@ export type CreateProxyInput = {
   auth_enabled: boolean
   username: string
   password: string
+  egress?: 'line' | 'wireguard'
+  egress_interface?: string
+  egress_dns?: string[]
 }
 
 export type UpdateProxyInput = Omit<CreateProxyInput, 'password'> & {

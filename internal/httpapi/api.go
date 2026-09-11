@@ -146,6 +146,18 @@ type WireGuardService interface {
 	WireGuardStatusFor(context.Context, string, bool) (agentclient.WireGuardStatus, error)
 }
 
+// DHTService is optional for the same reason WireGuardService is: an older
+// agent has no DHT endpoints, and the API must say the runtime is unavailable
+// rather than fail or invent a state.
+type DHTService interface {
+	ApplyDHT(context.Context, agentclient.DHTConfig) (agentclient.DHTStatus, error)
+	DHTStatus(context.Context, bool) (agentclient.DHTStatus, error)
+	// DialDHT connects to peers learned out of band -- addresses a paired
+	// instance announced over NKN. Apply does nothing while the host is
+	// already running, so this is how a late peer gets in without a restart.
+	DialDHT(context.Context, []string) (int, error)
+}
+
 type DeviceConfigurationService interface {
 	DeviceConfiguration(context.Context, string) (agentclient.DeviceConfiguration, error)
 	ApplyDeviceConfiguration(
@@ -292,6 +304,7 @@ type Options struct {
 	Communications         CommunicationService
 	DeviceConfigurations   DeviceConfigurationService
 	WireGuard              WireGuardService
+	DHT                    DHTService
 	LineServices           LineService
 	CallPolicies           CallPolicyService
 	MessagePolicies        MessagePolicyService
@@ -330,7 +343,6 @@ type API struct {
 	homeSIMNKNStatus           homeSIMNKNStatus
 	mobileInviteMu             sync.Mutex
 	wireGuardMu                sync.Mutex
-	nknMetricsMu               sync.Mutex
 	mobileInvites              map[[32]byte]mobileInvite
 	homeSIMNKNClients          map[string]*homeSIMNKNClient
 	nknNode                    *nknNodeManager
@@ -349,6 +361,8 @@ type API struct {
 	communications             CommunicationService
 	deviceConfigurations       DeviceConfigurationService
 	wireGuardService           WireGuardService
+	dhtService                 DHTService
+	dhtMu                      sync.Mutex
 	lineServices               LineService
 	callPolicies               CallPolicyService
 	messagePolicies            MessagePolicyService
@@ -405,6 +419,7 @@ func New(repository Repository, options Options) (*API, error) {
 		communications:             options.Communications,
 		deviceConfigurations:       options.DeviceConfigurations,
 		wireGuardService:           options.WireGuard,
+		dhtService:                 options.DHT,
 		lineServices:               options.LineServices,
 		callPolicies:               options.CallPolicies,
 		messagePolicies:            options.MessagePolicies,
@@ -611,6 +626,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.getOnly(response, request, api.nknNodeWalletBackup)
 	case "/api/v1/settings/nkn-node/logs":
 		api.getOnly(response, request, api.nknNodeLogTail)
+	case "/api/v1/settings/homesim/dht":
+		api.dhtSettingsHandler(response, request)
 	case "/api/v1/settings/nkn-network":
 		api.nknNetworkSettings(response, request)
 	case "/api/v1/settings/nkn-network/peers":

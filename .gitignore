@@ -125,3 +125,6 @@ agent/modemdeck-agent-arm64
 
 # Agent working memory (may contain operational details)
 .workbuddy/
+/**/*.tar
+r8*-webdist.tar
+/固件和工具/

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"reflect"
 	"strings"
@@ -1171,11 +1172,23 @@ func (s *Service) bindNetworkSnapshot(
 		endpointID := strings.TrimSpace(proxy.LineID)
 		lineID := lineIDByEndpoint[endpointID]
 		if lineID == "" {
-			return agentclient.NetworkSnapshot{}, nil, fmt.Errorf(
-				"proxy %q references unattached endpoint %q",
-				proxy.ID,
-				endpointID,
+			// A proxy whose endpoint is not attached cannot be presented with a
+			// stable line identity, so it is left out of the public snapshot --
+			// the same treatment the loop above gives a line.
+			//
+			// This used to fail the whole bind. That turned one unresolved
+			// proxy into a total blackout of network status, renewed at every
+			// poll, and the message named the proxy rather than the missing
+			// endpoint attachment that actually caused it. The proxy's own
+			// runtime status already reports that it cannot run; dropping it
+			// here keeps every other line and proxy visible while that is true.
+			slog.Warn(
+				"left a proxy out of the network snapshot: its endpoint is not attached to a line",
+				"component", "networkruntime",
+				"proxy", proxy.ID,
+				"endpoint", endpointID,
 			)
+			continue
 		}
 		proxy.LineID = lineID
 		publicProxies = append(publicProxies, proxy)

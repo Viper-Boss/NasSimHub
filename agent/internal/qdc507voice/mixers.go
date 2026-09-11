@@ -18,15 +18,36 @@ const mixerCommandTimeout = 8 * time.Second
 // voLTEMixers are the module mixer switches that connect the VoLTE voice stream
 // to the auxiliary PCM the USB audio path uses.
 //
-// They are NOT enabled by the vendor calibration even though that step logs
-// "Setting mixer control: ... value: 1": the tool it drives only prints what it
-// was asked to set and never reads the control back, so the route reports as
-// established while the switches stay off. Measured on the QDC507 with both
-// switches off: the downlink arrived as a barely audible leak and the uplink
-// never reached the far end at all — the caller could not hear this side.
+// The vendor firmware never enables them, and the reason is not subtle once you
+// look at the shipped image. Its voice daemon (usr/bin/quectel_daemon) brings
+// audio up by writing a hard-coded command block to alsaucm_test:
+//
+//	open snd_soc_msm_9x07_Tomtom_I2S
+//	set _verb Voice Call
+//	set _enadev Auxpcm Rx
+//	set _enadev Auxpcm Tx
+//
+// "Voice Call" is a literal with no branch anywhere near it, and in the UCM file
+// that verb actually reads (/etc/snd_soc_msm/snd_soc_msm_9x07_Tomtom_I2S) it
+// enables the CIRCUIT-SWITCHED route:
+//
+//	'SEC_AUX_PCM_RX_Voice Mixer CSVoice':1:1
+//	'Voice_Tx Mixer SEC_AUX_PCM_TX_Voice':1:1
+//
+// The same file also defines a "VoLTE" verb whose enable sequence is exactly the
+// two controls below — and nothing in the firmware ever selects it. So on a
+// VoLTE call, which is every call on a modern network, the route is simply never
+// connected. Measured on the QDC507 with both switches off: the downlink arrived
+// as a barely audible leak and the uplink never reached the far end at all.
 //
 // Enabling them is what makes call audio work in both directions, so the
-// reconciler asserts them on every pass rather than trusting the calibration.
+// reconciler asserts them on every pass rather than trusting the vendor daemon.
+//
+// (An earlier version of this comment blamed the calibration tool for not
+// reading its writes back. That was wrong: alsaucm_test is never asked to set
+// these controls in the first place. Recorded here because the wrong
+// explanation sends you digging through alsaucm_test for a bug that isn't
+// there.)
 var voLTEMixers = []string{
 	"SEC_AUX_PCM_RX_Voice Mixer VoLTE",
 	"VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE",

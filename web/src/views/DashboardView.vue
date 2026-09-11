@@ -33,6 +33,9 @@ import ContactEditor from '../components/ContactEditor.vue'
 import MessageThreadListItem from '../components/MessageThreadListItem.vue'
 import ModuleCard from '../components/ModuleCard.vue'
 import ModuleInsightCards from '../components/ModuleInsightCards.vue'
+import NetworkGlobeCard from '../components/NetworkGlobeCard.vue'
+import WireGuardTrafficCard from '../components/WireGuardTrafficCard.vue'
+import { wireGuardUnlockState } from '../state/wireguardUnlock'
 import ListSkeleton from '../components/ListSkeleton.vue'
 import ListSelectionToggle from '../components/ListSelectionToggle.vue'
 import SelectableListRow from '../components/SelectableListRow.vue'
@@ -40,7 +43,7 @@ import StatePanel from '../components/StatePanel.vue'
 import SwipeActionRow from '../components/SwipeActionRow.vue'
 import TrafficSummary from '../components/TrafficSummary.vue'
 import SystemMetricsStrip from '../components/SystemMetricsStrip.vue'
-import { acquireSystemMetrics, releaseSystemMetrics, systemMetricsState } from '../state/systemMetrics'
+import { acquireSystemMetrics, releaseSystemMetrics } from '../state/systemMetrics'
 import LoadingSkeletonBoundary from '../components/skeletons/LoadingSkeletonBoundary.vue'
 import SectionSkeleton from '../components/skeletons/SectionSkeleton.vue'
 import WorkspaceDetailSkeleton from '../components/skeletons/WorkspaceDetailSkeleton.vue'
@@ -1231,7 +1234,6 @@ onBeforeUnmount(() => {
                   :line="line"
                   :device="deviceFor(line)"
                   :runtime="networkRuntime(line)"
-                  :radio="systemMetricsState.metrics?.cellular ?? null"
                   :selectable="!line.module_only"
                   :default-line="lineKey(line) === defaultLineID"
                   @select="openLineSettings(line)"
@@ -1239,6 +1241,10 @@ onBeforeUnmount(() => {
                 <ModuleInsightCards
                   v-if="line === moduleLines[0]"
                   :line="line"
+                />
+                <NetworkGlobeCard v-if="line === moduleLines[0]" />
+                <WireGuardTrafficCard
+                  v-if="line === moduleLines[0] && wireGuardUnlockState.unlocked"
                 />
               </template>
               </div>
@@ -1447,6 +1453,12 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(auto-fill, minmax(320px, 420px));
   justify-content: start;
   gap: 12px;
+}
+
+/* Cards size to their content instead of being stretched to the tallest one in
+   the row. Stretching is what left large voids under the shorter cards. */
+.dashboard-module-grid {
+  align-items: start;
 }
 
 .dashboard-module-grid > :deep(.module-card),

@@ -8,6 +8,7 @@ import type {
   NetworkUsage,
   ProxyInstance
 } from '../api/types'
+import { getWireGuardSettings } from '../api/client'
 import LineTag from '../components/LineTag.vue'
 import PageContentFrame from '../components/PageContentFrame.vue'
 import ProxyCard from '../components/ProxyCard.vue'
@@ -231,11 +232,59 @@ watch(lines, current => {
   }
 })
 
+// Whether each WireGuard interface currently has a peer that is handshaking.
+// A tunnel interface stays up whether or not anyone is on the other end, so the
+// runtime honestly reports such a proxy as running -- this is what tells the
+// operator it cannot actually carry anything.
+//
+// Only fetched when a proxy actually leaves through a tunnel, and deliberately
+// outside the initial-load barrier: the proxy list must not wait on it, and a
+// failure here leaves the cards exactly as they were before.
+const tunnelPeerLive = ref<Record<string, boolean>>({})
+
+const tunnelInterfaces = computed(() => {
+  const names = new Set<string>()
+  for (const proxy of networkState.proxies) {
+    const name = (proxy.egress_interface || '').trim()
+    if (proxy.egress === 'wireguard' && name) names.add(name)
+  }
+  return [...names]
+})
+
+async function refreshTunnelPeers(): Promise<void> {
+  if (tunnelInterfaces.value.length === 0) {
+    tunnelPeerLive.value = {}
+    return
+  }
+  try {
+    const response = await getWireGuardSettings()
+    const live = (response.status.peers ?? []).some(peer => peer.current)
+    // The gateway runs a single interface, so every tunnel proxy shares its
+    // peer state. Keyed by name anyway so this still reads correctly if that
+    // ever stops being true.
+    const next: Record<string, boolean> = {}
+    for (const name of tunnelInterfaces.value) next[name] = live
+    tunnelPeerLive.value = next
+  } catch {
+    // Unknown is not the same as lost: leave the cards unannotated rather than
+    // accusing a healthy tunnel of being down.
+    tunnelPeerLive.value = {}
+  }
+}
+
+function egressPeerLost(proxy: ProxyInstance): boolean {
+  const name = (proxy.egress_interface || '').trim()
+  if (proxy.egress !== 'wireguard' || !name) return false
+  return tunnelPeerLive.value[name] === false
+}
+
+watch(tunnelInterfaces, () => void refreshTunnelPeers(), { immediate: false })
+
 onMounted(() => {
   void waitForInitialLoad([
     () => loadBootstrap(true),
     () => loadNetwork(true)
-  ])
+  ]).then(() => refreshTunnelPeers())
 })
 </script>
 
@@ -385,6 +434,7 @@ onMounted(() => {
               :today="usageFor('today', 'proxy', proxy.id)"
               :month="usageFor('month', 'proxy', proxy.id)"
               :busy="Boolean(networkState.busyID)"
+              :egress-peer-lost="egressPeerLost(proxy)"
               @edit="openEdit"
               @toggle="toggleProxy"
               @remove="deleteProxy"

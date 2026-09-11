@@ -5,6 +5,8 @@ import { computed, onMounted, ref } from 'vue'
 import SensitiveValue from '../SensitiveValue.vue'
 import { ShieldCheck, Plus, Trash2 } from '@lucide/vue'
 import { getWireGuardSettings, saveWireGuardSettings, type WireGuardResponse } from '../../api/client'
+import WireGuardTrafficCard from '../WireGuardTrafficCard.vue'
+import { wireGuardUnlockState } from '../../state/wireguardUnlock'
 const data = ref<WireGuardResponse | null>(null)
 const busy = ref(false)
 const error = ref('')
@@ -53,6 +55,7 @@ onMounted(load)
         <span class="wg-live-transfer">{{ t('homesim.advanced.wgPeerTransfer', { rx: bytes(peer.rx_bytes), tx: bytes(peer.tx_bytes) }) }}</span>
       </div>
     </section>
+    <WireGuardTrafficCard v-if="wireGuardUnlockState.unlocked" class="wg-traffic-slot" />
     <div class="wg-grid"><label class="wg-switch"><input v-model="data.settings.enabled" class="ui-check" type="checkbox" />{{ t('homesim.advanced.text69') }}</label><label>{{ t('homesim.advanced.text70') }}<input v-model="data.settings.address" placeholder="10.77.0.1/24" /></label><label>{{ t('homesim.advanced.text71') }}<input v-model.number="data.settings.listen_port" type="number" min="1024" max="65535" /></label><label>{{ t('homesim.advanced.text72') }}<input v-model="data.settings.advertised_endpoint" :placeholder="t('homesim.advanced.text61')" /></label></div>
     <p>{{ t('homesim.advanced.text73') }}</p>
     <h3>{{ t('homesim.advanced.text74') }}</h3><article v-for="(peer,index) in data.settings.peers" :key="index" class="wg-peer"><div class="wg-grid"><label>{{ t('homesim.advanced.text75') }}<input v-model="peer.name" /></label><label>{{ t('homesim.advanced.text76') }}<input v-model="peer.public_key" spellcheck="false" /></label><label>{{ t('homesim.advanced.text77') }}<input v-model="peer.endpoint" :placeholder="t('homesim.advanced.text62')" /></label><label>{{ t('homesim.advanced.text78') }}<input v-model="peer.nkn_address" :placeholder="t('homesim.advanced.text63')" /></label><label>{{ t('homesim.advanced.text79') }}<input :value="peer.allowed_ips.join(', ')" @input="peer.allowed_ips = ($event.target as HTMLInputElement).value.split(',').map(v => v.trim()).filter(Boolean)" placeholder="10.77.0.2/32" /></label></div><button type="button" class="secondary-button" @click="data.settings.peers.splice(index,1)"><Trash2 :size="15" />{{ t('homesim.advanced.text80') }}</button></article>

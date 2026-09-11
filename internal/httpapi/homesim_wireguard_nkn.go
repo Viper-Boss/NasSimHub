@@ -28,6 +28,9 @@ func (api *API) receiveNKNControl(ctx context.Context, client *homeSIMNKNClient)
 			if api.receiveNKNChat(message) {
 				continue
 			}
+			if api.receiveDHTAnnouncement(message) {
+				continue
+			}
 			api.receiveWireGuardAnnouncement(message)
 		}
 	}

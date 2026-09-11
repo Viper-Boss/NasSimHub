@@ -29,6 +29,14 @@ type proxyCreateRequest struct {
 	AuthEnabled   bool                  `json:"auth_enabled"`
 	Username      string                `json:"username"`
 	Password      string                `json:"password"`
+
+	// The egress selection. The store, the service and the proxy editor have
+	// carried these since the WireGuard egress landed; this struct did not, and
+	// because the decoder rejects unknown fields a proxy created with a tunnel
+	// egress was refused with 400 before it reached any of them.
+	Egress          string   `json:"egress"`
+	EgressInterface string   `json:"egress_interface"`
+	EgressDNS       []string `json:"egress_dns"`
 }
 
 type proxyUpdateRequest struct {
@@ -42,6 +50,10 @@ type proxyUpdateRequest struct {
 	AuthEnabled   *bool                  `json:"auth_enabled"`
 	Username      *string                `json:"username"`
 	Password      *string                `json:"password"`
+
+	Egress          *string   `json:"egress"`
+	EgressInterface *string   `json:"egress_interface"`
+	EgressDNS       *[]string `json:"egress_dns"`
 }
 
 type proxyCollectionResponse struct {
@@ -116,6 +128,10 @@ func (api *API) proxyCollection(response http.ResponseWriter, request *http.Requ
 			AuthEnabled:   body.AuthEnabled,
 			Username:      body.Username,
 			Password:      body.Password,
+
+			Egress:          body.Egress,
+			EgressInterface: body.EgressInterface,
+			EgressDNS:       body.EgressDNS,
 		})
 		if err != nil {
 			api.writeNetworkError(response, request, "create proxy settings", err)
@@ -178,6 +194,10 @@ func (api *API) proxyResource(
 			AuthEnabled:   body.AuthEnabled,
 			Username:      body.Username,
 			Password:      body.Password,
+
+			Egress:          body.Egress,
+			EgressInterface: body.EgressInterface,
+			EgressDNS:       body.EgressDNS,
 		})
 		if err != nil {
 			api.writeNetworkError(response, request, "update proxy settings", err)

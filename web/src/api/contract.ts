@@ -825,13 +825,36 @@ function normalizedProxyFields(
   requirePassword: boolean
 ): Omit<CreateProxyInput, 'password'> & { password?: string } {
   const name = input.name.trim()
-  const lineID = input.line_id.trim()
   const listenAddress = input.listen_address.trim()
   const username = input.username.trim()
   const password = input.password
   if (!name) throw new Error('代理名称不能为空')
-  if (!lineID) throw new Error('请选择线路')
   if (!PROXY_MODES.has(input.mode)) throw new Error('代理协议无效')
+
+  // The egress decides whether a line is even meaningful, so it is settled
+  // before the line is validated. A tunnel proxy is not tied to a SIM: the API
+  // clears its line_id, and demanding one here made a tunnel proxy impossible
+  // to submit from the editor at all.
+  const egress = input.egress === 'wireguard' ? 'wireguard' : 'line'
+  const lineID = egress === 'wireguard' ? '' : input.line_id.trim()
+  if (egress === 'line' && !lineID) throw new Error('请选择线路')
+
+  const egressInterface = egress === 'wireguard' ? (input.egress_interface ?? '').trim() : ''
+  const egressDNS =
+    egress === 'wireguard'
+      ? (input.egress_dns ?? []).map(server => server.trim()).filter(server => server !== '')
+      : []
+  if (egress === 'wireguard') {
+    if (!egressInterface) throw new Error('请填写 WireGuard 接口名')
+    if (egressInterface.length > 15 || /[\s/]/.test(egressInterface)) {
+      throw new Error('WireGuard 接口名无效')
+    }
+    // Name lookups have to leave through the tunnel too, which is why the API
+    // requires these rather than defaulting them.
+    if (egressDNS.length === 0) throw new Error('隧道出口必须填写 DNS 服务器，否则域名解析会走本地网络')
+    if (egressDNS.length > 4) throw new Error('最多 4 个 DNS 服务器')
+  }
+
   if (!listenAddress) throw new Error('监听地址不能为空')
   if (
     !Number.isSafeInteger(input.listen_port) ||
@@ -855,6 +878,9 @@ function normalizedProxyFields(
     listen_port: input.listen_port,
     auth_enabled: input.auth_enabled,
     username,
+    egress,
+    egress_interface: egressInterface,
+    egress_dns: egressDNS,
     ...(password ? { password } : {})
   }
 }

@@ -29,6 +29,11 @@ const props = defineProps<{
   today?: NetworkUsage
   month?: NetworkUsage
   busy: boolean
+  // True when this proxy leaves through a WireGuard interface that is still up
+  // but whose peer has stopped handshaking. The proxy really is running, so the
+  // runtime reports it as such; it just cannot carry anything, and "running" on
+  // its own reads as "this works".
+  egressPeerLost?: boolean
 }>()
 
 defineEmits<{
@@ -45,7 +50,10 @@ function runtimeState(): DisplayRuntimeState {
   return props.runtime?.state || 'unknown'
 }
 
+const peerLost = computed(() => props.egressPeerLost === true && runtimeState() === 'running')
+
 function stateLabel(): string {
+  if (peerLost.value) return t('proxy.peerLost')
   switch (runtimeState()) {
     case 'running':
       return t('proxy.running')
@@ -97,8 +105,12 @@ function applyStateLabel(): string {
       />
     </header>
 
-    <div class="proxy-card__status" :class="`is-${runtimeState()}`">
-      <CircleCheck v-if="runtimeState() === 'running'" :size="15" />
+    <div
+      class="proxy-card__status"
+      :class="peerLost ? 'is-peer-lost' : `is-${runtimeState()}`"
+    >
+      <CircleAlert v-if="peerLost" :size="15" />
+      <CircleCheck v-else-if="runtimeState() === 'running'" :size="15" />
       <CircleAlert v-else-if="runtimeState() === 'error'" :size="15" />
       <Power v-else-if="runtimeState() === 'disabled'" :size="15" />
       <Clock3 v-else-if="runtimeState() === 'waiting_for_bearer'" :size="15" />
@@ -112,6 +124,9 @@ function applyStateLabel(): string {
         class="proxy-card__runtime-error"
       >
         {{ runtime.last_error }}
+      </small>
+      <small v-else-if="peerLost" class="proxy-card__runtime-error">
+        {{ t('proxy.peerLostHint') }}
       </small>
     </div>
 
@@ -252,6 +267,14 @@ function applyStateLabel(): string {
 .proxy-card__status.is-error {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+/* A running proxy whose tunnel peer has gone quiet: it is not an error -- the
+   proxy is doing exactly what it was told -- but it cannot carry traffic, so it
+   must not wear the same colour as a healthy one. */
+.proxy-card__status.is-peer-lost {
+  color: var(--warning, #b45309);
+  background: var(--warning-soft, rgba(251, 191, 36, 0.16));
 }
 
 .proxy-card dl {

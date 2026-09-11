@@ -14,6 +14,8 @@ import { connectData, disconnectData, setRadioEnabled } from '../state/deviceCon
 import { gateway } from '../api/client'
 import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus, getVowifiDiagnostics } from '../api/client'
 import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus, VowifiDiagnosticsSnapshot, VowifiPathProbe } from '../api/client'
+import { getDHTSettings, type DHTStatus } from '../api/client'
+import { dhtUnlockState } from '../state/dhtUnlock'
 const LineSelector = defineAsyncComponent(() => import('./LineSelector.vue'))
 
 const { t } = useI18n()
@@ -46,6 +48,41 @@ const nknStateLabel = computed(() => t(`homesim.nknBadge.state_${nknState.value 
 const nknAddress = computed(() => nknStatus.value?.runtime.my_address || '')
 
 let nknTimer: ReturnType<typeof setInterval> | undefined
+
+// --- DHT indicator ----------------------------------------------------------
+// The second control path, shown beside NKN once the operator has asked for it
+// by name. The two are separate paths, so one being healthy says nothing about
+// the other and they get separate lights.
+const dhtStatus = ref<DHTStatus | null>(null)
+const dhtState = computed(() => dhtStatus.value?.state || 'unknown')
+const dhtDotClass = computed(() => {
+  // "ready" is the only state that can carry a lookup. "isolated" means the
+  // node is running and has found nobody, which is not an error and is also
+  // not working: it gets amber rather than green or red.
+  if (dhtState.value === 'ready') return 'is-green'
+  if (dhtState.value === 'starting' || dhtState.value === 'isolated') return 'is-amber'
+  return 'is-red'
+})
+const dhtStateLabel = computed(() => {
+  switch (dhtState.value) {
+    case 'ready': return t('dht.stateReady')
+    case 'isolated': return t('dht.stateIsolated')
+    case 'starting': return t('dht.stateStarting')
+    case 'error': return t('dht.stateError')
+    case 'disabled': return t('dht.stateDisabled')
+    case 'unavailable': return t('dht.stateUnavailable')
+    default: return t('dht.statePending')
+  }
+})
+
+async function refreshDhtStatus(): Promise<void> {
+  if (!dhtUnlockState.unlocked) return
+  try {
+    dhtStatus.value = (await getDHTSettings()).status
+  } catch {
+    dhtStatus.value = null
+  }
+}
 
 async function refreshNknStatus(): Promise<void> {
   try {
@@ -355,8 +392,10 @@ function onDocumentPointerDown(event: PointerEvent): void {
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown)
   void refreshNknStatus()
+  void refreshDhtStatus()
   nknTimer = setInterval(() => {
     void refreshNknStatus()
+    void refreshDhtStatus()
     void refreshDataState()
   }, 60_000)
 })
@@ -459,6 +498,17 @@ onBeforeUnmount(() => {
     </div>
     </template>
 
+    <!-- No module attached. The strip stays, greyed and flat-lined, rather than
+         vanishing: removing it left the NKN badge alone in the flex row, which
+         made the badge visibly shrink and read as a rendering fault. A flat line
+         where the signal bars were says "nothing is being measured" instead. -->
+    <div v-else class="line-status is-vacant" role="status" :aria-label="t('shell.noModuleStatus')">
+      <span class="line-status__carrier">{{ t('shell.noModuleStatus') }}</span>
+      <span class="line-status__divider" aria-hidden="true" />
+      <span class="line-status__flatline" aria-hidden="true" />
+      <span v-if="version" class="line-status__version">{{ version }}</span>
+    </div>
+
     <!-- NKN network: standalone box beside the status strip, independent of any line -->
     <button
       type="button"
@@ -475,6 +525,20 @@ onBeforeUnmount(() => {
       <span>NKN</span>
       <span class="nkn-badge__state">{{ nknStateLabel }}</span>
     </button>
+
+    <!-- DHT: the second control path, hidden until asked for by name -->
+    <RouterLink
+      v-if="dhtUnlockState.unlocked"
+      class="nkn-badge is-dht"
+      :class="dhtDotClass"
+      :to="{ name: 'settings', params: { section: 'dht' } }"
+      :title="dhtStateLabel"
+      :aria-label="dhtStateLabel"
+    >
+      <span class="nkn-badge__dot" aria-hidden="true" />
+      <span>DHT</span>
+      <span class="nkn-badge__state">{{ dhtStateLabel }}</span>
+    </RouterLink>
 
     <!-- Quota popover: one quota block, the line switches, then diagnostics -->
     <div v-if="open" class="line-status-pop">
@@ -597,7 +661,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="nkn-pop__stat">
           <em>{{ t('homesim.nknBadge.registered') }}</em>
-          <strong>{{ nknDetailLoading ? '…' : (nknPeers?.registered_total ?? '—') }}</strong>
+          <strong>{{ nknDetailLoading ? '…' : (nknPeers?.active_90d ?? '—') }}</strong>
         </div>
         <div class="nkn-pop__stat">
           <em>{{ t('homesim.nknBadge.nodes') }}</em>
@@ -645,6 +709,22 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--surface) 72%, transparent);
   transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+/* The vacant strip is not interactive: there is nothing to open. */
+.line-status.is-vacant {
+  cursor: default;
+  opacity: 0.62;
+}
+
+/* A flat line occupying the same width the signal bars had, so the header does
+   not change size when a module is pulled. */
+.line-status__flatline {
+  display: block;
+  width: 26px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.75;
 }
 
 .line-status:hover,
@@ -1140,6 +1220,17 @@ onBeforeUnmount(() => {
 .nkn-badge.is-red .nkn-badge__dot,
 .nkn-badge__dot.is-red {
   background: var(--danger, #f87171);
+}
+
+/* The DHT light borrows the NKN badge's shape so the two read as a pair, and
+   its own hue so they are never mistaken for one path reported twice. */
+.nkn-badge.is-dht {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nkn-badge.is-dht:hover {
+  border-color: color-mix(in srgb, var(--dht-hue, #b07cff) 45%, transparent);
 }
 
 /* NKN popover */

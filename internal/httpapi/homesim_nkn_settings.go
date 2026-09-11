@@ -185,6 +185,10 @@ func (api *API) StartHomeSIMNKNWorker(ctx context.Context) {
 					}
 					if time.Since(lastAnnouncement) >= time.Minute {
 						api.announceWireGuardEndpoint(current)
+						// The DHT rides the same cadence: both are signalling
+						// to the same set of paired instances, and a peer that
+						// can hear one can hear the other.
+						api.announceDHTAddresses(current)
 						lastAnnouncement = time.Now()
 					}
 				}

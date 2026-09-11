@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
         <dl class="nkn-network__metrics" :aria-busy="peersLoading">
           <div><dt>{{ t('homesim.nknNetwork.active24h') }}</dt><dd>{{ peersError ? '—' : (peers?.active_24h ?? '—') }}</dd></div>
           <div><dt>{{ t('homesim.nknNetwork.activeMonth') }}</dt><dd>{{ peersError ? '—' : (peers?.active_month ?? '—') }}</dd></div>
-          <div><dt>{{ t('homesim.nknNetwork.registeredTotal') }}</dt><dd>{{ peersError ? '—' : (peers?.registered_total ?? '—') }}</dd></div>
+          <div><dt>{{ t('homesim.nknNetwork.active90d') }}</dt><dd>{{ peersError ? '—' : (peers?.active_90d ?? '—') }}</dd></div>
         </dl>
         <details class="nkn-network__hint">
           <summary class="ui-disclosure-summary">{{ t('homesim.nknNetwork.statisticsDetails') }}</summary>

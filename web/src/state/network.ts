@@ -19,6 +19,19 @@ export type ProxyDraft = {
   listen_port: number
   username: string
   password: string
+  // 'line' leaves through a modem data bearer; 'wireguard' leaves through a
+  // tunnel interface, which is how a LAN device reaches the far side of a
+  // NAS-to-NAS link. Resolvers are typed as one comma-separated field.
+  egress: 'line' | 'wireguard'
+  egress_interface: string
+  egress_dns: string
+}
+
+function splitEgressDNS(value: string): string[] {
+  return value
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean)
 }
 
 export const networkState = reactive<{
@@ -49,8 +62,12 @@ function failureMessage(error: unknown, fallback: string): string {
 
 function proxyName(draft: ProxyDraft, lineLabel: string): string {
   const protocol = draft.mode === 'http' ? 'HTTP' : 'SOCKS5'
+  // A tunnel proxy has no line, so naming it after one would be a lie.
+  const source = draft.egress === 'wireguard'
+    ? (draft.egress_interface.trim() || 'WireGuard')
+    : (lineLabel.trim() || translate('lines.line'))
   return translate('runtime.proxyName', {
-    line: lineLabel.trim() || translate('lines.line'),
+    line: source,
     protocol,
     port: draft.listen_port
   }).slice(0, 100)
@@ -59,7 +76,17 @@ function proxyName(draft: ProxyDraft, lineLabel: string): string {
 function validateDraft(draft: ProxyDraft, existing?: ProxyInstance): string {
   const username = draft.username.trim()
   const password = draft.password
-  if (!draft.line_id.trim()) return translate('proxy.selectLine')
+  if (draft.egress === 'wireguard') {
+    if (!draft.egress_interface.trim()) return translate('proxy.enterEgressInterface')
+    const servers = splitEgressDNS(draft.egress_dns)
+    // Name lookups must leave through the tunnel too, or the LAN device's
+    // browsing is visible on the path its traffic deliberately avoids.
+    if (servers.length === 0) return translate('proxy.enterEgressDNS')
+    if (servers.length > 4) return translate('proxy.tooManyEgressDNS')
+    if (servers.some(server => !isIPAddress(server))) return translate('proxy.invalidEgressDNS')
+  } else if (!draft.line_id.trim()) {
+    return translate('proxy.selectLine')
+  }
   if (draft.mode !== 'http' && draft.mode !== 'socks5') {
     return translate('runtime.selectProxyProtocol')
   }
@@ -184,15 +211,21 @@ export async function saveProxy(
   const username = draft.username.trim()
   const password = draft.password
   const authEnabled = Boolean(username)
+  const tunnel = draft.egress === 'wireguard'
   const common = {
     name: proxyName(draft, lineLabel),
-    line_id: draft.line_id.trim(),
+    // A tunnel proxy carries no line: it is not tied to a SIM, and sending one
+    // would make it fail whenever that SIM went away.
+    line_id: tunnel ? '' : draft.line_id.trim(),
     enabled: existing?.enabled ?? true,
     mode: draft.mode,
     listen_address: draft.listen_address.trim(),
     listen_port: draft.listen_port,
     auth_enabled: authEnabled,
-    username: authEnabled ? username : ''
+    username: authEnabled ? username : '',
+    egress: draft.egress,
+    egress_interface: tunnel ? draft.egress_interface.trim() : '',
+    egress_dns: tunnel ? splitEgressDNS(draft.egress_dns) : []
   }
 
   networkState.busyID = existing?.id || 'new'

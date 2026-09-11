@@ -342,7 +342,24 @@ func upsertHardwareLine(
 	}
 	imei := hardwareLineIMEI(line)
 	if imei == "" {
-		return "", nil
+		// The endpoint is present -- the agent is reporting it in this very
+		// round -- it just has no readable IMEI yet, which is what a module
+		// does for the first rounds after it is re-plugged.
+		//
+		// Returning here without touching the device row used to freeze that
+		// device's last_seen while modemdeck_hardware_sync.observed_at kept
+		// advancing. Presence is tested by equality against the newest
+		// observed_at, so one such round dropped the device out of Lines()
+		// permanently -- and because nothing on this path logs, it surfaced
+		// three layers away as "proxy references unattached endpoint",
+		// repeating every poll.
+		//
+		// Refresh the presence of whatever device is already bound to this
+		// endpoint instead: the endpoint is demonstrably alive, and the only
+		// thing missing is an identifier that is already on file. No row is
+		// created, so an endpoint that has never been identified is still a
+		// no-op, exactly as before.
+		return "", refreshEndpointPresence(ctx, transaction, endpointID, observedAt)
 	}
 	observedRegion := phone.CanonicalRegion(line.HomeCountryISO)
 	identityLineID, identityErr := resolveStableLineIdentity(
@@ -585,6 +602,32 @@ func upsertHardwareLine(
 		return "", err
 	}
 	return lineID, nil
+}
+
+// refreshEndpointPresence marks the device already bound to endpointID as seen
+// in this sync round. It never inserts: an endpoint with no device on file is
+// left alone.
+func refreshEndpointPresence(
+	ctx context.Context,
+	transaction *sql.Tx,
+	endpointID string,
+	observedAt time.Time,
+) error {
+	if strings.TrimSpace(endpointID) == "" {
+		return nil
+	}
+	if _, err := transaction.ExecContext(
+		ctx,
+		`UPDATE devices
+		 SET last_seen = ?, updated_at = ?
+		 WHERE endpoint_id = ? AND endpoint_id <> ''`,
+		databaseTime(observedAt),
+		databaseTime(observedAt),
+		endpointID,
+	); err != nil {
+		return fmt.Errorf("refresh hardware endpoint presence: %w", err)
+	}
+	return nil
 }
 
 func hardwareLineIMEI(line HardwareLine) string {

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func newTestNKNNetworkManager(t *testing.T) *nknNetworkManager {
@@ -159,5 +160,86 @@ func TestNKNSeedRPCListPutsChinaFirstWithOfficialFallback(t *testing.T) {
 		if list[offset+i] != seed {
 			t.Fatalf("official fallback %d missing or reordered: %s", i, list[offset+i])
 		}
+	}
+}
+
+// --- statistics windows ----------------------------------------------------
+
+// Every window has to be answerable by the chain. NKN caps a subscription at
+// 400000 blocks (config.MaxSubscribeDuration) and a block is 20s
+// (config.ConsensusDuration), so a window longer than ~92 days cannot exist --
+// and a window configured beyond the cap would have its subscribe transaction
+// rejected, leaving a counter that silently never fills.
+func TestNKNWindowsFitWithinTheProtocolLimits(t *testing.T) {
+	const maxSubscribeDurationBlocks = 400000
+	const blockSeconds = 20
+
+	seen := map[string]bool{}
+	for _, window := range nknNetworkWindows {
+		if window.Blocks <= 0 || window.Blocks > maxSubscribeDurationBlocks {
+			t.Fatalf("%s: duration %d blocks is outside 1..%d", window.Topic, window.Blocks, maxSubscribeDurationBlocks)
+		}
+		// One identity holds one subscription per topic, so two windows sharing
+		// a topic would mean the shorter one repeatedly cutting the longer
+		// one's expiry back and both counts becoming the shorter window.
+		if seen[window.Topic] {
+			t.Fatalf("two windows share the topic %q", window.Topic)
+		}
+		seen[window.Topic] = true
+
+		covered := time.Duration(window.Blocks) * blockSeconds * time.Second
+
+		// The floor, not the duration, is what the count actually guarantees.
+		//
+		// An instance that goes quiet keeps its subscription until its LAST
+		// RENEWAL plus the duration, and that renewal was up to one renewal
+		// interval before it went quiet. So a window advertised as 30 days and
+		// built from a 30-day subscription renewed weekly guarantees only 23,
+		// and under-reports the number it is named after -- which is exactly
+		// the bug this assertion exists to catch.
+		floor := covered - window.Renew
+		if floor < window.Span {
+			t.Fatalf(
+				"%s is advertised as %s but only guarantees %s "+
+					"(%s subscription renewed every %s)",
+				window.Topic, window.Span, floor, covered, window.Renew,
+			)
+		}
+		// One renewal has to be missable: the subscription must outlive the
+		// gap to the next attempt, or a single failed renewal drops the
+		// instance out of a window it was present for.
+		if window.Renew*2 > covered {
+			t.Fatalf(
+				"%s renews every %s against a %s subscription, too close to expiry",
+				window.Topic, window.Renew, covered,
+			)
+		}
+	}
+}
+
+// The 24-hour topic keeps its original name. Renaming it would silently move
+// every upgraded install into an empty directory while the old one still held
+// everyone who had not upgraded.
+func TestTwentyFourHourTopicNameIsUnchanged(t *testing.T) {
+	if nknNetworkTopic != "modemdecknet" {
+		t.Fatalf("the 24h topic was renamed to %q", nknNetworkTopic)
+	}
+	if nknNetworkWindows[0].Topic != nknNetworkTopic {
+		t.Fatalf("the first window is %q, not the established topic", nknNetworkWindows[0].Topic)
+	}
+}
+
+// A seed that does not answer must leave the count nil. Zero is a real answer
+// meaning nobody is out there, and showing it for "the query failed" is a lie
+// the reader cannot detect.
+func TestUnreachableSeedLeavesCountsNilRatherThanZero(t *testing.T) {
+	var result nknNetworkPeersResponse
+	// Nothing listens on this port, so every window's query fails.
+	applyNKNWindowCounts(&result, nknWindowCountsFrom([]string{"http://127.0.0.1:1"}))
+	if result.Active24h != nil || result.ActiveMonth != nil || result.Active90d != nil {
+		t.Fatalf("an unreachable seed produced counts: %+v", result)
+	}
+	if result.StatisticsScope != "onchain_topic_subscribers" {
+		t.Fatalf("scope should still say where counts would come from, got %q", result.StatisticsScope)
 	}
 }

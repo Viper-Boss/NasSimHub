@@ -234,6 +234,13 @@ const initialDiagnosticsFailure =
   fixtureMode && typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('diagnosticsFixture') === 'error'
     : false
+// ?devicesFixture=none previews the gateway with no module attached. That state
+// has its own header treatment and its own empty states, and without a way to
+// reach it they can only be checked by unplugging real hardware.
+const noDevicesFixture =
+  fixtureMode && typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('devicesFixture') === 'none'
+    : false
 
 const fixturePreviewOptions =
   fixtureMode && typeof window !== 'undefined'
@@ -242,7 +249,8 @@ const fixturePreviewOptions =
         initialConcurrentCalls: initialConcurrentCallsFixture,
         initialOutgoingReservation: initialOutgoingReservationFixture,
         initialSoftwareUpdate: initialSoftwareUpdateFixture,
-        initialDiagnosticsFailure
+        initialDiagnosticsFailure,
+        noDevices: noDevicesFixture
       }
     : {}
 
@@ -2794,8 +2802,48 @@ export interface SystemMetricsSnapshot {
   error?: string
 }
 
+// Preview mode used to throw, which left the dashboard's throughput chart and
+// signal meters unrenderable — so they could not be reviewed without a NAS.
+// The counters below advance on every poll so the chart draws a real line.
+let fixtureMetricsTick = 0
+
+function fixtureSystemMetrics(): SystemMetricsSnapshot {
+  fixtureMetricsTick += 1
+  const wave = (phase: number, scale: number) =>
+    Math.max(0, Math.round((Math.sin((fixtureMetricsTick + phase) / 2.2) + 1.1) * scale))
+  return {
+    observed_at: new Date().toISOString(),
+    load_raw_1: 0.34, load_raw_5: 0.51, load_raw_15: 0.42,
+    load_percent_1: 2, load_percent_5: 34, load_percent_15: 27,
+    cores: 4,
+    memory_total_bytes: 42 * 1024 * 1024, memory_available_bytes: 9.8 * 1024 * 1024,
+    memory_used_percent: 77, memory_cached_bytes: 9.5 * 1024 * 1024,
+    memory_buffers_bytes: 1.2 * 1024 * 1024,
+    memory_spec: '', flash_path: '/', flash_total_bytes: 72.9 * 1024 * 1024,
+    flash_free_bytes: 23.6 * 1024 * 1024, flash_used_percent: 68,
+    flash_fs_type: 'ext4', flash_device_model: '', flash_device_path: '',
+    modem_temp_celsius: 41, cpu_model_name: 'Fixture CPU', cpu_usage_percent: 2,
+    cpu_current_mhz: 998, cpu_max_mhz: 1400,
+    cpu_l1_data_kb: 32, cpu_l1_inst_kb: 32, cpu_l2_kb: 512, cpu_l3_kb: 0,
+    cpu_temp_celsius: 45, process_count: 145, thread_count: 230,
+    host_uptime_seconds: 112_800,
+    cellular: {
+      state: 'registered', rat: 'LTE', duplex: 'FDD', plmn: '46001', band: 'B3',
+      earfcn: 1650, frequency_mhz: 1850, uplink_bandwidth_mhz: 20,
+      downlink_bandwidth_mhz: 20, pci: 207, cell_id_hex: 'C2FCC1F', tac_hex: 'E624',
+      rsrp: -94, rsrq: -11, rssi: -63, sinr: 5
+    },
+    interfaces: [{
+      name: 'enxa272bccda103',
+      rx_bytes: 5_400 + fixtureMetricsTick * wave(0, 900),
+      tx_bytes: 21_800 + fixtureMetricsTick * wave(3, 400)
+    }],
+    available: true
+  } as SystemMetricsSnapshot
+}
+
 export async function getSystemMetrics(): Promise<SystemMetricsSnapshot> {
-  if (fixtureMode) throw new Error('当前为演示模式，系统指标未连接 NAS。')
+  if (fixtureMode) return fixtureSystemMetrics()
   const result = await get(`${API_ROOT}/system-metrics`) as Partial<SystemMetricsSnapshot> | null
   if (!result || !Array.isArray(result.interfaces)) throw new Error('系统指标响应无效。')
   return {
@@ -2934,9 +2982,12 @@ export interface NKNNetworkPeer {
 export interface NKNNetworkPeers {
   coverage_started_at?: string
   statistics_scope?: string
+  // Each is the subscriber count of one on-chain topic whose subscription
+  // duration is the window. null means the chain query failed -- never zero,
+  // which is a real answer meaning nobody is out there.
   active_24h: number | null
   active_month: number | null
-  registered_total: number | null
+  active_90d: number | null
   topic: string
   window: string
   count: number
@@ -2945,7 +2996,13 @@ export interface NKNNetworkPeers {
 }
 
 export async function getNKNNetworkStatus(): Promise<NKNNetworkStatus> {
-  if (fixtureMode) throw new Error('当前为演示模式，网络目录未连接 NAS。')
+  if (fixtureMode) {
+    return {
+      settings: { revision: 1, enabled: true },
+      runtime: { state: 'active' },
+      topic: 'nassimhub.demo'
+    } as NKNNetworkStatus
+  }
   const result = await get(`${API_ROOT}/settings/nkn-network`) as Partial<NKNNetworkStatus> | null
   if (!result?.settings || !Number.isInteger(result.settings.revision) || !result.runtime) throw new Error('网络目录状态响应无效。')
   return { settings: result.settings, runtime: result.runtime, topic: typeof result.topic === 'string' ? result.topic : '' }
@@ -2959,7 +3016,14 @@ export async function updateNKNNetwork(next: { enabled: boolean; expected_revisi
 }
 
 export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
-  if (fixtureMode) throw new Error('当前为演示模式，网络目录未连接 NAS。')
+  if (fixtureMode) {
+    return {
+      active_24h: 7, active_month: 23, active_90d: 41,
+      topic: 'nassimhub.demo', window: '24h', count: 7, peers: [],
+      fetched_at: new Date().toISOString(),
+      statistics_scope: 'local_observed_identities'
+    }
+  }
   const result = await get(`${API_ROOT}/settings/nkn-network/peers`) as Partial<NKNNetworkPeers> | null
   if (!result || !Array.isArray(result.peers)) throw new Error('网络目录列表响应无效。')
   const metric = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
@@ -2968,13 +3032,80 @@ export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
     coverage_started_at: result.coverage_started_at,
     statistics_scope: result.statistics_scope,
     active_month: metric(result.active_month),
-    registered_total: metric(result.registered_total),
+    active_90d: metric(result.active_90d),
     topic: typeof result.topic === 'string' ? result.topic : '',
     window: typeof result.window === 'string' ? result.window : '',
     count: typeof result.count === 'number' ? result.count : result.peers.length,
     peers: result.peers,
     fetched_at: typeof result.fetched_at === 'string' ? result.fetched_at : ''
   }
+}
+
+// The DHT is the second control path beside NKN. It is off by default: a DHT
+// with no participants provides no redundancy, so joining is a deliberate
+// choice rather than something every install does.
+// The DHT is the second control path beside NKN, and like NKN it runs by
+// default: a spare path that ships switched off is not a spare. It is confined
+// to this project's own protocol prefix and relays nothing for anyone, which is
+// what makes running by default defensible.
+export interface DHTSettings {
+  revision: number
+  enabled: boolean
+  listen_port: number
+  bootstrap_peers: string[]
+  // Connection allowlist. Empty accepts any peer speaking this project's own
+  // protocol; one entry makes the gate strict.
+  authorized_peers: string[]
+  // mDNS. On unless switched off: it is the only bootstrap source needing no
+  // configuration, so two instances on one network find each other with
+  // nobody exchanging an address.
+  disable_lan_discovery: boolean
+}
+
+export interface DHTStatus {
+  state: 'disabled' | 'starting' | 'isolated' | 'ready' | 'error' | 'unavailable'
+  peer_id?: string
+  addresses?: string[]
+  connected_peers: number
+  routing_peers: number
+  bootstrap_configured: boolean
+  lan_discovery: boolean
+  lan_peers: number
+  error?: string
+  updated_at?: string
+}
+
+export interface DHTResponse {
+  settings: DHTSettings
+  status: DHTStatus
+}
+
+export async function getDHTSettings(): Promise<DHTResponse> {
+  if (fixtureMode) {
+    return {
+      settings: { revision: 1, enabled: true, listen_port: 4001, bootstrap_peers: [], authorized_peers: [], disable_lan_discovery: false },
+      // Demo mode shows a joined node so the card can be reviewed; the real
+      // default is off, and a real node with no peers reports "isolated"
+      // rather than this.
+      status: {
+        state: 'ready',
+        peer_id: '12D3KooWDemoPeerIdentityForPreviewOnly00000000',
+        connected_peers: 4,
+        routing_peers: 6,
+        bootstrap_configured: true,
+        lan_discovery: true,
+        lan_peers: 1
+      }
+    }
+  }
+  const result = await get(`${API_ROOT}/settings/homesim/dht`) as DHTResponse | null
+  if (!result?.settings || !result.status) throw new Error('DHT 状态响应无效。')
+  return result
+}
+
+export async function saveDHTSettings(settings: DHTSettings): Promise<DHTResponse> {
+  if (fixtureMode) throw new Error('当前为演示模式，DHT 配置未保存到 NAS。')
+  return await writeJSON(`${API_ROOT}/settings/homesim/dht`, 'PUT', settings, 200) as DHTResponse
 }
 
 export interface NKNChatMessage {

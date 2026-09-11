@@ -15,6 +15,7 @@ import (
 
 	"github.com/human-agent65535/modemdeck/agent/internal/controllease"
 	"github.com/human-agent65535/modemdeck/agent/internal/deviceconfig"
+	"github.com/human-agent65535/modemdeck/agent/internal/dht"
 	"github.com/human-agent65535/modemdeck/agent/internal/diagnostics"
 	"github.com/human-agent65535/modemdeck/agent/internal/domain"
 	"github.com/human-agent65535/modemdeck/agent/internal/httpapi"
@@ -277,6 +278,13 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 	wireGuardManager := wireguard.New(
 		envOrDefault("MODEMDECK_WIREGUARD_STATE_DIR", "/var/lib/ModemManager/wireguard"),
 	)
+	// The libp2p identity lives on persistent state for the same reason as the
+	// WireGuard key: a PeerID regenerated on every restart orphans this node
+	// from everyone who pinned it.
+	dhtService := dht.New(
+		envOrDefault("MODEMDECK_DHT_STATE_DIR", "/var/lib/ModemManager/dht"),
+	)
+	defer dhtService.Stop()
 
 	server := &http.Server{
 		Handler: httpapi.NewWithOptions(provider, version, httpapi.Options{
@@ -287,6 +295,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 			NetworkSelection:     provider,
 			DiagnosticLogs:       diagnosticLogs,
 			WireGuard:            wireGuardManager,
+			DHT:                  dhtService,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

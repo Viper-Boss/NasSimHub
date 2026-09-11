@@ -50,6 +50,8 @@ import CallSurface from './CallSurface.vue'
 import LineSelector from './LineSelector.vue'
 import { sessionState } from '../state/session'
 import { revealAdvancedNetwork } from '../state/advancedNetwork'
+import { unlockWireGuardChart, wireGuardUnlockState } from '../state/wireguardUnlock'
+import { dhtUnlockState, unlockDHT } from '../state/dhtUnlock'
 import { showFeedback } from '../state/feedback'
 
 const { t } = useI18n()
@@ -103,6 +105,14 @@ watch(number, value => {
         guardHintTimer = window.setTimeout(() => { guardHintVisible.value = false }, 5000)
       })
       .catch(() => { guardUnlockAttempted = false })
+  }
+  // Phones have no keyboard, so the dial pad carries the same phrase the
+  // window listener does.
+  if (!wireGuardUnlockState.unlocked && lower.includes('wireguard')) {
+    unlockWireGuardChart()
+  }
+  if (!dhtUnlockState.unlocked && lower.includes('dht')) {
+    unlockDHT()
   }
   if (nknUnlockState.unlocked && lower.includes('nkn')) return
   if (lower.includes('nkn')) {

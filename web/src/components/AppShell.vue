@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { listenForWireGuardPhrase } from '../state/wireguardUnlock'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter } from 'vue-router'
@@ -408,6 +409,10 @@ onMounted(() => {
   void initializeBrowserAudio()
   initializeBrowserNotifications()
   initializeBrowserSounds()
+  // The WireGuard chart is revealed by typing its name. Listening here rather
+  // than in either page that shows the chart means the phrase works wherever
+  // the operator happens to be.
+  listenForWireGuardPhrase()
   initializeCallRuntime(router)
   initializeMessageRuntime(router)
   stopForegroundCommunicationRefresh = initializeForegroundCommunicationRefresh()

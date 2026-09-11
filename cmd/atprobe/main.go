@@ -52,6 +52,62 @@ var probeCommands = []struct {
 	{"蜂窝功能", "AT+CFUN?", true},
 }
 
+// voiceCommands 是通话与音频通路的自检项。
+//
+// 这批命令不是猜出来的，是从模块官方固件 QDC507GLEFM21_01.001.02.004 的
+// system 分区里逆出来的：atfwd_daemon 的字符串表里有完整的 +QCFG 子键清单，
+// quectel_daemon 里有音频通路的建立顺序，/etc/snd_soc_msm/snd_soc_msm_9x07_Tomtom_I2S
+// 是那条通路真正读的 UCM 配置。每条为什么值得问，见下面的注释。
+//
+// 全部是查询，没有副作用。
+var voiceCommands = []struct {
+	label    string
+	command  string
+	optional bool
+}{
+	// 自动应答寄存器。固件的 Linux 用户态里**没有**任何自动接听逻辑
+	// （整个 rootfs 的二进制都扫过了），所以「模块自己接电话」只可能来自
+	// modem 侧 AT 栈的 S0 寄存器。非 0 就是它。
+	{"自动应答 S0", "ATS0?", false},
+	{"ATH 是否挂断语音", "AT+CVHU?", true},
+	{"来电号码显示", "AT+CLIP?", true},
+	{"来电扩展结果码", "AT+CRC?", true},
+
+	// USB 组合。最后一个标志位是 UAC（USB 声卡）。内核里 UAC2 gadget
+	// （snd_uac2 / f_audio_source）是编进去的，libql_usb.so 也有 audio 这个
+	// function，所以这一位是真能开的——开了通话音频就能走 USB 声卡，
+	// 不用再靠 ADB 进模块里掰 mixer。
+	{"USB 组合", `AT+QCFG="usbcfg"`, false},
+
+	// 次级 AUX PCM 的时钟开关。atfwd_daemon 用它写
+	// /sys/devices/soc:qcom,msm-sec-auxpcm/enable_clk。时钟没开的话，
+	// mixer 开关全对也不会有声音，而且这个状态在别处完全看不出来。
+	{"AUX PCM 时钟", `AT+QCFG="pcmclk"`, true},
+
+	// 数字音频接口与 PCM 语音通道。"=?" 问的是取值范围而不是当前值：
+	// 这是唯一能区分「这个固件不支持」和「支持但没开」的办法。
+	{"数字音频接口", "AT+QDAI?", true},
+	{"数字音频接口范围", "AT+QDAI=?", true},
+	{"PCM 语音通道", "AT+QPCMV?", true},
+	{"PCM 语音通道范围", "AT+QPCMV=?", true},
+	{"音频模式", "AT+QAUDMOD?", true},
+	{"音频回环", "AT+QAUDLOOP?", true},
+	{"侧音", "AT+QSIDET?", true},
+	{"送话增益", "AT+QMIC?", true},
+	{"收话增益", "AT+QRXGAIN?", true},
+
+	// 来电提示音与忙音：厂商 daemon 会在这两个状态下抢音频通路。
+	{"来电提示音", `AT+QCFG="tone/incoming"`, true},
+
+	// VoLTE。CS 语音和 VoLTE 走的是两条完全不同的 mixer 通路，
+	// 厂商 daemon 只建 CS 那条（见 HANDOFF 里的分析），所以这里必须问清楚
+	// 当前通话到底会走哪条。
+	{"VoLTE 开关", `AT+QCFG="ims"`, true},
+
+	// 这个固件支持的全部厂商配置项，用来核对上面每一条是不是真的存在。
+	{"全部 QCFG 配置项", "AT+QCFG=?", true},
+}
+
 func main() {
 	port := flag.String("port", "", "串口（默认自动扫描）；Windows 例：COM3，Linux 例：/dev/ttyUSB6")
 	baud := flag.Int("baud", 115200, "波特率")
@@ -172,17 +228,27 @@ func openAT(name string, baud int, timeout time.Duration) (serial.Port, error) {
 }
 
 func report(p serial.Port, timeout time.Duration) {
-	for _, item := range probeCommands {
+	runProbeSet(p, timeout, probeCommands)
+	fmt.Println("\n--- 通话与音频通路 ---")
+	runProbeSet(p, timeout, voiceCommands)
+}
+
+func runProbeSet(p serial.Port, timeout time.Duration, set []struct {
+	label    string
+	command  string
+	optional bool
+}) {
+	for _, item := range set {
 		response, err := exchange(p, item.command, timeout)
 		if err != nil {
-			fmt.Printf("%-10s %-22s -> 错误: %s\n", item.label, item.command, shortErr(err))
+			fmt.Printf("%-14s %-26s -> 错误: %s\n", item.label, item.command, shortErr(err))
 			continue
 		}
 		flat := flatten(response)
 		if flat == "" {
 			flat = "(无返回)"
 		}
-		fmt.Printf("%-10s %-22s -> %s\n", item.label, item.command, flat)
+		fmt.Printf("%-14s %-26s -> %s\n", item.label, item.command, flat)
 	}
 }
 

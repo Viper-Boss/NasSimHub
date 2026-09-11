@@ -38,8 +38,14 @@ const form = reactive<ProxyDraft>({
   listen_address: '127.0.0.1',
   listen_port: 1080,
   username: '',
-  password: ''
+  password: '',
+  egress: 'line',
+  egress_interface: 'wg-nassim',
+  egress_dns: ''
 })
+
+// A tunnel proxy is not tied to a SIM, so the line picker is meaningless for it.
+const usesTunnel = computed(() => form.egress === 'wireguard')
 const localError = reactive({ message: '' })
 
 const title = computed(() => (props.proxy ? t('proxy.edit') : t('proxy.add')))
@@ -54,7 +60,13 @@ function resetForm(): void {
       listen_address: props.proxy.listen_address,
       listen_port: props.proxy.listen_port,
       username: props.proxy.username,
-      password: ''
+      password: '',
+      // The egress has to be restored with everything else. Leaving it at the
+      // reactive default meant opening an existing tunnel proxy showed it as a
+      // line proxy, and saving silently converted it into one.
+      egress: props.proxy.egress === 'wireguard' ? 'wireguard' : 'line',
+      egress_interface: props.proxy.egress_interface || 'wg-nassim',
+      egress_dns: (props.proxy.egress_dns ?? []).join(', ')
     })
     return
   }
@@ -64,7 +76,10 @@ function resetForm(): void {
     listen_address: '127.0.0.1',
     listen_port: 1080,
     username: '',
-    password: ''
+    password: '',
+    egress: 'line',
+    egress_interface: 'wg-nassim',
+    egress_dns: ''
   })
 }
 
@@ -113,7 +128,10 @@ function submit(): void {
     listen_address: form.listen_address.trim(),
     listen_port: form.listen_port,
     username,
-    password
+    password,
+    egress: form.egress,
+    egress_interface: form.egress_interface.trim(),
+    egress_dns: form.egress_dns
   })
 }
 
@@ -158,13 +176,63 @@ watch(
       </header>
 
       <form @submit.prevent="submit">
+      <fieldset class="proxy-field">
+        <legend>{{ t('proxy.egress') }}</legend>
+        <div class="proxy-segmented">
+          <button
+            type="button"
+            :class="{ 'is-selected': form.egress === 'line' }"
+            :aria-pressed="form.egress === 'line'"
+            :disabled="busy"
+            @click="form.egress = 'line'"
+          >
+            {{ t('proxy.egressLine') }}
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-selected': form.egress === 'wireguard' }"
+            :aria-pressed="form.egress === 'wireguard'"
+            :disabled="busy"
+            @click="form.egress = 'wireguard'"
+          >
+            {{ t('proxy.egressTunnel') }}
+          </button>
+        </div>
+        <p class="proxy-hint">{{ usesTunnel ? t('proxy.egressTunnelHint') : t('proxy.egressLineHint') }}</p>
+      </fieldset>
+
       <LineSelector
+        v-if="!usesTunnel"
         v-model="form.line_id"
         class="proxy-field"
         :lines="lines"
         :label="t('proxy.line')"
         :disabled="busy"
       />
+
+      <template v-if="usesTunnel">
+        <label class="proxy-field">
+          <span>{{ t('proxy.egressInterface') }}</span>
+          <input
+            v-model="form.egress_interface"
+            type="text"
+            placeholder="wg-nassim"
+            spellcheck="false"
+            :disabled="busy"
+          />
+        </label>
+        <label class="proxy-field">
+          <span>{{ t('proxy.egressDNS') }}</span>
+          <input
+            v-model="form.egress_dns"
+            type="text"
+            placeholder="10.77.0.2, 10.77.0.3"
+            spellcheck="false"
+            :disabled="busy"
+          />
+          <small class="proxy-hint">{{ t('proxy.egressDNSHint') }}</small>
+        </label>
+      </template>
 
       <fieldset class="proxy-field">
         <legend>{{ t('common.protocol') }}</legend>
@@ -264,6 +332,13 @@ watch(
 </template>
 
 <style scoped>
+.proxy-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .proxy-modal {
   max-height: inherit;
   overflow: auto;

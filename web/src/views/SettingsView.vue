@@ -35,6 +35,7 @@ import {
   visibleSettingsSectionIDs
 } from '../components/settings/settingsNavigation'
 import { nknUnlockState } from '../state/nknUnlock'
+import { dhtUnlockState } from '../state/dhtUnlock'
 import type {
   SettingsSection,
   SettingsSectionGroup
@@ -104,6 +105,8 @@ const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
 const loadWireGuardPanel = () => import('../components/settings/WireGuardPanel.vue')
 const WireGuardPanel = defineAsyncComponent(loadWireGuardPanel)
+const loadDHTPanel = () => import('../components/settings/DHTPanel.vue')
+const DHTPanel = defineAsyncComponent(loadDHTPanel)
 const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
 const loadNknNetworkPanel = () => import('../components/settings/NknNetworkPanel.vue')
 const NknNodePanel = defineAsyncComponent(loadNknNodePanel)
@@ -141,6 +144,7 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
   { id: 'nkn-node', label: t('settings.nknNode'), description: t('settings.nknNodeDescription'), icon: Network },
   { id: 'nkn-network', label: t('settings.nknNetwork'), description: t('settings.nknNetworkDescription'), icon: Globe2 },
   { id: 'wireguard', label: 'WireGuard', description: t('homesim.advanced.text0'), icon: ShieldCheck },
+  { id: 'dht', label: t('dht.title'), description: t('dht.subtitle'), icon: Network },
   {
     id: 'preferences',
     label: t('settings.system'),
@@ -238,7 +242,8 @@ const sections = computed<SettingsSectionDefinition[]>(() => {
     isAdmin: isAdmin.value,
     canPairIOS: canPairIOS.value,
     advancedNetwork: advancedNetworkVisible.value,
-    nknUnlocked: nknUnlockState.unlocked
+    nknUnlocked: nknUnlockState.unlocked,
+    dhtUnlocked: dhtUnlockState.unlocked
   })
     .map(sectionID => catalog.get(sectionID))
     .filter((section): section is SettingsSectionDefinition => section !== undefined)
@@ -340,6 +345,8 @@ function preloadSection(section: SettingsSection): void {
         return loadNetworkSwitchesPanel
       case 'wireguard':
         return loadWireGuardPanel
+      case 'dht':
+        return loadDHTPanel
       case 'nkn-node':
         return loadNknNodePanel
       case 'nkn-network':
@@ -620,6 +627,9 @@ onMounted(() => {
             </div>
             <div v-else-if="selectedSection === 'wireguard'" class="settings-content">
               <PageContentFrame mode="reading"><WireGuardPanel /></PageContentFrame>
+            </div>
+            <div v-else-if="selectedSection === 'dht'" class="settings-content">
+              <PageContentFrame mode="reading"><DHTPanel /></PageContentFrame>
             </div>
 
             <div v-else-if="selectedSection === 'pairing'" class="settings-content">

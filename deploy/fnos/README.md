@@ -78,6 +78,18 @@ docker compose --env-file .env.fnos -f docker-compose.yml -f deploy/fnos/compose
 ssh -N -L 17577:127.0.0.1:7577 NAS_USER@NAS_IP
 ```
 
+> **飞牛 NAS 需要先放开端口转发。** 出厂的 sshd 配置里
+> `/etc/ssh/sshd_config.d/trim_sshd.conf` 带着 `AllowTcpForwarding no`，
+> 上面这条命令会直接报 `administratively prohibited`。先备份再改：
+>
+> ```sh
+> sudo cp /etc/ssh/sshd_config.d/trim_sshd.conf /etc/ssh/sshd_config.d/trim_sshd.conf.bak
+> sudo sed -i 's/^AllowTcpForwarding no/AllowTcpForwarding yes/' /etc/ssh/sshd_config.d/trim_sshd.conf
+> sudo sshd -t && sudo systemctl restart ssh
+> ```
+>
+> 这是放宽 SSH 的权限，只在你需要隧道访问管理页的时候开；验收完可以用备份文件还原。
+
 随后访问 `https://localhost:17577`，完成管理员初始化；确认并正确配置可信 HTTPS 证书。实际浏览器通话需要安全上下文和麦克风授权。隧道只覆盖此处管理页面访问，不等于已经解决 WebRTC 媒体或手机后台来电。
 
 先在局域网完成验收，再选择 VPN 与跨境媒体方案。不要直接开放管理端口到公网；不要为方便关闭鉴权。手机系统未确认前不接入商业推送或云服务。
