@@ -40,6 +40,7 @@ import { useListArrivals } from '../composables/useListArrivals'
 import { useListSelection } from '../composables/useListSelection'
 import { skeletonPreviewEnabled } from '../composables/useSkeletonPreview'
 import { messageComposeRoute } from '../router/messageRoute'
+import { addressesForContact, loadNknPeerNotes, noteForAddress } from '../state/nknPeerNotes'
 import { requestConfirmation } from '../state/confirmation'
 import { showSuccess } from '../state/feedback'
 import { openDialer } from '../state/ui'
@@ -286,9 +287,27 @@ function preferredLineName(contact: Contact): string {
   return line ? lineLabel(line) : contact.preferred_line_id || ''
 }
 
+// nMobile addresses linked to a contact. This is decoration, not part of the
+// page's data, so it stays out of the initial-load barrier: a slow or failing
+// fetch must not hold up the contact list.
+function nmobileAddresses(contact: Contact): string[] {
+  return addressesForContact(contact.id)
+}
+
+function nmobileLabel(address: string): string {
+  const alias = noteForAddress(address)?.alias
+  if (alias) return alias
+  return address.length <= 24 ? address : `${address.slice(0, 12)}…${address.slice(-6)}`
+}
+
+function openNmobile(address: string): void {
+  void router.push({ path: '/nmobile', query: { peer: address } })
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onSelectionKeydown)
   void waitForInitialLoad([() => loadBootstrap(), () => refreshContacts()])
+  void loadNknPeerNotes()
 })
 
 onBeforeUnmount(() => {
@@ -546,6 +565,30 @@ onBeforeUnmount(() => {
               {{ t('contacts.preferredLine') }}：{{ preferredLineName(selected) }}
             </p>
           </section>
+          <section v-if="nmobileAddresses(selected).length" class="detail-section">
+            <h3>{{ t('homesim.nmobile.title') }}</h3>
+            <div
+              v-for="address in nmobileAddresses(selected)"
+              :key="address"
+              class="phone-detail-row"
+            >
+              <span>
+                <small>{{ t('homesim.nmobile.linkedAddress') }}</small>
+                <strong :title="address">{{ nmobileLabel(address) }}</strong>
+              </span>
+              <span class="row-actions">
+                <button
+                  class="icon-button"
+                  type="button"
+                  :title="t('homesim.nmobile.openConversation')"
+                  :aria-label="t('homesim.nmobile.openConversation')"
+                  @click="openNmobile(address)"
+                >
+                  <MessageSquareText :size="18" />
+                </button>
+              </span>
+            </div>
+          </section>
           <p v-if="dialUnavailable || messageUnavailable" class="unavailable-note">
             {{ dialUnavailable || messageUnavailable }}
           </p>
@@ -583,6 +626,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* This pane never held two sections before the nMobile block, so the shared
+   .detail-section carries no vertical rhythm of its own. */
+.detail-section + .detail-section {
+  margin-top: 22px;
+}
+
 .contact-empty-state {
   display: flex;
   flex-direction: column;

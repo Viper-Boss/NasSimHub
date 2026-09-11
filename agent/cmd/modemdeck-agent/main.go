@@ -25,6 +25,7 @@ import (
 	"github.com/human-agent65535/modemdeck/agent/internal/safetywatchdog"
 	"github.com/human-agent65535/modemdeck/agent/internal/unixsocket"
 	"github.com/human-agent65535/modemdeck/agent/internal/volte"
+	"github.com/human-agent65535/modemdeck/agent/internal/wireguard"
 )
 
 var version = "dev"
@@ -270,6 +271,13 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 	go controlLease.Run(ctx)
 	go provider.RunATCallObserver(ctx)
 
+	// The WireGuard key lives on persistent hardware state, not in /run: a key
+	// regenerated on every restart would invalidate every peer that pinned the
+	// public key.
+	wireGuardManager := wireguard.New(
+		envOrDefault("MODEMDECK_WIREGUARD_STATE_DIR", "/var/lib/ModemManager/wireguard"),
+	)
+
 	server := &http.Server{
 		Handler: httpapi.NewWithOptions(provider, version, httpapi.Options{
 			Media:                mediaManager,
@@ -278,6 +286,7 @@ func run(diagnosticLogs diagnostics.LogSource) error {
 			Network:              networkManager,
 			NetworkSelection:     provider,
 			DiagnosticLogs:       diagnosticLogs,
+			WireGuard:            wireGuardManager,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

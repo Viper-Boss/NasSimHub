@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/human-agent65535/modemdeck/internal/agentclient"
 )
 
 type wireGuardPeer struct {
@@ -34,13 +37,32 @@ type wireGuardSettings struct {
 	AdvertisedEndpoint string          `json:"advertised_endpoint"`
 	Peers              []wireGuardPeer `json:"peers"`
 }
+
+const (
+	wireGuardInterfaceName    = "wg-nassim"
+	wireGuardKeepaliveSeconds = 25
+)
+
+// wireGuardPeerStatus is what the live interface reports per peer. Only the
+// public key travels; there is no field here that could carry a secret.
+type wireGuardPeerStatus struct {
+	Name          string `json:"name,omitempty"`
+	PublicKey     string `json:"public_key"`
+	Endpoint      string `json:"endpoint,omitempty"`
+	LastHandshake int64  `json:"last_handshake_unix,omitempty"`
+	RxBytes       int64  `json:"rx_bytes"`
+	TxBytes       int64  `json:"tx_bytes"`
+	Current       bool   `json:"current"`
+}
+
 type wireGuardStatus struct {
-	MTProtoState string    `json:"mtproto_state,omitempty"`
-	State        string    `json:"state"`
-	PublicKey    string    `json:"public_key,omitempty"`
-	Error        string    `json:"error,omitempty"`
-	Revision     int64     `json:"revision"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	MTProtoState string                `json:"mtproto_state,omitempty"`
+	State        string                `json:"state"`
+	PublicKey    string                `json:"public_key,omitempty"`
+	Error        string                `json:"error,omitempty"`
+	Revision     int64                 `json:"revision"`
+	UpdatedAt    time.Time             `json:"updated_at"`
+	Peers        []wireGuardPeerStatus `json:"peers,omitempty"`
 }
 
 type mtProtoSettings struct {
@@ -192,13 +214,88 @@ func (api *API) wireGuardSettingsHandler(w http.ResponseWriter, r *http.Request)
 		}
 		s = next
 	}
-	status := wireGuardStatus{State: "not_installed"}
-	if raw, err := os.ReadFile(filepath.Join(dir, "status.json")); err == nil {
-		_ = json.Unmarshal(raw, &status)
-	}
-	if status.State != "not_installed" && time.Since(status.UpdatedAt) > 30*time.Second {
-		status.State = "offline"
-	}
+	// The agent owns the interface: this process has no capabilities and cannot
+	// create one. A PUT applies the new configuration, a GET only reads.
+	status := api.wireGuardRuntimeStatus(r.Context(), s, r.Method == http.MethodPut)
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"settings": s, "status": status, "runtime_ready": status.State == "running" && status.Revision == s.Revision})
+	writeJSON(w, 200, map[string]any{
+		"settings":      s,
+		"status":        status,
+		"runtime_ready": status.State == string(agentclient.WireGuardStateUp) && status.Revision == s.Revision,
+	})
+}
+
+// wireGuardRuntimeStatus asks the agent what the host is actually doing.
+//
+// When no agent is wired in (an older agent build, or a unit test), the state
+// is reported as unavailable rather than invented. The previous version of this
+// code returned a hardcoded "not_installed" forever, which is how a feature
+// with no implementation behind it managed to look finished for so long.
+func (api *API) wireGuardRuntimeStatus(
+	ctx context.Context,
+	settings wireGuardSettings,
+	apply bool,
+) wireGuardStatus {
+	status := wireGuardStatus{State: "unavailable", Revision: settings.Revision, UpdatedAt: time.Now().UTC()}
+	if api.wireGuardService == nil {
+		status.Error = "WireGuard 运行时不可用：agent 未提供该能力"
+		return status
+	}
+	config := agentclient.WireGuardConfig{
+		InterfaceName: wireGuardInterfaceName,
+		Address:       settings.Address,
+		ListenPort:    settings.ListenPort,
+		Enabled:       settings.Enabled,
+		Revision:      settings.Revision,
+	}
+	for _, peer := range settings.Peers {
+		config.Peers = append(config.Peers, agentclient.WireGuardPeerConfig{
+			Name:       peer.Name,
+			PublicKey:  peer.PublicKey,
+			Endpoint:   peer.Endpoint,
+			AllowedIPs: peer.AllowedIPs,
+			// A NAS behind NAT has to keep its mapping alive or the peer can
+			// never reach it again after the first idle period.
+			PersistentKeepalive: wireGuardKeepaliveSeconds,
+		})
+	}
+	var (
+		live agentclient.WireGuardStatus
+		err  error
+	)
+	if apply {
+		live, err = api.wireGuardService.ApplyWireGuard(ctx, config)
+	} else {
+		live, err = api.wireGuardService.WireGuardStatusFor(ctx, config.InterfaceName, config.Enabled)
+	}
+	if err != nil {
+		status.State = "unavailable"
+		status.Error = err.Error()
+		return status
+	}
+	return wireGuardStatus{
+		State:        string(live.State),
+		PublicKey:    live.PublicKey,
+		Error:        live.Error,
+		Revision:     live.Revision,
+		UpdatedAt:    live.UpdatedAt,
+		Peers:        convertWireGuardPeerStatus(live.Peers),
+		MTProtoState: status.MTProtoState,
+	}
+}
+
+func convertWireGuardPeerStatus(peers []agentclient.WireGuardPeerStatus) []wireGuardPeerStatus {
+	converted := make([]wireGuardPeerStatus, 0, len(peers))
+	for _, peer := range peers {
+		converted = append(converted, wireGuardPeerStatus{
+			Name:          peer.Name,
+			PublicKey:     peer.PublicKey,
+			Endpoint:      peer.Endpoint,
+			LastHandshake: peer.LastHandshake,
+			RxBytes:       peer.TransferRxBytes,
+			TxBytes:       peer.TransferTxBytes,
+			Current:       peer.Current,
+		})
+	}
+	return converted
 }

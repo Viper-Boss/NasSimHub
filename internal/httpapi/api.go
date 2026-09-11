@@ -138,6 +138,14 @@ type CommunicationService interface {
 	EndCall(context.Context, string) error
 }
 
+// WireGuardService is optional: the API works without it and reports the
+// tunnel as unavailable rather than failing, which is what happens when the
+// agent is an older build that has no WireGuard endpoints.
+type WireGuardService interface {
+	ApplyWireGuard(context.Context, agentclient.WireGuardConfig) (agentclient.WireGuardStatus, error)
+	WireGuardStatusFor(context.Context, string, bool) (agentclient.WireGuardStatus, error)
+}
+
 type DeviceConfigurationService interface {
 	DeviceConfiguration(context.Context, string) (agentclient.DeviceConfiguration, error)
 	ApplyDeviceConfiguration(
@@ -283,6 +291,7 @@ type Options struct {
 	Capabilities           CapabilitySource
 	Communications         CommunicationService
 	DeviceConfigurations   DeviceConfigurationService
+	WireGuard              WireGuardService
 	LineServices           LineService
 	CallPolicies           CallPolicyService
 	MessagePolicies        MessagePolicyService
@@ -339,6 +348,7 @@ type API struct {
 	capabilities               CapabilitySource
 	communications             CommunicationService
 	deviceConfigurations       DeviceConfigurationService
+	wireGuardService           WireGuardService
 	lineServices               LineService
 	callPolicies               CallPolicyService
 	messagePolicies            MessagePolicyService
@@ -394,6 +404,7 @@ func New(repository Repository, options Options) (*API, error) {
 		capabilities:               options.Capabilities,
 		communications:             options.Communications,
 		deviceConfigurations:       options.DeviceConfigurations,
+		wireGuardService:           options.WireGuard,
 		lineServices:               options.LineServices,
 		callPolicies:               options.CallPolicies,
 		messagePolicies:            options.MessagePolicies,
@@ -610,6 +621,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.postOnly(response, request, api.nknChatClearHandler)
 	case "/api/v1/nkn/chat/send":
 		api.postOnly(response, request, api.nknChatSendHandler)
+	case "/api/v1/nkn/chat/peers":
+		api.nknChatPeersHandler(response, request)
 	case "/api/v1/settings/nkn-network/nodes":
 		api.getOnly(response, request, api.nknNetworkNodes)
 	case "/api/v1/settings/recording":

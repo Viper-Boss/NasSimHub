@@ -2573,9 +2573,31 @@ export type NKNSettingsResponse = {
   capabilities: { sms_forwarding: boolean; http_tunnel: boolean; voice_transport: boolean }
 }
 export type WireGuardSettings = { mtproto?: {enabled:boolean; bind_address:string; port:number; secret:string}; revision: number; enabled: boolean; address: string; listen_port: number; advertised_endpoint: string; peers: { name: string; public_key: string; endpoint: string; allowed_ips: string[]; nkn_address: string }[] }
-export type WireGuardResponse = { settings: WireGuardSettings; status: { state: string; mtproto_state?:string; public_key?: string; error?: string; revision: number }; runtime_ready: boolean }
+// Live per-peer figures from the gateway's interface. Only the public key
+// travels; nothing here can carry a secret.
+export type WireGuardPeerStatus = {
+  name?: string
+  public_key: string
+  endpoint?: string
+  last_handshake_unix?: number
+  rx_bytes: number
+  tx_bytes: number
+  current: boolean
+}
+export type WireGuardResponse = { settings: WireGuardSettings; status: { state: string; mtproto_state?: string; public_key?: string; error?: string; revision: number; peers?: WireGuardPeerStatus[] }; runtime_ready: boolean }
 export async function getWireGuardSettings(): Promise<WireGuardResponse> {
-  if (fixtureMode) return { settings: { revision: 1, enabled: false, address: '10.77.0.1/24', listen_port: 51820, advertised_endpoint: '', peers: [] }, status: { state: 'not_installed', revision: 0 }, runtime_ready: false }
+  if (fixtureMode) {
+    return {
+      settings: { revision: 1, enabled: true, address: '10.77.0.1/24', listen_port: 51820, advertised_endpoint: '', peers: [{ name: '\u5f02\u5730 NAS', public_key: 'demoPeerPublicKey0000000000000000000000000000=', endpoint: '203.0.113.9:51820', allowed_ips: ['10.77.0.2/32'], nkn_address: '' }] },
+      status: {
+        state: 'up',
+        revision: 1,
+        public_key: 'demoGatewayPublicKey00000000000000000000000=',
+        peers: [{ name: '\u5f02\u5730 NAS', public_key: 'demoPeerPublicKey0000000000000000000000000000=', endpoint: '203.0.113.9:51820', last_handshake_unix: Math.floor(Date.now() / 1000) - 42, rx_bytes: 5_242_880, tx_bytes: 1_048_576, current: true }]
+      },
+      runtime_ready: true
+    }
+  }
   return await get(`${API_ROOT}/settings/homesim/wireguard`) as WireGuardResponse
 }
 export async function saveWireGuardSettings(settings: WireGuardSettings): Promise<WireGuardResponse> {
@@ -2964,8 +2986,31 @@ export interface NKNChatMessage {
   status?: '' | 'sending' | 'sent' | 'delivered' // 'sending' is client-side only
 }
 
+// Preview mode used to throw here, so the chat page was the one screen that
+// showed an error instead of itself. It now serves a small in-memory thread set
+// so the layout can be reviewed without a NAS.
+const fixtureChatPeers = [
+  'demo.' + '9f3c'.repeat(16),
+  'lab.' + 'a71e'.repeat(16)
+]
+const fixtureChatMessages: NKNChatMessage[] = fixtureMode
+  ? (() => {
+      const now = Math.floor(Date.now() / 1000)
+      const first = fixtureChatPeers[0] as string
+      const second = fixtureChatPeers[1] as string
+      return [
+        { ts: now - 90_000, dir: 'in', peer: first, text: '在吗？我这边把 NKN 地址换了。', id: 'demo-1', status: 'delivered' },
+        { ts: now - 89_400, dir: 'out', peer: first, text: '收到，新地址已经存到通讯录了。', id: 'demo-2', status: 'delivered' },
+        { ts: now - 4_800, dir: 'in', peer: first, text: '验证码到了吗？', id: 'demo-3', status: 'delivered' },
+        { ts: now - 4_600, dir: 'out', peer: first, text: '到了，682931，五分钟内有效。', id: 'demo-4', status: 'delivered' },
+        { ts: now - 4_580, dir: 'out', peer: first, text: '你先用，我这边不动这张卡。', id: 'demo-5', status: 'sent' },
+        { ts: now - 1_200, dir: 'in', peer: second, text: 'Gateway is back online after the reboot.', id: 'demo-6', status: 'delivered' }
+      ] as NKNChatMessage[]
+    })()
+  : []
+
 export async function getNKNChatMessages(after = 0): Promise<NKNChatMessage[]> {
-  if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
+  if (fixtureMode) return fixtureChatMessages.filter(item => item.ts > after)
   const result = await get(`${API_ROOT}/nkn/chat/messages?after=${encodeURIComponent(String(after))}`) as { messages?: unknown } | null
   if (!result || !Array.isArray(result.messages)) throw new Error('NKN 聊天记录响应无效。')
   return result.messages.filter((item): item is NKNChatMessage => (
@@ -2977,13 +3022,57 @@ export async function getNKNChatMessages(after = 0): Promise<NKNChatMessage[]> {
 }
 
 export async function sendNKNChatMessage(to: string, text: string): Promise<{ id?: string; ts?: number }> {
-  if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
+  if (fixtureMode) {
+    const echo: NKNChatMessage = { ts: Math.floor(Date.now() / 1000), dir: 'out', peer: to, text, id: `demo-${fixtureChatMessages.length + 1}`, status: 'sent' }
+    fixtureChatMessages.push(echo)
+    return { id: echo.id, ts: echo.ts }
+  }
   const result = await writeJSON(`${API_ROOT}/nkn/chat/send`, 'POST', { to, text }, 200) as { ok?: boolean; id?: string; ts?: number } | null
   return { id: result?.id, ts: result?.ts }
 }
 
+// A peer note gives an NKN address a readable name: a free-text alias, a link
+// to a contact record, or both. Stored on the NAS so every browser sees the
+// same names.
+export interface NKNChatPeerNote {
+  address: string
+  alias?: string
+  contact_id?: string
+  updated_at?: number
+}
+
+const fixtureChatPeerNotes: NKNChatPeerNote[] = fixtureMode
+  ? [{ address: fixtureChatPeers[0] as string, alias: '老王', updated_at: Math.floor(Date.now() / 1000) }]
+  : []
+
+export async function getNKNChatPeerNotes(): Promise<NKNChatPeerNote[]> {
+  if (fixtureMode) return fixtureChatPeerNotes.map(item => ({ ...item }))
+  const result = await get(`${API_ROOT}/nkn/chat/peers`) as { peers?: unknown } | null
+  if (!result || !Array.isArray(result.peers)) return []
+  return result.peers.filter((item): item is NKNChatPeerNote => (
+    !!item && typeof item === 'object' && typeof (item as NKNChatPeerNote).address === 'string'
+  ))
+}
+
+export async function saveNKNChatPeerNote(note: NKNChatPeerNote): Promise<void> {
+  const payload = { address: note.address, alias: note.alias ?? '', contact_id: note.contact_id ?? '' }
+  if (fixtureMode) {
+    const index = fixtureChatPeerNotes.findIndex(item => item.address === note.address)
+    if (index >= 0) fixtureChatPeerNotes.splice(index, 1)
+    if (payload.alias || payload.contact_id) {
+      fixtureChatPeerNotes.push({ ...payload, contact_id: payload.contact_id || undefined, updated_at: Math.floor(Date.now() / 1000) })
+    }
+    return
+  }
+  await writeJSON(`${API_ROOT}/nkn/chat/peers`, 'POST', payload, 200)
+}
+
 export async function clearNKNChatMessages(peer = ''): Promise<void> {
-  if (fixtureMode) throw new Error('当前为演示模式，NKN 聊天未连接 NAS。')
+  if (fixtureMode) {
+    const kept = fixtureChatMessages.filter(item => peer !== '' && item.peer !== peer)
+    fixtureChatMessages.splice(0, fixtureChatMessages.length, ...kept)
+    return
+  }
   await writeJSON(`${API_ROOT}/nkn/chat/clear`, 'POST', { peer }, 200)
 }
 

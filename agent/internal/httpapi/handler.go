@@ -14,6 +14,7 @@ import (
 	"github.com/human-agent65535/modemdeck/agent/internal/diagnostics"
 	"github.com/human-agent65535/modemdeck/agent/internal/domain"
 	"github.com/human-agent65535/modemdeck/agent/internal/media"
+	"github.com/human-agent65535/modemdeck/agent/internal/wireguard"
 )
 
 const maxRequestBodyBytes = 256 << 10
@@ -34,6 +35,7 @@ type handler struct {
 	vowifiDiagnostics    domain.VowifiDiagnosticsProvider
 	agentVersion         string
 	media                *media.Manager
+	wireGuard            *wireguard.Manager
 }
 
 type healthResponse struct {
@@ -74,6 +76,7 @@ type Options struct {
 	Network              domain.NetworkProvider
 	NetworkSelection     domain.NetworkSelectionProvider
 	DiagnosticLogs       diagnostics.LogSource
+	WireGuard            *wireguard.Manager
 }
 
 func NewWithOptions(
@@ -96,6 +99,7 @@ func NewWithOptions(
 		diagnosticLogs:       options.DiagnosticLogs,
 		agentVersion:         agentVersion,
 		media:                options.Media,
+		wireGuard:            options.WireGuard,
 	}
 	h.changes, _ = provider.(domain.ChangeSource)
 	h.telemetry, _ = provider.(domain.TelemetryProvider)
@@ -113,6 +117,9 @@ func NewWithOptions(
 	mux.HandleFunc("GET /v1/telemetry", h.getTelemetry)
 	mux.HandleFunc("GET /v1/system/metrics", h.getSystemMetrics)
 	mux.HandleFunc("GET /v1/vowifi/diagnostics", h.getVowifiDiagnostics)
+	mux.HandleFunc("GET /v1/wireguard", h.getWireGuard)
+	mux.HandleFunc("PUT /v1/wireguard", h.putWireGuard)
+	mux.HandleFunc("POST /v1/wireguard/peer-endpoint", h.postWireGuardEndpoint)
 	mux.HandleFunc("GET /v1/lines/{id}/configuration", h.getDeviceConfiguration)
 	mux.HandleFunc("PATCH /v1/lines/{id}/configuration", h.patchDeviceConfiguration)
 	mux.HandleFunc("GET /v1/lines/{id}/sim", h.getSIMStatus)

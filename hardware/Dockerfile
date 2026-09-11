@@ -142,6 +142,8 @@ RUN apt-get update \
         libqrtr-glib0 \
         ppp \
         util-linux \
+        iproute2 \
+        wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=modemmanager-builder /out/usr/sbin/ModemManager /usr/sbin/ModemManager
