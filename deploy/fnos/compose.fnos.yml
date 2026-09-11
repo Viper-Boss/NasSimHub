@@ -4,6 +4,11 @@ services:
   hardware:
     container_name: nas-comm-hardware
     image: nas-comm-hardware:fnos-local-0.1
+    # WireGuard data plane (r80): the agent creates/deletes wg interfaces via
+    # the wg(8) and ip(8) tools, which needs CAP_NET_ADMIN in the host network
+    # namespace. The kernel module itself is provided by the fnOS kernel.
+    cap_add:
+      - NET_ADMIN
     # Host PID namespace so the system-metrics panel reports the real host
     # process/thread counts (task-manager style dashboard), not the
     # container's.
