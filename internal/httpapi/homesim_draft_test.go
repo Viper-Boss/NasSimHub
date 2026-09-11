@@ -35,7 +35,8 @@ func TestHomeSIMDraftValidation(t *testing.T) {
 
 func TestHomeSIMDraftPersistsAndConflicts(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "backups", "contacts")
-	api, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	api, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,8 @@ func TestHomeSIMDraftPersistsAndConflicts(t *testing.T) {
 	if put().Code != 409 {
 		t.Fatal("stale revision accepted")
 	}
-	reopened, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	reopened, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}

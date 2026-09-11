@@ -13,7 +13,8 @@ import (
 
 func TestContactBackupWritesServerData(t *testing.T) {
 	directory := t.TempDir()
-	api, err := New(&fakeRepository{contacts: []store.Contact{{ID: "c1", DisplayName: "Test"}}}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	api, err := New(&fakeRepository{contacts: []store.Contact{{ID: "c1", DisplayName: "Test"}}}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}

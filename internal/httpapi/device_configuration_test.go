@@ -207,11 +207,12 @@ func TestAppDeviceConfigurationReturnsServerComputedPolicyAndVisibleDNDOutcome(t
 		Revision:               3,
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		DeviceConfigurations:  configurations,
-		CallPolicies:          policies,
-		MessagePolicies:       messagePolicies,
-		disableAuthentication: true,
+		Communications:            communications,
+		DeviceConfigurations:      configurations,
+		CallPolicies:              policies,
+		MessagePolicies:           messagePolicies,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -262,10 +263,11 @@ func TestAppMessageDeliveryPolicyUsesRevisionedWrite(t *testing.T) {
 		Revision:               5,
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		DeviceConfigurations:  configurations,
-		CallPolicies:          &fakeCallPolicies{},
-		MessagePolicies:       messagePolicies,
-		disableAuthentication: true,
+		DeviceConfigurations:      configurations,
+		CallPolicies:              &fakeCallPolicies{},
+		MessagePolicies:           messagePolicies,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -330,10 +332,11 @@ func TestAppCallSettingsAndLinePolicyUseRevisionedWrites(t *testing.T) {
 		},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        &fakeCommunications{status: communicationStatusWithReject("line-1")},
-		DeviceConfigurations:  configurations,
-		CallPolicies:          policies,
-		disableAuthentication: true,
+		Communications:            &fakeCommunications{status: communicationStatusWithReject("line-1")},
+		DeviceConfigurations:      configurations,
+		CallPolicies:              policies,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -416,9 +419,10 @@ func TestAppHardwareConfigurationForwardsOpaqueDeviceRevision(t *testing.T) {
 		},
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		DeviceConfigurations:  configurations,
-		CallPolicies:          &fakeCallPolicies{},
-		disableAuthentication: true,
+		DeviceConfigurations:      configurations,
+		CallPolicies:              &fakeCallPolicies{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -468,9 +472,10 @@ func TestAppHardwareConfigurationAcceptsControlledUSBReset(t *testing.T) {
 		ObservedAt: time.Date(2026, time.July, 27, 0, 0, 0, 0, time.UTC),
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		DeviceConfigurations:  configurations,
-		CallPolicies:          &fakeCallPolicies{},
-		disableAuthentication: true,
+		DeviceConfigurations:      configurations,
+		CallPolicies:              &fakeCallPolicies{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -507,9 +512,10 @@ func TestAdministratorDiagnosticsOperateOutsideAssignedLines(t *testing.T) {
 		ObservedAt: time.Date(2026, time.July, 31, 0, 0, 0, 0, time.UTC),
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		DeviceConfigurations:  configurations,
-		CallPolicies:          &fakeCallPolicies{},
-		disableAuthentication: true,
+		DeviceConfigurations:      configurations,
+		CallPolicies:              &fakeCallPolicies{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -588,8 +594,9 @@ func TestMemberCannotUseSystemDiagnosticDeviceConfiguration(t *testing.T) {
 	t.Parallel()
 
 	api, err := New(&fakeRepository{}, Options{
-		DeviceConfigurations:  &fakeDeviceConfigurations{},
-		disableAuthentication: true,
+		DeviceConfigurations:      &fakeDeviceConfigurations{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

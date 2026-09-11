@@ -33,9 +33,10 @@ func TestRecordingSettingsAndToggleReturnAuthoritativeState(t *testing.T) {
 		},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		Recording:                 recordings,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,9 +89,10 @@ func TestRecordingToggleRejectsNonOwner(t *testing.T) {
 
 	recordings := &fakeRecordingService{}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		CallLeases:            &fakeCallLeases{err: calllease.ErrNotOwner},
-		disableAuthentication: true,
+		Recording:                 recordings,
+		CallLeases:                &fakeCallLeases{err: calllease.ErrNotOwner},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -134,9 +136,10 @@ func TestRecordingMetadataDoesNotLeakPathAndDownloadIsOgg(t *testing.T) {
 		},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		Recording:                 recordings,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -187,9 +190,10 @@ func TestRecordingDeleteUsesExactCallAndSegment(t *testing.T) {
 
 	recordings := &fakeRecordingService{}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		Recording:                 recordings,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -221,8 +225,9 @@ func TestRecordingBatchDeleteUsesExactCallAndSegment(t *testing.T) {
 
 	recordings := &fakeRecordingService{}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		disableAuthentication: true,
+		Recording:                 recordings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -351,9 +356,10 @@ func TestRecordingErrorsAreTypedAndToggleIncludesState(t *testing.T) {
 		toggleError: recording.ErrMediaUnavailable,
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		Recording:                 recordings,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -393,8 +399,9 @@ func TestRecordingErrorsAreTypedAndToggleIncludesState(t *testing.T) {
 func TestRecordingRoutesRejectPathTraversalBeforeService(t *testing.T) {
 	recordings := &fakeRecordingService{}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		disableAuthentication: true,
+		Recording:                 recordings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -419,10 +426,11 @@ func TestStartCallRecordingOverrideIsOptional(t *testing.T) {
 		communications := &fakeCommunications{call: store.Call{ID: "call-default"}}
 		recordings := &fakeRecordingService{}
 		api, err := New(&fakeRepository{}, Options{
-			Communications:        communications,
-			Recording:             recordings,
-			CallLeases:            &fakeCallLeases{},
-			disableAuthentication: true,
+			Communications:            communications,
+			Recording:                 recordings,
+			CallLeases:                &fakeCallLeases{},
+			disableAuthentication:     true,
+			disableLicenseEnforcement: true,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -454,10 +462,11 @@ func TestStartCallRecordingOverrideIsOptional(t *testing.T) {
 		communications := &fakeCommunications{call: store.Call{ID: "call-override"}}
 		recordings := &fakeRecordingService{preparedRequestID: "request-recording-off"}
 		api, err := New(&fakeRepository{}, Options{
-			Communications:        communications,
-			Recording:             recordings,
-			CallLeases:            &fakeCallLeases{},
-			disableAuthentication: true,
+			Communications:            communications,
+			Recording:                 recordings,
+			CallLeases:                &fakeCallLeases{},
+			disableAuthentication:     true,
+			disableLicenseEnforcement: true,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -497,10 +506,11 @@ func TestIncomingAnswerPersistsRecordingChoiceBeforeModemAnswer(t *testing.T) {
 			recordings.toggleCallID == "call-incoming" && !recordings.toggleEnabled
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		Recording:             recordings,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		Communications:            communications,
+		Recording:                 recordings,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)

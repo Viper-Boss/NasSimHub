@@ -13,7 +13,8 @@ import (
 
 func TestPhoneGeoHandler(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "backups", "contacts")
-	api, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	api, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,8 @@ func TestPhoneGeoHandler(t *testing.T) {
 
 func TestLineQuotaPersistAndAttach(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "backups", "contacts")
-	api, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	api, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +84,8 @@ func TestLineQuotaPersistAndAttach(t *testing.T) {
 
 func TestCallFilterValidationAndPersistence(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "backups", "contacts")
-	api, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	api, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +111,8 @@ func TestCallFilterValidationAndPersistence(t *testing.T) {
 	if save.Code != 200 {
 		t.Fatalf("filter save: %d %s", save.Code, save.Body.String())
 	}
-	reopened, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	reopened, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +138,8 @@ func TestCallFilterValidationAndPersistence(t *testing.T) {
 
 func TestF50SettingsPersistAndValidate(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "backups", "contacts")
-	api, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	api, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +155,8 @@ func TestF50SettingsPersistAndValidate(t *testing.T) {
 	if save.Code != 200 {
 		t.Fatalf("f50 save: %d %s", save.Code, save.Body.String())
 	}
-	reopened, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: directory})
+	reopened, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}

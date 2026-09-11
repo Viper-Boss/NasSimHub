@@ -312,6 +312,8 @@ export default {
     netSwitchesDescription: "Debug cellular sharing and NasSimHub-only supply switches",
     nknNode: 'NKN node',
     nknNodeDescription: 'Embedded NKN relay node (off by default); rewards are yours',
+    callServices: "Call forwarding",
+    callServicesDescription: "Held by your operator, not this gateway",
     nknNetwork: 'NasSimHub network',
     nknNetworkDescription: 'Anonymous decentralized network access, on by default; statistics are aggregate counts only.',
     iosApp: 'Pairing',

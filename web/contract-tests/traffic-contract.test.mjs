@@ -357,6 +357,95 @@ test('a tunnel proxy payload carries its egress and needs no line', () => {
   )
 })
 
+// A tunnel proxy is not tied to a SIM, so it carries no line. Both halves of
+// that used to be broken at once: the payload builder demanded a line_id and
+// then dropped the egress fields entirely, so choosing "WireGuard tunnel" in the
+// editor could not reach the API at all -- the request was refused before any of
+// the egress handling that had already been written for it ever ran.
+test('a tunnel proxy payload carries its egress and needs no line', () => {
+  const payload = createProxyPayload({
+    name: '隧道代理',
+    line_id: '',
+    enabled: true,
+    mode: 'socks5',
+    listen_address: '127.0.0.1',
+    listen_port: 1080,
+    auth_enabled: false,
+    username: '',
+    password: '',
+    egress: 'wireguard',
+    egress_interface: 'wg-nassim',
+    egress_dns: ['10.77.0.1', '1.1.1.1']
+  })
+  assert.equal(payload.egress, 'wireguard')
+  assert.equal(payload.egress_interface, 'wg-nassim')
+  assert.deepEqual(payload.egress_dns, ['10.77.0.1', '1.1.1.1'])
+  assert.equal(payload.line_id, '', 'a tunnel proxy must not claim a line')
+
+  // Name lookups have to leave through the tunnel too, so DNS is required
+  // rather than defaulted -- a resolver reachable only on the modem side would
+  // reveal what the LAN device is browsing over the path it deliberately avoids.
+  assert.throws(
+    () =>
+      createProxyPayload({
+        name: '隧道代理',
+        line_id: '',
+        enabled: true,
+        mode: 'socks5',
+        listen_address: '127.0.0.1',
+        listen_port: 1080,
+        auth_enabled: false,
+        username: '',
+        password: '',
+        egress: 'wireguard',
+        egress_interface: 'wg-nassim',
+        egress_dns: []
+      }),
+    /DNS/
+  )
+
+  // An interface name is what the egress actually binds to; without it there is
+  // nothing to bind.
+  assert.throws(
+    () =>
+      createProxyPayload({
+        name: '隧道代理',
+        line_id: '',
+        enabled: true,
+        mode: 'socks5',
+        listen_address: '127.0.0.1',
+        listen_port: 1080,
+        auth_enabled: false,
+        username: '',
+        password: '',
+        egress: 'wireguard',
+        egress_interface: '',
+        egress_dns: ['10.77.0.1']
+      }),
+    /接口名/
+  )
+
+  // A line proxy still requires its line.
+  assert.throws(
+    () =>
+      createProxyPayload({
+        name: '线路代理',
+        line_id: '',
+        enabled: true,
+        mode: 'socks5',
+        listen_address: '127.0.0.1',
+        listen_port: 1080,
+        auth_enabled: false,
+        username: '',
+        password: '',
+        egress: 'line',
+        egress_interface: '',
+        egress_dns: []
+      }),
+    /选择线路/
+  )
+})
+
 test('proxy payloads validate listener security and revision', () => {
   assert.deepEqual(
     createProxyPayload({

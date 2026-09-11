@@ -4,6 +4,7 @@ export type SettingsSection =
   | 'users'
   | 'contacts'
   | 'audio'
+  | 'call-services'
   | 'pairing'
   | 'devices'
   | 'telegram'
@@ -33,6 +34,7 @@ export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
   'preferences',
   'security',
   'audio',
+  'call-services',
   'pairing',
   'contacts',
   'users',
@@ -60,6 +62,10 @@ const PERSONAL_SECTIONS = new Set<SettingsSection>([
 ])
 
 const ADMIN_ONLY_SECTIONS = new Set<SettingsSection>([
+  // Forwarding is a change to the subscriber's own network service and can
+  // divert every incoming call, so it is not something a non-admin user of a
+  // shared gateway should be able to set.
+  'call-services',
   'nkn-node',
   'nkn-network',
   'wireguard',
@@ -77,7 +83,7 @@ const ADMIN_ONLY_SECTIONS = new Set<SettingsSection>([
 export function settingsSectionGroup(section: SettingsSection): SettingsSectionGroup {
   if (section === 'nkn-node' || section === 'nkn-network') return 'network'
   if (section === 'wireguard' || section === 'dht') return 'network'
-  if (['audio', 'devices', 'contacts', 'telegram', 'bark', 'sms-forward'].includes(section)) return 'communication'
+  if (['audio', 'call-services', 'devices', 'contacts', 'telegram', 'bark', 'sms-forward'].includes(section)) return 'communication'
   if (['f50', 'net-switches', 'connectivity', 'pairing'].includes(section)) return 'network'
   return PERSONAL_SECTIONS.has(section) ? 'personal' : 'management'
 }

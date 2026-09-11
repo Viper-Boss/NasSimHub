@@ -42,8 +42,9 @@ func TestMobilePushTestCallTargetsCurrentPrincipal(t *testing.T) {
 			Devices: []store.IOSPairingDevice{{ID: "ios-device-example"}},
 		},
 	}, Options{
-		IOSCallTests:          service,
-		disableAuthentication: true,
+		IOSCallTests:              service,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +92,9 @@ func TestMobilePushTestCallRequiresAndUsesOneOfMultipleCredentials(
 			},
 		},
 	}, Options{
-		IOSCallTests:          service,
-		disableAuthentication: true,
+		IOSCallTests:              service,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,8 +177,9 @@ func TestMobilePushTestCallReportsUnavailableStates(t *testing.T) {
 					Devices: []store.IOSPairingDevice{{ID: "ios-device-example"}},
 				},
 			}, Options{
-				IOSCallTests:          test.service,
-				disableAuthentication: true,
+				IOSCallTests:              test.service,
+				disableAuthentication:     true,
+				disableLicenseEnforcement: true,
 			})
 			if err != nil {
 				t.Fatal(err)

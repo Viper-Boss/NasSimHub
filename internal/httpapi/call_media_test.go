@@ -22,9 +22,10 @@ func TestCallMediaExchangeReturnsAnswer(t *testing.T) {
 
 	media := &fakeCallMedia{answer: "answer-sdp"}
 	api, err := New(&fakeRepository{}, Options{
-		CallMedia:             media,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		CallMedia:                 media,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -58,9 +59,10 @@ func TestCallMediaErrorsHaveStableMapping(t *testing.T) {
 
 	media := &fakeCallMedia{err: mediaapp.ErrNotActive}
 	api, err := New(&fakeRepository{}, Options{
-		CallMedia:             media,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		CallMedia:                 media,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -81,9 +83,10 @@ func TestCallMediaRejectsNonOwnerBeforeExchange(t *testing.T) {
 
 	media := &fakeCallMedia{}
 	api, err := New(&fakeRepository{}, Options{
-		CallMedia:             media,
-		CallLeases:            &fakeCallLeases{err: calllease.ErrNotOwner},
-		disableAuthentication: true,
+		CallMedia:                 media,
+		CallLeases:                &fakeCallLeases{err: calllease.ErrNotOwner},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -109,9 +112,10 @@ func TestCallMediaDeleteReleasesMatchingOwner(t *testing.T) {
 
 	media := &fakeCallMedia{}
 	api, err := New(&fakeRepository{}, Options{
-		CallMedia:             media,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		CallMedia:                 media,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -137,9 +141,10 @@ func TestCallMediaDeleteReportsInvalidOwnerAsMediaRequest(t *testing.T) {
 
 	media := &fakeCallMedia{err: mediaapp.ErrInvalidArgument}
 	api, err := New(&fakeRepository{}, Options{
-		CallMedia:             media,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		CallMedia:                 media,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -173,9 +178,10 @@ func TestMobileCallMediaUsesRelayOnlyServerPeer(t *testing.T) {
 		},
 		callLineID: "line-1",
 	}, Options{
-		CallMedia:             media,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		CallMedia:                 media,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +219,8 @@ func TestCloudflareWebCallMediaUsesRelayOnlyServerPeer(t *testing.T) {
 		MobilePairing: fakeMobilePairingAvailability{
 			webIngressHost: "deck.example.com",
 		},
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -271,9 +278,10 @@ func TestMobileCallMediaICEConfigurationRequiresLease(t *testing.T) {
 		},
 		callLineID: "line-1",
 	}, Options{
-		CallLeases:            leases,
-		RTCConfiguration:      provider,
-		disableAuthentication: true,
+		CallLeases:                leases,
+		RTCConfiguration:          provider,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -331,7 +339,8 @@ func TestCloudflareWebCallMediaICEConfigurationUsesTURN(t *testing.T) {
 		MobilePairing: fakeMobilePairingAvailability{
 			webIngressHost: "deck.example.com",
 		},
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -378,7 +387,8 @@ func TestLocalWebCallMediaICEConfigurationDoesNotRequireTURN(t *testing.T) {
 		MobilePairing: fakeMobilePairingAvailability{
 			webIngressHost: "deck.example.com",
 		},
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)

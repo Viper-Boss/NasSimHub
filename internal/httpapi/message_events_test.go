@@ -106,8 +106,9 @@ func TestMessageEventStreamOnlyForwardsLiveMessages(t *testing.T) {
 		LineID:    "line-main",
 	})
 	api, err := New(&fakeRepository{}, Options{
-		MessageEvents:         events,
-		disableAuthentication: true,
+		MessageEvents:             events,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

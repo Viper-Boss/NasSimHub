@@ -448,15 +448,16 @@ func TestBootstrapGatesCapabilitiesUntilAgentConnected(t *testing.T) {
 	t.Parallel()
 
 	repository := &fakeRepository{lines: []store.LineSummary{}}
-	api, err := New(repository, Options{disableAuthentication: true, Capabilities: fixedCapabilities{value: Capabilities{
-		AgentConnected: false,
-		Dial:           true,
-		Message:        true,
-		WebRTCAudio:    true,
-		DeviceControl:  true,
-		VoLTEControl:   true,
-		VoWiFiControl:  true,
-	}}})
+	api, err := New(repository, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, Capabilities: fixedCapabilities{value: Capabilities{
+			AgentConnected: false,
+			Dial:           true,
+			Message:        true,
+			WebRTCAudio:    true,
+			DeviceControl:  true,
+			VoLTEControl:   true,
+			VoWiFiControl:  true,
+		}}})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -497,9 +498,10 @@ func TestBootstrapPreservesConnectedCapabilities(t *testing.T) {
 		},
 	}
 	api, err := New(repository, Options{
-		disableAuthentication: true,
-		Capabilities:          fixedCapabilities{value: want},
-		CallMedia:             &fakeCallMedia{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
+		Capabilities:              fixedCapabilities{value: want},
+		CallMedia:                 &fakeCallMedia{},
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -579,8 +581,9 @@ func TestBootstrapRequiresHostMediaCapabilityAndCallMediaService(t *testing.T) {
 							},
 						}},
 					}},
-					CallMedia:             test.callMedia,
-					disableAuthentication: true,
+					CallMedia:                 test.callMedia,
+					disableAuthentication:     true,
+					disableLicenseEnforcement: true,
 				},
 			)
 			if err != nil {
@@ -636,8 +639,9 @@ func TestBootstrapMergesPersistedIdentityIntoLiveLines(t *testing.T) {
 		}},
 	}}
 	api, err := New(repository, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -689,7 +693,8 @@ func TestBootstrapDisconnectedFallbackHidesOrphanedStableLines(t *testing.T) {
 		Communications: &fakeCommunications{
 			statusError: errors.New("live hardware state is unavailable"),
 		},
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -748,8 +753,9 @@ func TestDevicesExposeLiveServingNetworkWithoutReplacingHomeOperator(t *testing.
 		}},
 	}}
 	api, err := New(repository, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -806,8 +812,9 @@ func TestBootstrapDoesNotMergePersistedLineLabelByIMSI(t *testing.T) {
 		}},
 	}}
 	api, err := New(repository, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

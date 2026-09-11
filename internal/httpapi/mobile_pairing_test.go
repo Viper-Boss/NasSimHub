@@ -168,7 +168,8 @@ func TestExternalAccessStatusReportsInstallationAndConnectorState(t *testing.T) 
 		},
 	}
 	api, err := New(repository, Options{
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 		MobilePairing: fakeMobilePairingAvailability{status: mobilepairing.CloudflareStatus{
 			Enabled:   true,
 			Connected: false,
@@ -231,7 +232,8 @@ func TestExternalAccessStatusReportsUnavailableTURN(t *testing.T) {
 		pairing:        store.IOSPairingStatus{Allowed: true},
 	}
 	api, err := New(repository, Options{
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 		MobilePairing: fakeMobilePairingAvailability{
 			status: mobilepairing.CloudflareStatus{Enabled: true},
 		},
@@ -291,7 +293,8 @@ func TestIOSPairingStatusReturnsReadinessAndVerifiedPairingAddresses(
 		},
 	}
 	api, err := New(repository, Options{
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 		MobilePairing: fakeMobilePairingAvailability{
 			status: mobilepairing.CloudflareStatus{
 				Enabled:            true,
@@ -363,7 +366,8 @@ func TestIOSPairingCreatesOnlyCurrentUsersCredentialThroughCloudflare(
 	}
 	const publicURL = "https://phone.example.com"
 	api, err := New(repository, Options{
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 		MobilePairing: fakeMobilePairingAvailability{status: mobilepairing.CloudflareStatus{
 			Enabled:   true,
 			Connected: true,
@@ -433,7 +437,8 @@ func TestIOSPairingSelectsOneVerifiedAddressFromMultipleIngresses(
 		},
 	}
 	api, err := New(repository, Options{
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 		MobilePairing: fakeMobilePairingAvailability{
 			status: mobilepairing.CloudflareStatus{
 				Enabled:            true,
@@ -502,7 +507,8 @@ func TestIOSPairingRequiresAValidSelectionForMultipleIngresses(
 				},
 			}
 			api, err := New(repository, Options{
-				disableAuthentication: true,
+				disableAuthentication:     true,
+				disableLicenseEnforcement: true,
 				MobilePairing: fakeMobilePairingAvailability{
 					status: mobilepairing.CloudflareStatus{
 						Enabled:   true,
@@ -550,7 +556,8 @@ func TestExternalAccessRefreshRunsACloudflareScan(t *testing.T) {
 		VerifiedAPIURLs:    []string{"https://phone.example.com"},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 		MobilePairing: fakeMobilePairingAvailability{
 			status:        mobilepairing.CloudflareStatus{Enabled: true},
 			refreshStatus: &refreshed,
@@ -616,7 +623,8 @@ func TestIOSPairingRequiresEnabledAndConnectedCloudflare(t *testing.T) {
 				},
 			}
 			api, err := New(repository, Options{
-				disableAuthentication: true,
+				disableAuthentication:     true,
+				disableLicenseEnforcement: true,
 				MobilePairing: fakeMobilePairingAvailability{
 					status: testCase.status,
 				},

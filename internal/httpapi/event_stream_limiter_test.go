@@ -170,8 +170,9 @@ func TestEventStreamConnectionLimitReleasesOnCancel(t *testing.T) {
 	t.Parallel()
 
 	api, err := New(&fakeRepository{}, Options{
-		RuntimeEvents:         runtimeevents.NewHub(),
-		disableAuthentication: true,
+		RuntimeEvents:             runtimeevents.NewHub(),
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

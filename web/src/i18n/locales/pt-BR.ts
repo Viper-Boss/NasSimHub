@@ -283,6 +283,8 @@ export default {
   },
   "settings": {
     ...fallback.settings,
+    "callServices": "Desvio de chamadas",
+    "callServicesDescription": "Na sua operadora, não aqui",
     "title": "Configurações",
     "personal": "Pessoal",
     "management": "Gerenciamento",

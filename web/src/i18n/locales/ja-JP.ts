@@ -283,6 +283,8 @@ export default {
   },
   "settings": {
     ...fallback.settings,
+    "callServices": "転送設定",
+    "callServicesDescription": "通信事業者側に保存",
     "title": "設定",
     "personal": "個人",
     "management": "管理",

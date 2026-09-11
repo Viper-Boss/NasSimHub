@@ -283,6 +283,8 @@ export default {
   },
   "settings": {
     ...fallback.settings,
+    "callServices": "Chuyển cuộc gọi",
+    "callServicesDescription": "Do nhà mạng lưu, không ở gateway",
     "title": "Cài đặt",
     "personal": "Cá nhân",
     "management": "Quản lý",

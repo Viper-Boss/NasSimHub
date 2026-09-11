@@ -201,8 +201,9 @@ func TestRenewCallLease(t *testing.T) {
 		ExpiresAt: expiresAt,
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		CallLeases:            leases,
-		disableAuthentication: true,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -17,8 +17,9 @@ import (
 func newPeerNotesAPI(t *testing.T, repository *fakeRepository) *API {
 	t.Helper()
 	api, err := New(repository, Options{
-		disableAuthentication:  true,
-		ContactBackupDirectory: filepath.Join(t.TempDir(), "backups", "contacts"),
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
+		ContactBackupDirectory:    filepath.Join(t.TempDir(), "backups", "contacts"),
 	})
 	if err != nil {
 		t.Fatal(err)

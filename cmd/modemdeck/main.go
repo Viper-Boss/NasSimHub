@@ -367,7 +367,17 @@ func run(
 		DeviceConfigurations:   communications,
 		// The agent owns the WireGuard interface: this process runs with every
 		// capability dropped and cannot create one.
-		WireGuard:        agent,
+		WireGuard: agent,
+		// Same reason for the DHT: the libp2p host binds a socket, so it lives
+		// in the agent. This line was MISSING, which meant api.dhtService was
+		// nil in every production build and every DHT read answered
+		// "unavailable" -- the feature could not run at all outside the
+		// fixture, and nothing said so because "the agent does not offer this
+		// capability" is a legitimate answer that looks identical.
+		DHT: agent,
+		// Call forwarding and call waiting go to the network over AT, which
+		// only the agent can reach.
+		CallServices:     agent,
 		LineServices:     communications,
 		CallPolicies:     communications,
 		MessagePolicies:  communications,
@@ -395,6 +405,12 @@ func run(
 		UpdateManager:      updateManager,
 		ApplicationVersion: version,
 		SettingsSecrets:    settingsSecrets,
+		// The issuer's PUBLIC key. Certificates are verified against it and
+		// nothing is signed here -- the private key never touches a gateway,
+		// see internal/license/certificate.go. Empty locks the paid features,
+		// which is the right default for a build with no key: the alternative
+		// is shipping one where everything is unlocked.
+		IssuerPublicKey: os.Getenv("MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY"),
 	})
 	if err != nil {
 		_ = recordings.Close(context.Background())
@@ -408,6 +424,10 @@ func run(
 	api.StartHomeSIMForwarderWorker(signals)
 	api.StartHomeSIMNKNWorker(signals)
 	api.StartHomeSIMNKNOptionalServices(signals)
+	// WireGuard and the DHT persist an enabled flag and, until this call
+	// existed, acted on it only when someone saved the settings page. A reboot
+	// left both down. See homesim_tunnel_lifecycle.go.
+	api.StartHomeSIMTunnelRestore(signals)
 	tlsMaintenanceDone := make(chan struct{})
 	go func() {
 		defer close(tlsMaintenanceDone)

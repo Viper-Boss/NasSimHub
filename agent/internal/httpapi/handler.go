@@ -29,6 +29,7 @@ type handler struct {
 	callMedia            domain.CallMediaActivator
 	deviceConfigurations domain.DeviceConfigurationProvider
 	lineServices         domain.LineServiceProvider
+	callServices         domain.CallServiceProvider
 	network              domain.NetworkProvider
 	networkSelection     domain.NetworkSelectionProvider
 	diagnosticLogs       diagnostics.LogSource
@@ -75,6 +76,7 @@ type Options struct {
 	ControlLease         domain.ControlLease
 	DeviceConfigurations domain.DeviceConfigurationProvider
 	LineServices         domain.LineServiceProvider
+	CallServices         domain.CallServiceProvider
 	Network              domain.NetworkProvider
 	NetworkSelection     domain.NetworkSelectionProvider
 	DiagnosticLogs       diagnostics.LogSource
@@ -87,6 +89,12 @@ func NewWithOptions(
 	agentVersion string,
 	options Options,
 ) http.Handler {
+	callServices := options.CallServices
+	if callServices == nil {
+		// The ModemManager provider implements this; a build without it simply
+		// answers 501 rather than pretending the services do not exist.
+		callServices, _ = provider.(domain.CallServiceProvider)
+	}
 	lineServices := options.LineServices
 	if lineServices == nil {
 		lineServices, _ = provider.(domain.LineServiceProvider)
@@ -97,6 +105,7 @@ func NewWithOptions(
 		controlLease:         options.ControlLease,
 		deviceConfigurations: options.DeviceConfigurations,
 		lineServices:         lineServices,
+		callServices:         callServices,
 		network:              options.Network,
 		networkSelection:     options.NetworkSelection,
 		diagnosticLogs:       options.DiagnosticLogs,
@@ -140,6 +149,9 @@ func NewWithOptions(
 	mux.HandleFunc("DELETE /v1/lines/{id}/profiles", h.deleteConnectionProfile)
 	mux.HandleFunc("GET /v1/lines/{id}/ussd", h.getUSSDStatus)
 	mux.HandleFunc("POST /v1/lines/{id}/ussd", h.postUSSDCommand)
+	mux.HandleFunc("GET /v1/lines/{id}/call-services", h.getCallServices)
+	mux.HandleFunc("PUT /v1/lines/{id}/call-services/forwarding", h.putCallForwarding)
+	mux.HandleFunc("PUT /v1/lines/{id}/call-services/waiting", h.putCallWaiting)
 	mux.HandleFunc("POST /v1/lines/{id}/network-scan", h.postNetworkScan)
 	mux.HandleFunc("PUT /v1/lines/{id}/network-selection", h.putNetworkSelection)
 	mux.HandleFunc("POST /v1/calls", h.startCall)

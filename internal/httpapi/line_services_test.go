@@ -154,9 +154,10 @@ func TestLineServiceRoutesExposeTypedOperationsWithoutLoggingSecrets(t *testing.
 	buffer := diagnostics.NewLogBuffer(32)
 	repository := &fakeRepository{}
 	api, err := New(repository, Options{
-		LineServices:          service,
-		Logger:                slog.New(buffer.Handler(slog.NewTextHandler(io.Discard, nil))),
-		disableAuthentication: true,
+		LineServices:              service,
+		Logger:                    slog.New(buffer.Handler(slog.NewTextHandler(io.Discard, nil))),
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

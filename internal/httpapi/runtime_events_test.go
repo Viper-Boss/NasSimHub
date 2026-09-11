@@ -113,8 +113,9 @@ func TestRuntimeStateStreamStartsWithCurrentStateAndIgnoresReplayCursors(t *test
 		ObservedAt: time.Date(2026, time.August, 2, 3, 0, 1, 0, time.UTC),
 	})
 	api, err := New(&fakeRepository{}, Options{
-		RuntimeEvents:         hub,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -151,8 +152,9 @@ func TestRuntimeStateStreamSendsLatestStateAfterNotification(t *testing.T) {
 	hub := runtimeevents.NewHub()
 	hub.Publish(runtimeevents.Change{Sections: runtimeevents.SectionCommunication})
 	api, err := New(&fakeRepository{}, Options{
-		RuntimeEvents:         hub,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -201,9 +203,10 @@ func TestRuntimeCallStateStreamEndsWithPersistedTerminalReason(t *testing.T) {
 	}
 	leases := &fakeCallLeases{control: calllease.ControlOwned}
 	api, err := New(repository, Options{
-		RuntimeEvents:         hub,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -265,9 +268,10 @@ func TestRuntimeCallStateStreamRejectsInaccessibleLine(t *testing.T) {
 		},
 	}
 	api, err := New(repository, Options{
-		RuntimeEvents:         runtimeevents.NewHub(),
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		RuntimeEvents:             runtimeevents.NewHub(),
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -320,9 +324,10 @@ func TestRuntimeStateStreamMultiplexesAdminUpdateProgress(t *testing.T) {
 		},
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		RuntimeEvents:         hub,
-		UpdateManager:         manager,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		UpdateManager:             manager,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -367,7 +372,8 @@ func TestRuntimeStateStreamDoesNotExposeUpdateToMembers(t *testing.T) {
 			State:         updatecheck.OperationRunning,
 			TargetVersion: "v1.10.2",
 		}},
-		disableAuthentication: true,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -398,10 +404,11 @@ func TestRuntimeStateSnapshotIsBuiltOncePerSignal(t *testing.T) {
 	communications := &fakeCommunications{}
 	network := &fakeNetworkService{}
 	api, err := New(repository, Options{
-		Communications:        communications,
-		CallLeases:            &fakeCallLeases{},
-		Network:               network,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                &fakeCallLeases{},
+		Network:                   network,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -459,10 +466,11 @@ func TestRuntimeStateWritesOnlyChangedSections(t *testing.T) {
 		ApplyStatus: networkruntime.ApplyStatusApplied,
 	}}
 	api, err := New(repository, Options{
-		Communications:        communications,
-		CallLeases:            &fakeCallLeases{},
-		Network:               network,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                &fakeCallLeases{},
+		Network:                   network,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -545,9 +553,10 @@ func TestRuntimeStateCarriesNetworkAndConfiguredProxies(t *testing.T) {
 		}},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Network:               network,
-		RuntimeEvents:         hub,
-		disableAuthentication: true,
+		Network:                   network,
+		RuntimeEvents:             hub,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -595,9 +604,10 @@ func TestRuntimeStateCacheKeepsPerUserProjectionsIndependent(t *testing.T) {
 		},
 	}
 	api, err := New(repository, Options{
-		Communications:        communications,
-		Network:               network,
-		disableAuthentication: true,
+		Communications:            communications,
+		Network:                   network,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -672,8 +682,9 @@ func TestMobileRuntimeStateFiltersLinesToPrincipal(t *testing.T) {
 		},
 	}
 	api, err := New(repository, Options{
-		RuntimeEvents:         hub,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

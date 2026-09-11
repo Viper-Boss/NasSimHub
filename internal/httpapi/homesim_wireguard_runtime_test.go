@@ -42,9 +42,10 @@ func (f *fakeWireGuardService) WireGuardStatusFor(
 func newWireGuardAPI(t *testing.T, service WireGuardService) *API {
 	t.Helper()
 	api, err := New(&fakeRepository{}, Options{
-		disableAuthentication:  true,
-		ContactBackupDirectory: filepath.Join(t.TempDir(), "backups", "contacts"),
-		WireGuard:              service,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
+		ContactBackupDirectory:    filepath.Join(t.TempDir(), "backups", "contacts"),
+		WireGuard:                 service,
 	})
 	if err != nil {
 		t.Fatal(err)

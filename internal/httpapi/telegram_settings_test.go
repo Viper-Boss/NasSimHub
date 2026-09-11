@@ -82,8 +82,9 @@ func TestTelegramSettingsCollectionAndWriteOnlyToken(t *testing.T) {
 	}
 	settings := &fakeTelegramSettings{units: []telegramsettings.Unit{unit}}
 	api, err := New(&fakeRepository{}, Options{
-		TelegramSettings:      settings,
-		disableAuthentication: true,
+		TelegramSettings:          settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -140,8 +141,9 @@ func TestTelegramSettingsResourceUsesRevision(t *testing.T) {
 	unit := telegramsettings.Unit{ID: "telegram_unit_1", DisplayName: "Primary", Revision: 4}
 	settings := &fakeTelegramSettings{units: []telegramsettings.Unit{unit}}
 	api, err := New(&fakeRepository{}, Options{
-		TelegramSettings:      settings,
-		disableAuthentication: true,
+		TelegramSettings:          settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -201,8 +203,9 @@ func TestTelegramSettingsErrorsAreTypedAndDoNotLeakCauses(t *testing.T) {
 		},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		TelegramSettings:      settings,
-		disableAuthentication: true,
+		TelegramSettings:          settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -239,8 +242,9 @@ func TestTelegramSettingsMembersManageOnlyTheirOwnBots(t *testing.T) {
 		},
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		TelegramSettings:      settings,
-		disableAuthentication: true,
+		TelegramSettings:          settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

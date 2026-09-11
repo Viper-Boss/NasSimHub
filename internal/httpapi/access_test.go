@@ -104,8 +104,9 @@ func TestCommunicationDeletionUsesAssignedLineScopeForMembers(t *testing.T) {
 					repository := &fakeRepository{callLineID: scope.lineID}
 					recordings := &fakeRecordingService{}
 					api, err := New(repository, Options{
-						Recording:             recordings,
-						disableAuthentication: true,
+						Recording:                 recordings,
+						disableAuthentication:     true,
+						disableLicenseEnforcement: true,
 					})
 					if err != nil {
 						t.Fatalf("New() error = %v", err)

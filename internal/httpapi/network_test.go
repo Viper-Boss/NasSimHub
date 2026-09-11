@@ -715,8 +715,9 @@ func (recorder *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
 func newNetworkTestAPI(t *testing.T, network NetworkService) *API {
 	t.Helper()
 	api, err := New(&fakeRepository{}, Options{
-		Network:               network,
-		disableAuthentication: true,
+		Network:                   network,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

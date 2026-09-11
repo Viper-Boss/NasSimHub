@@ -10,6 +10,7 @@ import (
 
 	"github.com/human-agent65535/modemdeck/internal/calllease"
 	"github.com/human-agent65535/modemdeck/internal/communication"
+	"github.com/human-agent65535/modemdeck/internal/license"
 	"github.com/human-agent65535/modemdeck/internal/store"
 )
 
@@ -112,12 +113,44 @@ func (api *API) sendMessage(response http.ResponseWriter, request *http.Request)
 			return
 		}
 	}
+	// The free tier allows a few sends a day; a module certificate lifts it.
+	//
+	// This is a SEPARATE counter from the fraud guard above, and deliberately
+	// so: that one limits how many DIFFERENT numbers may be reached and is
+	// lifted by typing "unlock" on the dial pad. If the unlock lifted this one
+	// too, the paywall would come off by typing a word into the dial pad. See
+	// internal/license/allowance.go.
+	sendDecision, usage := api.featureDecision(request.Context(), license.FeatureSMSSend)
+	if !sendDecision.Allowed {
+		writeError(response, http.StatusPaymentRequired, "license_required", licenseDenial(sendDecision), "")
+		return
+	}
+	// Consumed BEFORE the send, so two concurrent requests cannot both take the
+	// last slot. Refunded below if the send does not happen.
+	if !usage.Consume(license.FeatureSMSSend, sendDecision) {
+		writeError(
+			response,
+			http.StatusPaymentRequired,
+			"license_quota",
+			"今天的免费短信条数已用完（每天 "+strconv.Itoa(sendDecision.Limit.Count)+
+				" 条）。给模组开通授权后不限条数。",
+			"",
+		)
+		return
+	}
+
 	message, err := api.communications.SendMessage(request.Context(), communication.SendMessageInput{
 		RequestID: requestID,
 		LineID:    lineID,
 		Number:    input.To,
 		Text:      input.Content,
 	})
+	if err != nil {
+		// The message never left, so the allowance is given back. Charging a
+		// day's quota for a send the modem refused is a small unfairness that
+		// gets remembered.
+		usage.Refund(license.FeatureSMSSend)
+	}
 	if err != nil {
 		api.writeCommunicationError(response, request, "send message", err)
 		return
@@ -493,6 +526,16 @@ func (api *API) startCall(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if !api.requireLineAccess(response, request, input.LineID) {
+		return
+	}
+	// Outbound calling is paid, and the licence is checked BEFORE the fraud
+	// guard. The order matters: an unlicensed caller must be told they need a
+	// licence, not told they have used up an allowance they never had -- and
+	// the guard would otherwise spend one of its daily slots on a call that
+	// was never going to be placed.
+	dialDecision, _ := api.featureDecision(request.Context(), license.FeatureCallDial)
+	if !dialDecision.Allowed {
+		writeError(response, http.StatusPaymentRequired, "license_required", licenseDenial(dialDecision), "")
 		return
 	}
 	if guard, ok := api.callGuardStore(); ok {

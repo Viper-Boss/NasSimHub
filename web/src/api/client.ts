@@ -187,7 +187,7 @@ import type {
 import { ApiError } from './types'
 import { translate } from '../i18n'
 
-const API_ROOT = '/api/v1'
+export const API_ROOT = '/api/v1'
 const READ_REQUEST_TIMEOUT_MS = 15_000
 const WRITE_REQUEST_TIMEOUT_MS = 60_000
 const NETWORK_SCAN_REQUEST_TIMEOUT_MS = 130_000
@@ -1130,7 +1130,11 @@ async function request(
   return result.body
 }
 
-function get(path: string): Promise<unknown> {
+// Exported for per-feature API modules that belong to a lazily loaded panel.
+// Code added to THIS file lands in the startup bundle every visitor downloads,
+// so a feature only reachable from one settings page keeps its requests in its
+// own module and imports these.
+export function get(path: string): Promise<unknown> {
   return request(
     path,
     {
@@ -1182,7 +1186,7 @@ export async function unlockCallGuard(): Promise<void> {
   await writeJSON('/api/v1/calls/guard', 'POST', { action: 'unlock' }, 200)
 }
 
-function writeJSON(
+export function writeJSON(
   path: string,
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   input: unknown,

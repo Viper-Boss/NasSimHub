@@ -283,6 +283,8 @@ export default {
   },
   "settings": {
     ...fallback.settings,
+    "callServices": "Renvoi d'appel",
+    "callServicesDescription": "Chez votre opérateur, pas ici",
     "title": "Paramètres",
     "personal": "Personnel",
     "management": "Gestion",

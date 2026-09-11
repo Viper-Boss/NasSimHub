@@ -312,6 +312,8 @@ export default {
     netSwitchesDescription: "蜂窝代理使用指引与推送出口策略",
     nknNode: 'NKN 中继节点',
     nknNodeDescription: '可选的独立中继节点，默认关闭',
+    callServices: "呼叫转移",
+    callServicesDescription: "由运营商网络保存，不在本机",
     nknNetwork: 'NKN 网络',
     nknNetworkDescription: '默认开启的匿名去中心化网络接入；统计为聚合计数',
     iosApp: '手机配对',

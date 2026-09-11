@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
+	"github.com/human-agent65535/modemdeck/internal/license"
 )
 
 type wireGuardPeer struct {
@@ -264,6 +265,16 @@ func (api *API) wireGuardRuntimeStatus(
 		err  error
 	)
 	if apply {
+		// WireGuard is machine-scoped and paid. Checked at APPLY rather than
+		// at read, so an unlicensed installation can still see its own
+		// configuration and what it would take to turn it on -- hiding the
+		// settings page would leave nothing to explain the lock with.
+		decision, _ := api.featureDecision(ctx, license.FeatureWireGuard)
+		if !decision.Allowed {
+			status.State = "unavailable"
+			status.Error = licenseDenial(decision)
+			return status
+		}
 		live, err = api.wireGuardService.ApplyWireGuard(ctx, config)
 	} else {
 		live, err = api.wireGuardService.WireGuardStatusFor(ctx, config.InterfaceName, config.Enabled)

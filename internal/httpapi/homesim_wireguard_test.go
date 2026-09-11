@@ -10,7 +10,8 @@ import (
 )
 
 func TestWireGuardNKNAuthorizationAndReplay(t *testing.T) {
-	api, err := New(&fakeRepository{}, Options{disableAuthentication: true, ContactBackupDirectory: filepath.Join(t.TempDir(), "backups", "contacts")})
+	api, err := New(&fakeRepository{}, Options{disableAuthentication: true,
+		disableLicenseEnforcement: true, ContactBackupDirectory: filepath.Join(t.TempDir(), "backups", "contacts")})
 	if err != nil {
 		t.Fatal(err)
 	}

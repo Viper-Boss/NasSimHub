@@ -18,6 +18,7 @@ import {
   RadioTower,
   BellRing,
   Network,
+  PhoneForwarded,
   RefreshCw,
   Send,
   Wifi,
@@ -107,6 +108,8 @@ const loadWireGuardPanel = () => import('../components/settings/WireGuardPanel.v
 const WireGuardPanel = defineAsyncComponent(loadWireGuardPanel)
 const loadDHTPanel = () => import('../components/settings/DHTPanel.vue')
 const DHTPanel = defineAsyncComponent(loadDHTPanel)
+const loadCallServicesPanel = () => import('../components/settings/CallServicesPanel.vue')
+const CallServicesPanel = defineAsyncComponent(loadCallServicesPanel)
 const loadNknNodePanel = () => import('../components/settings/NknNodePanel.vue')
 const loadNknNetworkPanel = () => import('../components/settings/NknNetworkPanel.vue')
 const NknNodePanel = defineAsyncComponent(loadNknNodePanel)
@@ -145,6 +148,12 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
   { id: 'nkn-network', label: t('settings.nknNetwork'), description: t('settings.nknNetworkDescription'), icon: Globe2 },
   { id: 'wireguard', label: 'WireGuard', description: t('homesim.advanced.text0'), icon: ShieldCheck },
   { id: 'dht', label: t('dht.title'), description: t('dht.subtitle'), icon: Network },
+  {
+    id: 'call-services',
+    label: t('settings.callServices'),
+    description: t('settings.callServicesDescription'),
+    icon: PhoneForwarded
+  },
   {
     id: 'preferences',
     label: t('settings.system'),
@@ -347,6 +356,8 @@ function preloadSection(section: SettingsSection): void {
         return loadWireGuardPanel
       case 'dht':
         return loadDHTPanel
+      case 'call-services':
+        return loadCallServicesPanel
       case 'nkn-node':
         return loadNknNodePanel
       case 'nkn-network':
@@ -630,6 +641,9 @@ onMounted(() => {
             </div>
             <div v-else-if="selectedSection === 'dht'" class="settings-content">
               <PageContentFrame mode="reading"><DHTPanel /></PageContentFrame>
+            </div>
+            <div v-else-if="selectedSection === 'call-services'" class="settings-content">
+              <PageContentFrame mode="reading"><CallServicesPanel /></PageContentFrame>
             </div>
 
             <div v-else-if="selectedSection === 'pairing'" class="settings-content">

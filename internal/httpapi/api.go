@@ -158,6 +158,8 @@ type DHTService interface {
 	DialDHT(context.Context, []string) (int, error)
 }
 
+// CallServices reaches the operator's supplementary services through the
+// agent. Optional: see CallServicesService in call_services.go.
 type DeviceConfigurationService interface {
 	DeviceConfiguration(context.Context, string) (agentclient.DeviceConfiguration, error)
 	ApplyDeviceConfiguration(
@@ -305,30 +307,45 @@ type Options struct {
 	DeviceConfigurations   DeviceConfigurationService
 	WireGuard              WireGuardService
 	DHT                    DHTService
-	LineServices           LineService
-	CallPolicies           CallPolicyService
-	MessagePolicies        MessagePolicyService
-	CallMedia              CallMediaService
-	CallLeases             CallLeaseService
-	Recording              RecordingService
-	Network                NetworkService
-	TelegramSettings       TelegramSettingsService
-	TLSSettings            TLSSettingsService
-	CloudflareOriginTLS    CloudflareOriginTLSService
-	MobilePairing          mobilepairing.Availability
-	IOSCallTests           IOSCallTestService
-	RTCConfiguration       rtcconfig.Provider
-	Authenticator          Authenticator
-	SecureCookies          bool
-	Logger                 *slog.Logger
-	DiagnosticLogs         diagnostics.LogSource
-	MessageEvents          messageevents.Source
-	RuntimeEvents          runtimeevents.Source
-	UpdateChecker          UpdateChecker
-	UpdateManager          UpdateManager
-	ApplicationVersion     string
-	SettingsSecrets        SecretBox
-	disableAuthentication  bool
+	CallServices           CallServicesService
+	// IssuerPublicKey is the base64 Ed25519 key that licence certificates are
+	// verified against. Empty locks every paid feature, which is the correct
+	// behaviour for a build with no key -- see internal/license.
+	IssuerPublicKey       string
+	LineServices          LineService
+	CallPolicies          CallPolicyService
+	MessagePolicies       MessagePolicyService
+	CallMedia             CallMediaService
+	CallLeases            CallLeaseService
+	Recording             RecordingService
+	Network               NetworkService
+	TelegramSettings      TelegramSettingsService
+	TLSSettings           TLSSettingsService
+	CloudflareOriginTLS   CloudflareOriginTLSService
+	MobilePairing         mobilepairing.Availability
+	IOSCallTests          IOSCallTestService
+	RTCConfiguration      rtcconfig.Provider
+	Authenticator         Authenticator
+	SecureCookies         bool
+	Logger                *slog.Logger
+	DiagnosticLogs        diagnostics.LogSource
+	MessageEvents         messageevents.Source
+	RuntimeEvents         runtimeevents.Source
+	UpdateChecker         UpdateChecker
+	UpdateManager         UpdateManager
+	ApplicationVersion    string
+	SettingsSecrets       SecretBox
+	disableAuthentication bool
+	// disableLicenseEnforcement lets a test exercise a paid code path without
+	// issuing itself a certificate. Unexported and set only from _test files,
+	// like disableAuthentication above -- a licence_enforcement_test asserts
+	// nothing in the shipped tree sets it.
+	//
+	// It exists because eleven tests exercise call-start and WireGuard-apply
+	// MECHANICS, and making each of them mint a certificate would couple them
+	// to the licence system they are not about. The tests that are about
+	// licensing use the real path.
+	disableLicenseEnforcement bool
 }
 
 type API struct {
@@ -364,6 +381,11 @@ type API struct {
 	deviceConfigurations       DeviceConfigurationService
 	wireGuardService           WireGuardService
 	dhtService                 DHTService
+	callServices               CallServicesService
+	issuerPublicKey            string
+	licenseEnforced            bool
+	licenseOnce                sync.Once
+	licenseRuntimeInstance     *licenseRuntime
 	dhtMu                      sync.Mutex
 	lineServices               LineService
 	callPolicies               CallPolicyService
@@ -422,6 +444,9 @@ func New(repository Repository, options Options) (*API, error) {
 		deviceConfigurations:       options.DeviceConfigurations,
 		wireGuardService:           options.WireGuard,
 		dhtService:                 options.DHT,
+		callServices:               options.CallServices,
+		issuerPublicKey:            strings.TrimSpace(options.IssuerPublicKey),
+		licenseEnforced:            !options.disableLicenseEnforcement,
 		lineServices:               options.LineServices,
 		callPolicies:               options.CallPolicies,
 		messagePolicies:            options.MessagePolicies,

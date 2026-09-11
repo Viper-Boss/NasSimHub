@@ -15,8 +15,9 @@ func TestConditionalCollectionReadSkipsRepositoryWhenDurableWatermarkMatches(t *
 	repository := &fakeRepository{contacts: []store.Contact{{ID: "contact-one"}}}
 	hub := runtimeevents.NewHub()
 	api, err := New(repository, Options{
-		RuntimeEvents:         hub,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -69,8 +70,9 @@ func TestConditionalCollectionReadSkipsRepositoryWhenDurableWatermarkMatches(t *
 func TestConditionalCollectionETagSeparatesQueryAndPrincipal(t *testing.T) {
 	hub := runtimeevents.NewHub()
 	api, err := New(&fakeRepository{}, Options{
-		RuntimeEvents:         hub,
-		disableAuthentication: true,
+		RuntimeEvents:             hub,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)

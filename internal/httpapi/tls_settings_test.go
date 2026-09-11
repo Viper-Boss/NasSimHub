@@ -267,8 +267,9 @@ func TestTLSSettingsDownloadsAutomaticCertificateAuthority(t *testing.T) {
 func newTLSSettingsAPI(t *testing.T, settings TLSSettingsService) *API {
 	t.Helper()
 	api, err := New(&fakeRepository{}, Options{
-		TLSSettings:           settings,
-		disableAuthentication: true,
+		TLSSettings:               settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

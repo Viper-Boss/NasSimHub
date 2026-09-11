@@ -147,10 +147,11 @@ func TestAdministratorPasswordResetImmediatelyRevokesUserCalls(t *testing.T) {
 	communications := &fakeCommunications{}
 	media := &fakeCallMedia{}
 	api, err := New(repository, Options{
-		disableAuthentication: true,
-		CallLeases:            leases,
-		Communications:        communications,
-		CallMedia:             media,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
+		CallLeases:                leases,
+		Communications:            communications,
+		CallMedia:                 media,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -197,8 +198,9 @@ func TestMemberAccessUpdateReloadsTelegramRuntimeAfterCommit(t *testing.T) {
 	}
 	settings := &fakeTelegramSettings{}
 	api, err := New(repository, Options{
-		TelegramSettings:      settings,
-		disableAuthentication: true,
+		TelegramSettings:          settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -331,8 +333,9 @@ func TestFailedMemberAccessUpdateDoesNotReloadTelegramRuntime(t *testing.T) {
 	}
 	settings := &fakeTelegramSettings{}
 	api, err := New(repository, Options{
-		TelegramSettings:      settings,
-		disableAuthentication: true,
+		TelegramSettings:          settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

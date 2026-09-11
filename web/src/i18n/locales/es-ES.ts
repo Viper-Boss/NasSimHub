@@ -283,6 +283,8 @@ export default {
   },
   "settings": {
     ...fallback.settings,
+    "callServices": "Desvío de llamadas",
+    "callServicesDescription": "En tu operador, no en el gateway",
     "title": "Configuración",
     "personal": "Personal",
     "management": "Gestión",

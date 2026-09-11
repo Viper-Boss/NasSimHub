@@ -208,8 +208,9 @@ func newCloudflareOriginTLSAPI(
 ) *API {
 	t.Helper()
 	api, err := New(&fakeRepository{}, Options{
-		CloudflareOriginTLS:   settings,
-		disableAuthentication: true,
+		CloudflareOriginTLS:       settings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

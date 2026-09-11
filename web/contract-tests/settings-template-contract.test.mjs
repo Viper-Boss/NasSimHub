@@ -38,6 +38,8 @@ test('settings navigation groups personal and managed surfaces behind one visibi
       'preferences',
       'security',
       'audio',
+      // Forwarding can divert every incoming call, so it is admin-only.
+      'call-services',
       'pairing',
       'contacts',
       'users',

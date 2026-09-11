@@ -283,6 +283,8 @@ export default {
   },
   "settings": {
     ...fallback.settings,
+    "callServices": "Rufumleitung",
+    "callServicesDescription": "Beim Netzbetreiber, nicht hier",
     "title": "Einstellungen",
     "personal": "Persönlich",
     "management": "Verwaltung",

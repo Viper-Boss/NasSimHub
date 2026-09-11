@@ -332,12 +332,29 @@ func (p *Provider) ensureQuectelMediaRouting(
 		return runtimeResult, true
 	}
 
+	// The secondary PCM clock, before anything else. It gates whether the PCM
+	// interface can carry samples at all, and with it off every other signal
+	// here reports success on a call that is silent in both directions. See
+	// pcm_clock.go for where this gate came from -- it is not documented, and
+	// nothing else in this probe would notice it.
+	clock := ensurePCMClock(ctx, func(ctx context.Context, command string) (string, error) {
+		return p.commandATPath(ctx, path, operation, command)
+	})
+	logPCMClock(operation, line.ID, clock)
+
 	status, statusErr := p.commandATPath(ctx, path, operation, quectelPCMStatusQuery)
 	if statusErr == nil &&
 		strings.EqualFold(strings.TrimSpace(status), quectelPCMReadyStatus) {
 		result.media = true
 		result.mediaRouting = voiceVerificationEnabled
 		result.reason = ""
+		// A configured interface with a stopped clock is not a working audio
+		// route, and saying "enabled" here is what would send somebody hunting
+		// through WebRTC for a fault that is in the module.
+		if clock.State != pcmClockOn {
+			result.reason = "PCM interface is configured but the secondary PCM clock is " +
+				string(clock.State) + "; call audio may be silent"
+		}
 		p.storeVoiceProbe(key, result)
 		return result, true
 	}

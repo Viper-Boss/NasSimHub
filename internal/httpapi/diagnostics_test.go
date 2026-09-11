@@ -60,8 +60,9 @@ func TestDiagnosticsReportsRuntimeAndLineCapabilities(t *testing.T) {
 		}},
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -111,8 +112,9 @@ func TestDiagnosticsKeepsDegradedSnapshotWhenRefreshFails(t *testing.T) {
 		statusError: errors.New("live hardware state is unavailable"),
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -131,8 +133,9 @@ func TestDiagnosticsKeepsDegradedSnapshotWhenRefreshFails(t *testing.T) {
 func TestDiagnosticsSerializesUnavailableCollectionsAsArrays(t *testing.T) {
 	t.Parallel()
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        &fakeCommunications{},
-		disableAuthentication: true,
+		Communications:            &fakeCommunications{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -157,8 +160,9 @@ func TestDiagnosticLogHistoryFiltersAndRedacts(t *testing.T) {
 	logger.Warn("modem timeout", "component", "communications", "auth_token", "secret")
 
 	api, err := New(&fakeRepository{}, Options{
-		DiagnosticLogs:        buffer,
-		disableAuthentication: true,
+		DiagnosticLogs:            buffer,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -191,8 +195,9 @@ func TestDiagnosticLogStreamReplaysCursor(t *testing.T) {
 	logger.Info("second")
 
 	api, err := New(&fakeRepository{}, Options{
-		DiagnosticLogs:        buffer,
-		disableAuthentication: true,
+		DiagnosticLogs:            buffer,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

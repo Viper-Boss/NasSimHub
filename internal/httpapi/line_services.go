@@ -37,6 +37,17 @@ func (api *API) lineServiceResource(
 	lineID string,
 	resource string,
 ) {
+	// Call services come from a DIFFERENT provider (the agent's AT transport,
+	// not the line-services provider), so they are routed before the guard
+	// below. Sharing that guard would make forwarding unavailable on any build
+	// where line services happen to be absent, for no reason.
+	if resource == "call-services" {
+		if !api.requireLineAccess(response, request, lineID) {
+			return
+		}
+		api.callServicesHandler(response, request, lineID)
+		return
+	}
 	if api.lineServices == nil {
 		writeError(
 			response,
@@ -260,7 +271,7 @@ func lineServiceResource(path string) (lineID string, resource string, ok bool) 
 	lineID = parts[0]
 	resource = strings.Join(parts[1:], "/")
 	switch resource {
-	case "sim", "sim/commands", "sim/auto-unlock", "profiles", "ussd":
+	case "sim", "sim/commands", "sim/auto-unlock", "profiles", "ussd", "call-services":
 		return lineID, resource, true
 	default:
 		return "", "", false

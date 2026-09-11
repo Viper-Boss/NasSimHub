@@ -47,8 +47,9 @@ func (checker observingUpdateChecker) Check(ctx context.Context) updatecheck.Res
 func TestAboutReportsProductMetadata(t *testing.T) {
 	t.Parallel()
 	api, err := New(&fakeRepository{}, Options{
-		ApplicationVersion:    "v1.0.0",
-		disableAuthentication: true,
+		ApplicationVersion:        "v1.0.0",
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -113,9 +114,10 @@ func TestUpdateCheckReturnsCheckerResult(t *testing.T) {
 		CheckedAt:      "2026-07-28T08:00:00Z",
 	}
 	api, err := New(&fakeRepository{}, Options{
-		UpdateChecker:         fakeUpdateChecker{result: expected},
-		ApplicationVersion:    "v1.0.0",
-		disableAuthentication: true,
+		UpdateChecker:             fakeUpdateChecker{result: expected},
+		ApplicationVersion:        "v1.0.0",
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -139,8 +141,9 @@ func TestUpdateCheckForwardsManualRefresh(t *testing.T) {
 	t.Parallel()
 	refreshed := false
 	api, err := New(&fakeRepository{}, Options{
-		UpdateChecker:         observingUpdateChecker{refreshed: &refreshed},
-		disableAuthentication: true,
+		UpdateChecker:             observingUpdateChecker{refreshed: &refreshed},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -193,8 +196,9 @@ func TestUpdateApplyAndStatusUseManager(t *testing.T) {
 		StartedAt:     "2026-08-01T08:00:00Z",
 	}
 	api, err := New(&fakeRepository{}, Options{
-		UpdateManager:         fakeUpdateManager{operation: expected},
-		disableAuthentication: true,
+		UpdateManager:             fakeUpdateManager{operation: expected},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

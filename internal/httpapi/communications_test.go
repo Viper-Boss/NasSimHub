@@ -123,8 +123,9 @@ func TestMessageCommandForwardsExplicitLineAndIdempotencyKey(t *testing.T) {
 		State:     "sending",
 	}}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -158,8 +159,9 @@ func TestHTTPCommandRequestIDCannotUseInternalNamespace(t *testing.T) {
 	t.Parallel()
 	communications := &fakeCommunications{}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		disableAuthentication: true,
+		Communications:            communications,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -221,8 +223,9 @@ func TestMessageThreadDeleteUsesExactIdentityAndPublishesDurableRevision(t *test
 	repository := &fakeRepository{}
 	events := runtimeevents.NewHub()
 	api, err := New(repository, Options{
-		RuntimeEvents:         events,
-		disableAuthentication: true,
+		RuntimeEvents:             events,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -257,8 +260,9 @@ func TestMessageThreadStateUpdatesMultipleExactIdentities(t *testing.T) {
 	repository := &fakeRepository{}
 	events := runtimeevents.NewHub()
 	api, err := New(repository, Options{
-		RuntimeEvents:         events,
-		disableAuthentication: true,
+		RuntimeEvents:             events,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -350,8 +354,9 @@ func TestSingleMissedCallReadAndCallDeletionUseExactCallID(t *testing.T) {
 	repository := &fakeRepository{}
 	recordings := &fakeRecordingService{}
 	api, err := New(repository, Options{
-		Recording:             recordings,
-		disableAuthentication: true,
+		Recording:                 recordings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -457,8 +462,9 @@ func TestCallsBatchDeleteCascadesThroughRecordingService(t *testing.T) {
 
 	recordings := &fakeRecordingService{}
 	api, err := New(&fakeRepository{}, Options{
-		Recording:             recordings,
-		disableAuthentication: true,
+		Recording:                 recordings,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -581,9 +587,10 @@ func TestCommandRejectsConflictingRequestIdentities(t *testing.T) {
 
 	communications := &fakeCommunications{}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            &fakeCallLeases{},
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                &fakeCallLeases{},
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -620,9 +627,10 @@ func TestCallControlAndActiveCallRoutes(t *testing.T) {
 	communications := &fakeCommunications{call: call, active: []store.Call{call}}
 	leases := &fakeCallLeases{control: calllease.ControlOwned}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -702,9 +710,10 @@ func TestActiveCallReportsOccupiedToAnotherBrowser(t *testing.T) {
 	}
 	leases := &fakeCallLeases{control: calllease.ControlOccupied}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        &fakeCommunications{active: []store.Call{call}},
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            &fakeCommunications{active: []store.Call{call}},
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -747,9 +756,10 @@ func TestActiveCallsIncludeOutgoingLineReservations(t *testing.T) {
 		ControlState: calllease.ControlOccupied,
 	}}}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        &fakeCommunications{},
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            &fakeCommunications{},
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -794,9 +804,10 @@ func TestSecondBrowserCannotAnswerClaimedIncomingCall(t *testing.T) {
 	communications := &fakeCommunications{}
 	leases := &fakeCallLeases{err: calllease.ErrCallOwned}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -839,9 +850,10 @@ func TestStartCallClaimsTheDialingBrowser(t *testing.T) {
 		}
 	}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -897,9 +909,10 @@ func TestCompletedStartCallReplayBypassesEphemeralReservation(t *testing.T) {
 	}
 	leases := &fakeCallLeases{control: calllease.ControlOwned}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -937,9 +950,10 @@ func TestConcurrentStartRetryDoesNotDispatchOrReleaseOriginalReservation(t *test
 	leases := &fakeCallLeases{reserveReplay: true}
 	communications := &fakeCommunications{}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -975,9 +989,10 @@ func TestIndeterminateStartCallRetainsReservationForSnapshotResolution(t *testin
 	}
 	leases := &fakeCallLeases{}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1012,9 +1027,10 @@ func TestStartCallClaimFailureEndsOnlyCreatedCall(t *testing.T) {
 	}}
 	leases := &fakeCallLeases{activateErr: calllease.ErrCallNotActive}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1053,9 +1069,10 @@ func TestBrowserCannotStartASecondOwnedCall(t *testing.T) {
 	}}
 	leases := &fakeCallLeases{reserveErr: calllease.ErrHolderBusy}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1088,9 +1105,10 @@ func TestIncomingAnswerIsFirstClaimWins(t *testing.T) {
 	communications := &fakeCommunications{}
 	leases := &fakeCallLeases{err: calllease.ErrCallOwned}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1124,9 +1142,10 @@ func TestFailedIncomingAnswerKeepsSessionClaim(t *testing.T) {
 	}
 	leases := &fakeCallLeases{}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1160,9 +1179,10 @@ func TestNonOwnerCannotControlActiveCall(t *testing.T) {
 	communications := &fakeCommunications{}
 	leases := &fakeCallLeases{err: calllease.ErrNotOwner}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1202,9 +1222,10 @@ func TestCompletedCallActionReplayBypassesEphemeralOwnership(t *testing.T) {
 	}
 	leases := &fakeCallLeases{err: calllease.ErrNotOwner}
 	api, err := New(&fakeRepository{}, Options{
-		Communications:        communications,
-		CallLeases:            leases,
-		disableAuthentication: true,
+		Communications:            communications,
+		CallLeases:                leases,
+		disableAuthentication:     true,
+		disableLicenseEnforcement: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1276,9 +1297,10 @@ func TestCommunicationErrorsHaveStableHTTPMapping(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			communications := &fakeCommunications{startError: test.err}
 			api, err := New(&fakeRepository{}, Options{
-				Communications:        communications,
-				CallLeases:            &fakeCallLeases{},
-				disableAuthentication: true,
+				Communications:            communications,
+				CallLeases:                &fakeCallLeases{},
+				disableAuthentication:     true,
+				disableLicenseEnforcement: true,
 			})
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
