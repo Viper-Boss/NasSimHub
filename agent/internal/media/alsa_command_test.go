@@ -79,13 +79,20 @@ func TestALSACommandDeviceUsesQuectelUACTransferBlocks(t *testing.T) {
 		playbackTransfer: make([]byte, transferBytes(format, quectelUACPlaybackDuration)),
 	}
 
+	// The device applies the route gains on the way through, so the frames
+	// that come out are the inputs with the configured transform applied --
+	// the assertions below compare against that same transform.
+	captureGained := append([]byte(nil), capture...)
+	applyGainS16LE(captureGained, captureGainNum, captureGainDen)
+	playbackGained := applyGainS16LECopy(bytes.Repeat([]byte{0x31}, format.FrameBytes))
+
 	for frameIndex := 0; frameIndex < 2; frameIndex++ {
 		frame := make([]byte, format.FrameBytes)
 		read, err := device.Read(frame)
 		if err != nil {
 			t.Fatalf("Read(frame %d) error = %v", frameIndex, err)
 		}
-		if read != len(frame) || !bytes.Equal(frame, capture[frameIndex*len(frame):(frameIndex+1)*len(frame)]) {
+		if read != len(frame) || !bytes.Equal(frame, captureGained[frameIndex*len(frame):(frameIndex+1)*len(frame)]) {
 			t.Fatalf("Read(frame %d) = %d bytes", frameIndex, read)
 		}
 	}
@@ -106,6 +113,17 @@ func TestALSACommandDeviceUsesQuectelUACTransferBlocks(t *testing.T) {
 	if playback.Len() != transferBytes(format, quectelUACPlaybackDuration) {
 		t.Fatalf("playback block = %d bytes", playback.Len())
 	}
+	if !bytes.Equal(playback.Bytes(), bytes.Repeat(playbackGained, 5)) {
+		t.Fatalf("playback content is not the browser input with the playback gain applied")
+	}
+}
+
+// applyGainS16LECopy is the out-of-place form of applyGainS16LE, for tests
+// that want the expected transform of an input.
+func applyGainS16LECopy(buffer []byte) []byte {
+	gained := append([]byte(nil), buffer...)
+	applyGainS16LE(gained, playbackGainNum, playbackGainDen)
+	return gained
 }
 
 func TestALSACommandRejectsNonNativeQuectelUACRate(t *testing.T) {
@@ -227,10 +245,10 @@ func TestApplyGainS16LEScalesAndClamps(t *testing.T) {
 		0x80, 0x3e, // 16000 little-endian
 		0x40, 0x06, // 1600
 		0xc0, 0xf9, // -1600
-		0x00, 0xc1, // -16000
+		0x80, 0xc1, // -16000
 	}
 	applyGainS16LE(buffer, 1, 4)
-	want := []byte{0xa0, 0x0f, 0x90, 0x01, 0x70, 0xfe, 0x00, 0xf0}
+	want := []byte{0xa0, 0x0f, 0x90, 0x01, 0x70, 0xfe, 0x60, 0xf0}
 	if string(buffer) != string(want) {
 		t.Fatalf("quarter gain = % x; want % x", buffer, want)
 	}
