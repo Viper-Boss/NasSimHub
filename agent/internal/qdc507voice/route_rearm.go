@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +66,31 @@ const routeRearmTimeout = 40 * time.Second
 // DSP is still dismantling.
 const routeRearmDelay = 2 * time.Second
 
+// routeRearmBackoffBase is the wait before the first retry after a failed
+// re-arm; each consecutive failure doubles it up to routeRearmBackoffMax. A
+// failing re-arm used to retry on literally the next snapshot (~3s), which
+// hammered the one ADB channel everything else shares.
+const routeRearmBackoffBase = 15 * time.Second
+
+// routeRearmBackoffMax caps the doubling. Five consecutive failures means
+// something structural is wrong (module gone, runtime broken) and only a
+// human or a new call should try again.
+const routeRearmBackoffMax = 4 * time.Minute
+
+// helperPattern turns the helper path into a pkill -f pattern that cannot
+// match the shell carrying the pkill itself. The path appears verbatim in that
+// shell's command line -- pkill -f matches against the whole command line -- so
+// the shell used to SIGTERM itself before it could report an exit status,
+// making every stop fail with "did not contain an exit status" and the retry
+// loop kill the bridge it had just been asked to replace. Bracketing one
+// character (and escaping the dots) keeps the regex pointing at the bridge
+// while the pattern's own text no longer matches it -- the same trick as
+// grep '[b]ridge'.
+func helperPattern(helper string) string {
+	escaped := strings.ReplaceAll(helper, ".", "[.]")
+	return strings.Replace(escaped, "bridge", "bridg[e]", 1)
+}
+
 // routeArmState tracks one line's bridge across calls.
 type routeArmState struct {
 	// inCall is the last observed call presence, so transitions can be
@@ -77,6 +103,12 @@ type routeArmState struct {
 	// snapshot every second would pile up concurrent restarts, each killing
 	// the bridge the previous one had just started.
 	arming bool
+	// attempts counts consecutive failed re-arms for the backoff, and
+	// nextAttempt is when the next retry becomes eligible. Reset when a
+	// re-arm succeeds or a new call starts (THE ONE RULE: a new call on a
+	// dirty bridge always retries immediately).
+	attempts    int
+	nextAttempt time.Time
 }
 
 // routeArming is the per-line arming state, separate from the reconciler's own
@@ -119,6 +151,11 @@ func (m *Manager) ObserveCallActivity(line domain.Line, active bool) {
 	switch {
 	case active && !state.inCall:
 		state.inCall = true
+		// THE ONE RULE: a new call always retries immediately, whatever the
+		// backoff owed on previous failures -- silence for that call is the
+		// alternative.
+		state.attempts = 0
+		state.nextAttempt = time.Time{}
 		if state.dirty {
 			// A call has started on a bridge that has already been used. It
 			// would carry no audio, so restart it now even though the call is
@@ -128,10 +165,18 @@ func (m *Manager) ObserveCallActivity(line domain.Line, active bool) {
 	case !active && state.inCall:
 		state.inCall = false
 		state.dirty = true
+		state.attempts = 0
+		state.nextAttempt = time.Time{}
 		reason = "a call ended, so the route session has been consumed"
 	case state.dirty && !state.arming:
-		// A previous re-arm failed. Retry on the next observation rather than
-		// waiting for another call to expose it.
+		// A previous re-arm failed. Retry on the next observation, but spaced
+		// out by the backoff -- the previous behaviour retried on literally
+		// the next snapshot (~3s), hammering the one ADB channel the rest of
+		// the runtime shares.
+		if !state.nextAttempt.IsZero() && time.Now().Before(state.nextAttempt) {
+			m.arming.mu.Unlock()
+			return
+		}
 		reason = "an earlier re-arm of the route session did not succeed"
 	}
 	if reason == "" || state.arming {
@@ -165,17 +210,42 @@ func (m *Manager) rearmInBackground(line domain.Line, key, reason string, idle b
 	defer cancel()
 
 	if err := m.RearmRoute(ctx, line); err != nil {
+		// Back off before the retry that the next observation will schedule:
+		// double from the base up to the cap. Nothing here resets dirty -- the
+		// retry itself is the next observation past nextAttempt.
+		m.arming.mu.Lock()
+		state := m.arming.state(key)
+		state.attempts++
+		base := m.rearmBackoff
+		if base <= 0 {
+			base = routeRearmBackoffBase
+		}
+		backoff := base
+		for round := 1; round < state.attempts; round++ {
+			backoff *= 2
+			if backoff >= routeRearmBackoffMax {
+				backoff = routeRearmBackoffMax
+				break
+			}
+		}
+		state.nextAttempt = time.Now().Add(backoff)
+		m.arming.mu.Unlock()
 		slog.Warn(
 			"re-arm QDC507 VoLTE route session",
 			"component", "qdc507voice",
 			"line_id", line.ID,
 			"reason", reason,
 			"error", err,
+			"attempt", state.attempts,
+			"next_retry_in", backoff.String(),
 		)
 		return
 	}
 	m.arming.mu.Lock()
-	m.arming.state(key).dirty = false
+	state := m.arming.state(key)
+	state.dirty = false
+	state.attempts = 0
+	state.nextAttempt = time.Time{}
 	m.arming.mu.Unlock()
 	slog.Info(
 		"re-armed the QDC507 VoLTE route session",
@@ -213,12 +283,12 @@ func (m *Manager) RearmRoute(ctx context.Context, line domain.Line) error {
 // SIGKILL, because a bridge that will not exit is worse than one killed hard:
 // the next start fails and the line stays silent.
 func (m *Manager) stopRoute(ctx context.Context, serial string) error {
-	helper := remoteDirectory + "/" + m.manifest.Helper
-	command := "pkill -TERM -f '" + helper + "' 2>/dev/null; " +
+	pattern := helperPattern(remoteDirectory + "/" + m.manifest.Helper)
+	command := "pkill -TERM -f '" + pattern + "' 2>/dev/null; " +
 		"n=0; while pidof " + m.manifest.Helper + " >/dev/null 2>&1 && test \"$n\" -lt 40; do " +
 		"sleep 0.1; n=$((n+1)); done; " +
 		"if pidof " + m.manifest.Helper + " >/dev/null 2>&1; then " +
-		"pkill -KILL -f '" + helper + "' 2>/dev/null; " +
+		"pkill -KILL -f '" + pattern + "' 2>/dev/null; " +
 		"n=0; while pidof " + m.manifest.Helper + " >/dev/null 2>&1 && test \"$n\" -lt 20; do " +
 		"sleep 0.1; n=$((n+1)); done; fi; " +
 		"rm -f '" + routePIDFile + "'; " +

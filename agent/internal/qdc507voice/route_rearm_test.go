@@ -3,6 +3,7 @@ package qdc507voice
 import (
 	"context"
 	"io/fs"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -220,7 +221,9 @@ func TestOverlappingObservationsRearmOnce(t *testing.T) {
 }
 
 // A failed re-arm must be retried rather than leaving the line quietly broken.
-func TestAFailedRearmIsRetriedOnTheNextObservation(t *testing.T) {
+// The retry is spaced out by the backoff, so the test winds the backoff clock
+// forward by hand (deterministic, no sleeping on a real timer).
+func TestAFailedRearmIsRetriedAfterTheBackoff(t *testing.T) {
 	t.Parallel()
 	client := &rearmClient{running: true, startFails: true}
 	manager := rearmManager(client)
@@ -230,13 +233,36 @@ func TestAFailedRearmIsRetriedOnTheNextObservation(t *testing.T) {
 	manager.ObserveCallActivity(line, false)
 	client.waitForSteps(t, 2)
 
-	// The bridge can come up now; the next observation must try again.
+	// While the backoff has time left, observations must NOT retry.
+	manager.arming.mu.Lock()
+	manager.arming.state(line.PhysicalDevice).nextAttempt = time.Now().Add(time.Minute)
+	manager.arming.mu.Unlock()
+	manager.ObserveCallActivity(line, false)
+	manager.ObserveCallActivity(line, false)
+	if len(client.sequence()) != 2 {
+		t.Fatalf(
+			"observations during the backoff retried anyway: %v",
+			client.sequence(),
+		)
+	}
+
+	// The bridge can come up now; the backoff expires and the next
+	// observation must try again.
 	client.mu.Lock()
 	client.startFails = false
 	client.mu.Unlock()
+	manager.arming.mu.Lock()
+	manager.arming.state(line.PhysicalDevice).nextAttempt = time.Now().Add(-time.Second)
+	manager.arming.mu.Unlock()
 
 	deadline := time.Now().Add(3 * time.Second)
 	for {
+		// Keep the backoff expired: the first re-arm's own failure handler
+		// runs late (after waitForSteps) and would otherwise re-arm the gate
+		// for another 15s on top of the expired window this test sets.
+		manager.arming.mu.Lock()
+		manager.arming.state(line.PhysicalDevice).nextAttempt = time.Now().Add(-time.Second)
+		manager.arming.mu.Unlock()
 		manager.ObserveCallActivity(line, false)
 		if len(client.sequence()) >= 4 {
 			break
@@ -289,5 +315,33 @@ func TestALineWithoutAPhysicalDeviceIsIgnored(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if steps := client.sequence(); len(steps) != 0 {
 		t.Fatalf("a line with no physical device was acted on: %v", steps)
+	}
+}
+
+// The pkill pattern must keep matching the bridge process while no longer
+// matching the shell that carries the pkill itself: pkill -f compares against
+// the whole command line, and the path appears verbatim inside it, so an
+// unbracketed pattern made the shell kill itself before it could report an
+// exit status -- every stop failed, the bridge was killed anyway by the
+// SIGTERM, and the retry loop never recovered the route.
+func TestHelperPatternMatchesTheBridgeButNotItsOwnShell(t *testing.T) {
+	helper := "/tmp/modemdeck-qdc507-voice/mavo-pcm-bridge.armv7"
+	pattern := helperPattern(helper)
+
+	bridgeMatch, err := regexp.MatchString(pattern, helper)
+	if err != nil {
+		t.Fatalf("pattern %q is not a valid regexp: %v", pattern, err)
+	}
+	if !bridgeMatch {
+		t.Fatalf("pattern %q does not match the bridge cmdline %q", pattern, helper)
+	}
+
+	shellCmdline := "sh -c pkill -TERM -f '" + pattern + "' 2>/dev/null; n=0; while pidof mavo-pcm-bridge >/dev/null 2>&1; do sleep 0.1; done"
+	shellMatch, err := regexp.MatchString(pattern, shellCmdline)
+	if err != nil {
+		t.Fatalf("pattern %q is not a valid regexp: %v", pattern, err)
+	}
+	if shellMatch {
+		t.Fatalf("pattern %q matches the carrying shell's own cmdline and would kill it", pattern)
 	}
 }
