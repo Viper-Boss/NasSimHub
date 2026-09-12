@@ -218,3 +218,47 @@ func TestALSACommandCaptureErrorIncludesBoundedToolOutput(t *testing.T) {
 		t.Fatalf("Close() after capture failure = %v", err)
 	}
 }
+
+func TestApplyGainS16LEScalesAndClamps(t *testing.T) {
+	t.Parallel()
+
+	// 16000, 1600, -1600, -16000 with a quarter gain: 4000, 400, -400, -4000.
+	buffer := []byte{
+		0x80, 0x3e, // 16000 little-endian
+		0x40, 0x06, // 1600
+		0xc0, 0xf9, // -1600
+		0x00, 0xc1, // -16000
+	}
+	applyGainS16LE(buffer, 1, 4)
+	want := []byte{0xa0, 0x0f, 0x90, 0x01, 0x70, 0xfe, 0x00, 0xf0}
+	if string(buffer) != string(want) {
+		t.Fatalf("quarter gain = % x; want % x", buffer, want)
+	}
+}
+
+func TestApplyGainS16LEClampsAtFullScale(t *testing.T) {
+	t.Parallel()
+
+	// 20000 amplified 50x would be 1,000,000: clamp to 32767 / -32768.
+	positive := []byte{0x20, 0x4e} // 20000
+	applyGainS16LE(positive, 50, 1)
+	if got := int16(uint16(positive[0]) | uint16(positive[1])<<8); got != 32767 {
+		t.Fatalf("positive clamp = %d; want 32767", got)
+	}
+	negative := []byte{0x00, 0xb1} // -20000
+	applyGainS16LE(negative, 50, 1)
+	if got := int16(uint16(negative[0]) | uint16(negative[1])<<8); got != -32768 {
+		t.Fatalf("negative clamp = %d; want -32768", got)
+	}
+}
+
+func TestApplyGainS16LEIdentityWhenUnity(t *testing.T) {
+	t.Parallel()
+
+	buffer := []byte{0x80, 0x3e, 0xc0, 0xf9, 0x00, 0x80} // includes -32768
+	original := append([]byte(nil), buffer...)
+	applyGainS16LE(buffer, 7, 7)
+	if string(buffer) != string(original) {
+		t.Fatalf("unity gain mutated the buffer: % x; want % x", buffer, original)
+	}
+}

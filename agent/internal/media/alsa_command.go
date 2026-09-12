@@ -20,6 +20,26 @@ const (
 
 	quectelUACCaptureDuration  = 40 * time.Millisecond
 	quectelUACPlaybackDuration = 100 * time.Millisecond
+
+	// The module's DSP delivers its own direction roughly 12 dB too hot -- a
+	// live call measured speech at -8 dBFS RMS with peaks already at digital
+	// full scale, which the far side hears as loud distortion. The capture
+	// stream is therefore attenuated a quarter before it leaves the agent.
+	//
+	// The opposite direction arrives some 50 dB too quiet: the browser's
+	// microphone measured -60 dBFS RMS on a live call while the speaker
+	// talked at a normal level, which is inaudible on a phone. The playback
+	// stream is amplified 50x before it reaches the module's AFE TX path, and
+	// hard clipping is the only peak protection -- a shout into the browser
+	// microphone distorts rather than explodes.
+	//
+	// Both numbers come from one live QDC507 on one firmware; if a firmware
+	// update changes the DSP calibration these want re-measuring (the level
+	// logs around "modem call audio level" are the instrument).
+	captureGainNum  = 1
+	captureGainDen  = 4
+	playbackGainNum = 50
+	playbackGainDen = 1
 )
 
 // ALSACommandOpener uses the established alsa-utils PCM tools as an explicit
@@ -188,6 +208,7 @@ func (d *alsaCommandDevice) Read(destination []byte) (int, error) {
 			}
 			return 0, commandIOError("arecord", d.captureErrors, err)
 		}
+		applyGainS16LE(d.captureTransfer, captureGainNum, captureGainDen)
 		d.captureOffset = 0
 	}
 	read := copy(destination, d.captureTransfer[d.captureOffset:])
@@ -204,6 +225,15 @@ func (d *alsaCommandDevice) Write(source []byte) (int, error) {
 	defer d.playbackMu.Unlock()
 
 	d.playbackLevel.observe(source)
+	// The level meter above reports what the browser delivered; what the
+	// module receives is this buffer with the playback gain applied. The
+	// caller's slice is left untouched.
+	if playbackGainNum != playbackGainDen {
+		gained := make([]byte, len(source))
+		copy(gained, source)
+		applyGainS16LE(gained, playbackGainNum, playbackGainDen)
+		source = gained
+	}
 	consumed := 0
 	for consumed < len(source) {
 		copied := copy(d.playbackTransfer[d.playbackOffset:], source[consumed:])
@@ -371,4 +401,26 @@ func commandIOError(command string, output *boundedCommandOutput, err error) err
 		return fmt.Errorf("%s: %s: %w", command, detail, err)
 	}
 	return err
+}
+
+// applyGainS16LE scales a little-endian S16 sample buffer by
+// numerator/denominator in place, clamping to full scale. Speech is roughly
+// sinusoidal, so the truncation is toward zero and the clamp is symmetric;
+// anything fancier (soft knee, AGC) belongs in a follow-up with its own
+// listening test.
+func applyGainS16LE(buffer []byte, numerator, denominator int) {
+	if numerator == denominator || denominator == 0 {
+		return
+	}
+	for index := 0; index+1 < len(buffer); index += 2 {
+		sample := int16(uint16(buffer[index]) | uint16(buffer[index+1])<<8)
+		scaled := int32(sample) * int32(numerator) / int32(denominator)
+		if scaled > 32767 {
+			scaled = 32767
+		} else if scaled < -32768 {
+			scaled = -32768
+		}
+		buffer[index] = byte(scaled)
+		buffer[index+1] = byte(uint16(scaled) >> 8)
+	}
 }

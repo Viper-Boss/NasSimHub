@@ -1665,6 +1665,18 @@ func upsertHardwareCall(
 		}
 	}
 	if stored.Missed && (stored.Phase == "ended" || stored.Phase == "failed") {
+		// The event key is the call ID, and this block runs again on every
+		// snapshot round while a terminated call still lingers in the module's
+		// call list. occurredAt therefore has to be stable for the life of the
+		// call: the snapshot's observed_at advances on every round, and a
+		// changed field under an existing event key is rejected as a conflict,
+		// which failed the whole snapshot and took every live state down with
+		// it. The call's own creation time is the clock the closeMissingCalls
+		// path already uses for the same reason.
+		occurredAt := call.ObservedAt
+		if parsed, ok := parseDatabaseTime(stored.CreatedAt); ok {
+			occurredAt = parsed.UTC()
+		}
 		if err := enqueueNotification(
 			ctx,
 			transaction,
@@ -1674,7 +1686,7 @@ func upsertHardwareCall(
 			stored.LineID,
 			stored.RemoteNumber,
 			"",
-			call.ObservedAt,
+			occurredAt,
 		); err != nil {
 			return Call{}, false, false, err
 		}

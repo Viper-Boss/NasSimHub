@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -2073,6 +2074,72 @@ func stableLineIDForICCID(t *testing.T, repository *Store, iccid string) string 
 	}
 	if lineID == "" {
 		t.Fatalf("stable line ID for ICCID %q is empty", iccid)
+	}
+	return lineID
+}
+
+// A terminated missed call keeps sitting in the module's call list long after
+// it ended, so every snapshot round re-enqueues the same missed-call
+// notification. The event key is the call ID, so the stored event has to
+// tolerate the snapshot's advancing observed_at: any field changing under an
+// existing key was rejected as a conflict, and that error failed the whole
+// snapshot apply -- which took every live state down with it (calls could not
+// be answered, lines and proxies went blind) until the module restarted.
+func TestHardwareSnapshotMissedCallLingersAcrossObservations(t *testing.T) {
+	t.Parallel()
+
+	repository := newHardwareTestStore(t)
+	ctx := context.Background()
+	observedAt := time.Date(2026, time.August, 12, 4, 0, 0, 0, time.UTC)
+	line := policyTestLine()
+	if _, err := repository.ApplyHardwareSnapshotWithResult(ctx, HardwareSnapshot{
+		BootEpoch:  "boot-missed-linger",
+		Revision:   "snapshot-lines",
+		ObservedAt: observedAt,
+		Lines:      []HardwareLine{line},
+	}); err != nil {
+		t.Fatalf("apply line snapshot: %v", err)
+	}
+	lineID := baseLineID(t, repository, line)
+
+	missedCall := HardwareCall{
+		AppID:          "call-missed-linger",
+		LineID:         lineID,
+		EndpointLineID: line.ID,
+		EndpointCallID: "endpoint-call-missed-linger",
+		Direction:      "incoming",
+		Phase:          "ended",
+	}
+	for round := 1; round <= 3; round++ {
+		missedCall.ObservedAt = observedAt.Add(time.Duration(round) * time.Second)
+		snapshot := HardwareSnapshot{
+			BootEpoch:  "boot-missed-linger",
+			Revision:   "snapshot-missed-" + strconv.Itoa(round),
+			ObservedAt: missedCall.ObservedAt,
+			Lines:      []HardwareLine{line},
+			Calls:      []HardwareCall{missedCall},
+		}
+		if _, err := repository.ApplyHardwareSnapshotWithResult(ctx, snapshot); err != nil {
+			t.Fatalf("lingering missed call snapshot round %d: %v", round, err)
+		}
+	}
+}
+
+// baseLineID resolves the stable line ID the store minted for a test line.
+func baseLineID(t *testing.T, repository *Store, line HardwareLine) string {
+	t.Helper()
+	snapshot, err := repository.ApplyHardwareSnapshotWithResult(context.Background(), HardwareSnapshot{
+		BootEpoch:  "boot-missed-linger",
+		Revision:   "snapshot-line-id",
+		ObservedAt: time.Date(2026, time.August, 12, 4, 0, 0, 0, time.UTC),
+		Lines:      []HardwareLine{line},
+	})
+	if err != nil {
+		t.Fatalf("resolve stable line id: %v", err)
+	}
+	lineID := snapshot.LineIDsByEndpoint[line.ID]
+	if lineID == "" {
+		t.Fatalf("no stable line id for endpoint %q", line.ID)
 	}
 	return lineID
 }
