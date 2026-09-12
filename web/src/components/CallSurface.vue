@@ -566,15 +566,21 @@ onBeforeUnmount(() => {
             <small>{{ t('calls.answer') }}</small>
           </span>
         </template>
-        <template v-else-if="canHangup && callState.owned">
+        <!-- The hangup button renders whenever the line can hang up, owned or
+             not, but stays disabled for a call another client owns: the
+             ownership flag can also drop while a live call is still on the
+             line (a browser-audio recovery losing the lease, for one), and an
+             active call with no visible way to end it reads as the page being
+             broken. Disabled-with-a-reason beats a vanished button. -->
+        <template v-else-if="canHangup">
           <span class="call-primary-action call-primary-action--center keypad-action-item">
             <button
               class="call-button call-button--hangup"
               type="button"
-              :title="hangupUnavailable || t('calls.hangup')"
+              :title="hangupUnavailable || (!callState.owned ? t('runtime.callOwnedElsewhere') : t('calls.hangup'))"
               :aria-label="t('calls.hangup')"
               :aria-describedby="hangupUnavailable ? 'call-capability-notice' : undefined"
-              :disabled="callState.busy || Boolean(hangupUnavailable)"
+              :disabled="callState.busy || Boolean(hangupUnavailable) || !callState.owned"
               @click="hangupCall"
             >
               <LoaderCircle v-if="callState.pendingAction === 'hangup'" class="spin" :size="25" />

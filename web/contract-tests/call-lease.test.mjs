@@ -96,7 +96,11 @@ test('occupied calls are visible but cannot consume browser controls or media', 
     surface,
     /session\.value\?\.control_state === 'occupied'[\s\S]*?calls\.answeredElsewhere/
   )
-  assert.match(surface, /v-else-if="canHangup && callState\.owned"/)
+  // The hangup control stays visible for a call another client owns, but
+  // disabled with a reason -- an active call with no way to end it read as
+  // the page being broken.
+  assert.match(surface, /v-else-if="canHangup"/)
+  assert.match(surface, /!callState\.owned/)
   assert.match(surface, /active\.value &&[\s\S]*?callState\.owned/)
 })
 

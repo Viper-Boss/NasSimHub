@@ -24,7 +24,10 @@ const (
 	// The module's DSP delivers its own direction roughly 12 dB too hot -- a
 	// live call measured speech at -8 dBFS RMS with peaks already at digital
 	// full scale, which the far side hears as loud distortion. The capture
-	// stream is therefore attenuated a quarter before it leaves the agent.
+	// stream is therefore attenuated a half (-6 dB), landing speech around
+	// -14 dBFS: above the noise with peak headroom. The first attempt at a
+	// quarter (-12 dB) measured -22 dBFS RMS and the operator called it too
+	// quiet.
 	//
 	// The opposite direction arrives some 50 dB too quiet: the browser's
 	// microphone measured -60 dBFS RMS on a live call while the speaker
@@ -37,7 +40,7 @@ const (
 	// update changes the DSP calibration these want re-measuring (the level
 	// logs around "modem call audio level" are the instrument).
 	captureGainNum  = 1
-	captureGainDen  = 4
+	captureGainDen  = 2
 	playbackGainNum = 50
 	playbackGainDen = 1
 )
