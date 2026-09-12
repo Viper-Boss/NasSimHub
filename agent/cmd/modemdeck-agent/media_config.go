@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -72,13 +73,30 @@ func configureMediaBackends(
 			break
 		}
 	}
-	if !requiresALSA {
-		return backends, nil
-	}
 	opener, err := media.NewALSACommandOpener()
 	if err != nil {
-		return nil, err
+		// A binding that NAMES this backend and cannot have it is a
+		// misconfiguration worth refusing to start over: the operator asked for
+		// something this host cannot do.
+		if requiresALSA {
+			return nil, err
+		}
+		// Otherwise the host simply has no alsa-utils. Carrying on without the
+		// backend is correct -- char-pcm lines still work -- and the ports that
+		// needed it report themselves unconfigured, which is true.
+		slog.Warn(
+			"alsa-utils is not installed, so module USB audio lines cannot carry call audio",
+			"component", "media",
+			"error", err,
+		)
+		return backends, nil
 	}
+	// Built whether or not a binding names it, because a Quectel UAC port's
+	// binding is DERIVED rather than written in the file (see
+	// media/quectel_uac_binding.go). Building it only on demand made the
+	// derivation useless on exactly the installations it exists for: no
+	// bindings file means no binding names alsa-pcm, so the backend was absent,
+	// so the derived binding was unusable, so media stayed unavailable.
 	backends[media.BackendALSAPCM] = media.NewALSAPCMBackend(opener)
 	return backends, nil
 }

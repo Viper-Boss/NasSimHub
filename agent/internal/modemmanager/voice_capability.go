@@ -584,14 +584,31 @@ func projectQuectelUACCall(
 	if call == nil || call.StateCode != 4 || !result.media {
 		return
 	}
-	if call.MediaAvailable {
-		return
-	}
 	audioPort := quectelUACAudioPort(line)
 	if audioPort == "" {
 		return
 	}
+	// The UAC port ALWAYS wins on this module, whatever ModemManager reported.
+	//
+	// This used to return early when the call already claimed media was
+	// available -- "if call.MediaAvailable { return }" -- on the theory that a
+	// modem reporting complete media knows better than we do. On this module it
+	// does not: call audio leaves over the USB audio gadget and nowhere else, so
+	// whatever port ModemManager names is either this one or wrong. Keeping a
+	// port nothing can open is worse than replacing it, because it ends as
+	// MediaConfigured false, which the server turns into media_available false
+	// for the whole call, which leaves the browser waiting for a flag that can
+	// never arrive -- the call connects and the page sits on "ringing" forever.
+	//
+	// The neighbouring test (TestQuectelPCMActivationReplacesIncompleteModem-
+	// ManagerAudio) already pinned the replacement for the case where the
+	// reported media was visibly incomplete. The early return meant the same
+	// replacement did NOT happen once the report merely looked complete, which
+	// is the harder case to notice and the one that was breaking calls.
 	call.AudioPort = audioPort
+	// Not a guess: this is the format the module's USB audio gadget carries, and
+	// the host ALSA backend refuses anything else (see media/alsa_command.go,
+	// which rejects any rate but 8000).
 	call.AudioFormat = &domain.CallAudioFormat{
 		Encoding:   "pcm",
 		Resolution: "s16le",

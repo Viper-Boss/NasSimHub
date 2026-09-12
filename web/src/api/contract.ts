@@ -928,7 +928,18 @@ function parseNetworkProxy(value: unknown, index: number): NetworkProxyStatus {
   const source = objectValue(value, path)
   return {
     id: requiredString(source, path, 'id'),
-    line_id: requiredString(source, path, 'line_id'),
+    // Empty is allowed, for the same reason as in parseProxyInstance: a proxy
+    // whose egress is a WireGuard tunnel is deliberately stored with NO line.
+    //
+    // This is the SECOND parser that had to learn it, and the second outage
+    // from the same cause -- the first fix covered the proxy collection and
+    // this one is the network status view, so the dashboard kept failing with
+    // "network.proxies[0] 缺少 line_id" after the list started working. There
+    // is no egress field in the runtime status to branch on, and none is
+    // needed: "a line proxy must have a line" is enforced by the server and by
+    // the collection parser, which can see the egress. Re-checking it here
+    // buys nothing and costs the whole panel.
+    line_id: requiredString(source, path, 'line_id', true),
     state: proxyRuntimeState(source, path),
     running: requiredBoolean(source, path, 'running'),
     mode: proxyMode(source, path),

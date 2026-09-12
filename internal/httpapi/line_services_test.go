@@ -218,13 +218,28 @@ func TestLineServiceRoutesExposeTypedOperationsWithoutLoggingSecrets(t *testing.
 		t.Fatalf("USSD request = %+v", service.ussdRequest)
 	}
 
-	encoded, err := json.Marshal(buffer.Snapshot(0))
-	if err != nil {
-		t.Fatalf("marshal logs: %v", err)
-	}
-	for _, secret := range []string{"1234", "profile-secret", "*123#", rawEID} {
-		if bytes.Contains(encoded, []byte(secret)) {
-			t.Fatalf("diagnostic logs contain secret %q: %s", secret, encoded)
+	// Searched over the message and the fields, NOT over the whole marshalled
+	// snapshot.
+	//
+	// The whole snapshot includes each entry's timestamp, whose nanosecond
+	// component is nine random-looking digits -- and "1234" turns up inside
+	// those digits a few times in a hundred runs, failing this test with a
+	// timestamp masquerading as a leaked PIN. Found when it fired on a run that
+	// changed nothing in this area. The fields are where a secret would
+	// actually leak, so that is what gets searched; a false alarm here costs
+	// somebody an afternoon looking for a disclosure that never happened, and a
+	// test that cries wolf gets muted.
+	snapshot := buffer.Snapshot(0)
+	for _, entry := range snapshot.Entries {
+		fields, err := json.Marshal(entry.Fields)
+		if err != nil {
+			t.Fatalf("marshal log fields: %v", err)
+		}
+		searched := append([]byte(entry.Message+" "+entry.Component+" "+entry.Caller+" "), fields...)
+		for _, secret := range []string{"1234", "profile-secret", "*123#", rawEID} {
+			if bytes.Contains(searched, []byte(secret)) {
+				t.Fatalf("diagnostic logs contain secret %q: %s", secret, searched)
+			}
 		}
 	}
 }

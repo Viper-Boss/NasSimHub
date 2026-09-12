@@ -15,10 +15,14 @@ const mixerOn = "on"
 // mixerCommandTimeout bounds a single mixer read or write.
 const mixerCommandTimeout = 8 * time.Second
 
-// voLTEMixers are the module mixer switches that connect the VoLTE voice stream
-// to the auxiliary PCM the USB audio path uses.
+// The voice route, and why every one of these switches has to be asserted.
 //
-// The vendor firmware never enables them, and the reason is not subtle once you
+// There are two halves to this, found six weeks apart, and the second one is
+// the reason the first was not enough. Read both before removing anything.
+//
+// HALF ONE: the vendor firmware never enables the VoLTE route at all.
+//
+// The reason is not subtle once you
 // look at the shipped image. Its voice daemon (usr/bin/quectel_daemon) brings
 // audio up by writing a hard-coded command block to alsaucm_test:
 //
@@ -34,23 +38,79 @@ const mixerCommandTimeout = 8 * time.Second
 //	'SEC_AUX_PCM_RX_Voice Mixer CSVoice':1:1
 //	'Voice_Tx Mixer SEC_AUX_PCM_TX_Voice':1:1
 //
-// The same file also defines a "VoLTE" verb whose enable sequence is exactly the
-// two controls below — and nothing in the firmware ever selects it. So on a
-// VoLTE call, which is every call on a modern network, the route is simply never
-// connected. Measured on the QDC507 with both switches off: the downlink arrived
-// as a barely audible leak and the uplink never reached the far end at all.
-//
-// Enabling them is what makes call audio work in both directions, so the
-// reconciler asserts them on every pass rather than trusting the vendor daemon.
+// The same file also defines a "VoLTE" verb whose enable sequence is the
+// SEC_AUX_PCM pair — and nothing in the firmware ever selects it. So on a
+// VoLTE call, which is every call on a modern network, that route is simply
+// never connected.
 //
 // (An earlier version of this comment blamed the calibration tool for not
 // reading its writes back. That was wrong: alsaucm_test is never asked to set
 // these controls in the first place. Recorded here because the wrong
 // explanation sends you digging through alsaucm_test for a bug that isn't
 // there.)
-var voLTEMixers = []string{
-	"SEC_AUX_PCM_RX_Voice Mixer VoLTE",
-	"VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE",
+//
+// HALF TWO: the SEC_AUX_PCM pair is the wrong front end for this product.
+//
+// Enabling only that pair produced a call that connected and carried nothing:
+// measured on hardware, two calls, sixteen consecutive two-second windows at
+// rms -120 dBFS, peak 0, in both directions, with both SEC_AUX_PCM controls
+// reading back "on" the whole time.
+//
+// The reason is which device the audio has to arrive at. The module's PCM
+// bridge opens hw:0,4, the AFE PCM front end, and that is where this software
+// reads and writes call audio -- the SEC_AUX_PCM controls connect the voice
+// session to the secondary AUX PCM HARDWARE PINS instead, which on this board
+// go nowhere anybody is listening. So the route was genuinely connected, to the
+// wrong place, and every signal available said it was fine.
+//
+// Probed on the module before writing anything here: all four controls below
+// exist on this firmware and all four read "off". The lead came from
+// cellbridge-mac, which drives the same bridge binary and sets the AFE PCM
+// controls in ADDITION to running the same UCM VoLTE verb -- the two are not
+// alternatives, and the SEC_AUX_PCM pair stays because the verb enables it and
+// a CS call on some networks uses it.
+//
+// CSVoice is included alongside VoLTE because the session type is the network's
+// choice, not ours: a call that falls back to circuit-switched uses the CS
+// session, and a route connected only for VoLTE is silent for exactly the calls
+// that needed the fallback.
+var afePCMMixers = []string{
+	"AFE_PCM_RX_Voice Mixer VoLTE",
+	"AFE_PCM_RX_Voice Mixer CSVoice",
+	"VoLTE_Tx Mixer AFE_PCM_TX_VoLTE",
+	"Voice_Tx Mixer AFE_PCM_TX_Voice",
+}
+
+// optionalVoiceMixers are the multimode-voice session variants.
+//
+// Separate from the required list because they were NOT probed on this
+// firmware. cellbridge-mac sets them on the same module family, and a modem
+// using a multimode voice session would need them, but a control this build
+// does not have would otherwise be reported as a broken route on every
+// reconcile pass. Absent is fine here; present and refusing to turn on is
+// worth a line in the log and nothing more.
+var optionalVoiceMixers = []string{
+	"AFE_PCM_RX_Voice Mixer VoiceMMode1",
+	"AFE_PCM_RX_Voice Mixer VoiceMMode2",
+	"VoiceMMode1_Tx Mixer AFE_PCM_TX_MMode1",
+	"VoiceMMode2_Tx Mixer AFE_PCM_TX_MMode2",
+}
+
+// voLTEMixers is every control that must be on for a call to carry audio: the
+// UCM VoLTE verb's own pair, and the AFE PCM front end the bridge reads. A
+// failure on any of these means the route can carry nothing.
+var voLTEMixers = append(
+	[]string{
+		"SEC_AUX_PCM_RX_Voice Mixer VoLTE",
+		"VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE",
+	},
+	afePCMMixers...,
+)
+
+// allVoiceMixers is what the reconciler writes: everything required, plus the
+// optional controls, in one module command.
+func allVoiceMixers() []string {
+	return append(append([]string(nil), voLTEMixers...), optionalVoiceMixers...)
 }
 
 // ensureVoiceMixers turns on the VoLTE route switches and verifies each write by
@@ -85,7 +145,7 @@ func (m *Manager) ensureVoiceMixers(ctx context.Context, serial string) error {
 		case mixerStatusOn:
 		case mixerStatusFixed:
 			slog.Warn(
-				"enabled a QDC507 VoLTE route mixer the vendor calibration left off",
+				"enabled a QDC507 voice route mixer the vendor calibration left off",
 				"component", "qdc507voice",
 				"mixer", name,
 			)
@@ -93,6 +153,20 @@ func (m *Manager) ensureVoiceMixers(ctx context.Context, serial string) error {
 			failures = append(
 				failures,
 				fmt.Errorf("mixer %q is not enabled", name),
+			)
+		}
+	}
+	// The optional controls only ever produce a log line. A firmware without
+	// them is not a broken route, and treating absence as failure would report
+	// a working line as broken on every pass.
+	for _, name := range optionalVoiceMixers {
+		switch statuses[name] {
+		case mixerStatusOn, mixerStatusFixed:
+		default:
+			slog.Debug(
+				"a multimode voice route mixer is unavailable on this firmware",
+				"component", "qdc507voice",
+				"mixer", name,
 			)
 		}
 	}
@@ -116,7 +190,7 @@ const (
 func voiceMixerScript() string {
 	var script strings.Builder
 	script.WriteString("for n in")
-	for _, name := range voLTEMixers {
+	for _, name := range allVoiceMixers() {
 		script.WriteString(" ")
 		script.WriteString(quoteMixerName(name))
 	}
@@ -132,7 +206,7 @@ func voiceMixerScript() string {
 // parseMixerStatuses maps each control named in the script's output to the last
 // status reported for it.
 func parseMixerStatuses(output string) map[string]string {
-	statuses := make(map[string]string, len(voLTEMixers))
+	statuses := make(map[string]string, len(allVoiceMixers()))
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		status, name, found := strings.Cut(line, " ")

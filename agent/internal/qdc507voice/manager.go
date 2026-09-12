@@ -150,6 +150,9 @@ type Manager struct {
 	arming routeArming
 	// rearmDelay overrides routeRearmDelay in tests. Zero means the constant.
 	rearmDelay time.Duration
+	// rearmBackoff overrides routeRearmBackoffBase in tests. Zero means the
+	// constant.
+	rearmBackoff time.Duration
 }
 
 func New(options Options) (*Manager, error) {

@@ -193,3 +193,109 @@ func TestQuoteMixerName(t *testing.T) {
 		t.Errorf("quoteMixerName(spaced) = %q", quoted)
 	}
 }
+
+// The AFE PCM front end must be in the required list.
+//
+// This is the control set that was missing when calls connected and carried
+// nothing. Probed on hardware: all four exist and all four were off, while the
+// two SEC_AUX_PCM controls this code already asserted read "on" throughout
+// sixteen consecutive silent measurement windows. The bridge reads hw:0,4 --
+// the AFE PCM front end -- so connecting the voice session only to the
+// secondary AUX PCM pins routes the call somewhere nothing is listening.
+func TestTheAFEPCMFrontEndIsRequired(t *testing.T) {
+	required := map[string]bool{}
+	for _, name := range voLTEMixers {
+		required[name] = true
+	}
+	for _, name := range []string{
+		"AFE_PCM_RX_Voice Mixer VoLTE",
+		"AFE_PCM_RX_Voice Mixer CSVoice",
+		"VoLTE_Tx Mixer AFE_PCM_TX_VoLTE",
+		"Voice_Tx Mixer AFE_PCM_TX_Voice",
+	} {
+		if !required[name] {
+			t.Fatalf(
+				"%q is not asserted; the bridge reads the AFE PCM front end, so without "+
+					"it a call connects and carries nothing in either direction",
+				name,
+			)
+		}
+	}
+	// And the UCM verb's own pair stays: the verb enables it, and a call that
+	// falls back to circuit-switched uses it.
+	for _, name := range []string{
+		"SEC_AUX_PCM_RX_Voice Mixer VoLTE",
+		"VoLTE_Tx Mixer SEC_AUX_PCM_TX_VoLTE",
+	} {
+		if !required[name] {
+			t.Fatalf("%q was dropped; the UCM VoLTE verb enables it", name)
+		}
+	}
+}
+
+// A firmware without the multimode controls is not a broken route.
+//
+// They were never probed on this build, so treating their absence as a failure
+// would report a working line as broken on every reconcile pass. Present and
+// refusing to turn on is worth a log line and nothing more.
+func TestMissingMultimodeMixersAreNotAFailure(t *testing.T) {
+	output := ""
+	for _, name := range voLTEMixers {
+		output += mixerStatusOn + " " + name + "\n"
+	}
+	for _, name := range optionalVoiceMixers {
+		output += "failed " + name + "\n"
+	}
+	manager := testManager(&fixedOutputClient{output: output})
+	if err := manager.ensureVoiceMixers(context.Background(), "transport:2"); err != nil {
+		t.Fatalf("a firmware with no multimode controls was reported as broken: %v", err)
+	}
+}
+
+// But a REQUIRED control that will not turn on is a failure, or this tolerance
+// would swallow the fault it was written around.
+func TestARequiredMixerThatWillNotEnableIsAFailure(t *testing.T) {
+	for _, missing := range []string{
+		"AFE_PCM_RX_Voice Mixer VoLTE",
+		"Voice_Tx Mixer AFE_PCM_TX_Voice",
+		"SEC_AUX_PCM_RX_Voice Mixer VoLTE",
+	} {
+		output := ""
+		for _, name := range voLTEMixers {
+			status := mixerStatusOn
+			if name == missing {
+				status = "failed"
+			}
+			output += status + " " + name + "\n"
+		}
+		manager := testManager(&fixedOutputClient{output: output})
+		err := manager.ensureVoiceMixers(context.Background(), "transport:2")
+		if err == nil {
+			t.Fatalf("%q refused to turn on and the route was reported as healthy", missing)
+		}
+		if !strings.Contains(err.Error(), missing) {
+			t.Fatalf("the failure does not name %q: %v", missing, err)
+		}
+	}
+}
+
+// fixedOutputClient answers every shell command with one canned mixer report.
+type fixedOutputClient struct {
+	output string
+}
+
+func (c *fixedOutputClient) Devices(context.Context) ([]Device, error) {
+	return []Device{{Selector: "transport:2", State: "device", USB: "usb:1-10"}}, nil
+}
+
+func (c *fixedOutputClient) Shell(
+	context.Context, string, string, time.Duration,
+) (ShellResult, error) {
+	return ShellResult{Output: c.output}, nil
+}
+
+func (c *fixedOutputClient) Push(
+	context.Context, string, string, string, fs.FileMode, time.Duration,
+) error {
+	return nil
+}

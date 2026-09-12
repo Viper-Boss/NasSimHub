@@ -382,7 +382,24 @@ func TestQuectelPCMIsRestoredBeforeOutgoingCallWhenRuntimeStateChanged(t *testin
 	assertATInvocationCount(t, invocations, quectelPCMStatusQuery, 2)
 }
 
-func TestQuectelPCMActivationKeepsAuthoritativeModemManagerAudio(t *testing.T) {
+// A complete-looking ModemManager audio port is REPLACED, not trusted.
+//
+// This test asserted the opposite until call audio was measured on hardware.
+// The argument for trusting it was that a modem reporting a full media
+// description knows where its own audio goes. The argument against is stronger
+// and comes from what gets us into this function at all: result.media is true
+// only because OUR probe put the module into USB-audio voice mode with
+// AT+QPCMV=1,2. In that mode call audio leaves over the USB gadget and nowhere
+// else, so a port ModemManager names is either this one or a port nothing can
+// open.
+//
+// Keeping an unopenable port is not a harmless difference of opinion. It ends
+// as MediaConfigured false, which the server turns into media_available false
+// for the whole call, which leaves the browser waiting for a flag that can
+// never arrive: the call connects, the far end answers, and the page sits on
+// "ringing" with not one ICE candidate exchanged. That was measured on this
+// hardware.
+func TestQuectelPCMActivationReplacesEvenACompleteModemManagerAudioPort(t *testing.T) {
 	t.Parallel()
 
 	objects := emptyLineObjects(true, false)
@@ -411,12 +428,22 @@ func TestQuectelPCMActivationKeepsAuthoritativeModemManagerAudio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot() error = %v", err)
 	}
-	if len(snapshot.Calls) != 1 ||
-		snapshot.Calls[0].AudioPort != "hw:mm,0" ||
-		snapshot.Calls[0].AudioFormat == nil ||
-		snapshot.Calls[0].AudioFormat.Rate != 16000 ||
-		!snapshot.Calls[0].MediaAvailable {
+	if len(snapshot.Calls) != 1 {
 		t.Fatalf("call media = %+v", snapshot.Calls)
+	}
+	call := snapshot.Calls[0]
+	if call.AudioPort != quectelUACPortPrefix+"/sys/devices/usb1/1-2" {
+		t.Fatalf(
+			"audio port = %q; ModemManager's own port was kept, and nothing can open "+
+				"it -- the call would report media as unavailable for its whole life",
+			call.AudioPort,
+		)
+	}
+	if call.AudioFormat == nil || call.AudioFormat.Rate != 8000 {
+		t.Fatalf("audio format = %+v; the USB gadget carries 8 kHz", call.AudioFormat)
+	}
+	if !call.MediaAvailable {
+		t.Fatal("media was withheld entirely")
 	}
 }
 

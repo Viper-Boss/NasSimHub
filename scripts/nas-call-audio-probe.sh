@@ -159,6 +159,38 @@ echo "If the bridge start time is older than your most recent call and there is"
 echo "no re-arm line above, that call ran on a used session and was silent for"
 echo "that reason alone."
 
+# ----------------------------------------- C4: does the call have a media binding
+say "C4. Can the agent open the module's audio device at all"
+# The fault that made the page sit on "ringing" forever while the call was up.
+#
+# The chain: the agent names an audio port for the call ("quectel-uac:" plus the
+# module's sysfs path), the media manager has to resolve that port to a host
+# ALSA device, and only then does the call report media_configured. The server
+# will not tell the browser that media is available without it, and the browser
+# will not start the audio exchange without THAT -- so an unresolvable port
+# leaves the call connected, silent and permanently "ringing", with nothing in
+# the UI to say why.
+#
+# Until r87 the resolution came only from a hand-written bindings file, which no
+# installation had, so this was false everywhere. r87 derives it from sysfs.
+echo "agent media binding resolution (empty means it has not run yet):"
+docker logs --since 24h "$HW_CONTAINER" 2>&1 \
+    | grep -E 'module USB audio device|no media binding could be derived' \
+    | tail -5 \
+    || echo "  (none)"
+echo
+echo "host ALSA cards (the module's UAC card must be one of these):"
+docker exec "$HW_CONTAINER" sh -c 'cat /proc/asound/cards 2>&1' 2>&1 | sed 's/^/  /'
+echo
+echo "arecord/aplay present in the hardware container:"
+docker exec "$HW_CONTAINER" sh -c \
+    'command -v arecord >/dev/null && command -v aplay >/dev/null && echo "  yes" || echo "  NO -- install alsa-utils; without them no call can carry audio"' 2>&1
+echo
+echo "During a call, these two fields decide whether the browser ever starts:"
+echo "  agent snapshot  -> calls[].media_configured   (needs the binding above)"
+echo "  /calls/active   -> calls[].media_available    (needs media_configured)"
+echo "Both false with the call in phase=active is this section's fault, not WebRTC."
+
 # --------------------------------------------------- D: the decisive measurement
 say "D. Is there audio at the agent boundary (make a call NOW)"
 echo "Watching the agent log for 60 seconds. Place a call and TALK, and have"

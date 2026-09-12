@@ -84,6 +84,11 @@ type Manager struct {
 	bindings map[string]Binding
 	backends map[BackendKind]Backend
 	options  Options
+	// resolver derives a binding for a port the bindings file does not name.
+	// See quectel_uac_binding.go: the file is keyed by a sysfs path nobody can
+	// write by hand, so without this every real installation had no bindings at
+	// all and reported media as unavailable for the whole of every call.
+	resolver bindingResolver
 
 	mu              sync.Mutex
 	closed          bool
@@ -316,13 +321,13 @@ func (m *Manager) openBackend(ctx context.Context, pending *pendingOpen) backend
 	if err != nil {
 		return backendOpenResult{err: err}
 	}
-	binding, ok := m.bindings[call.AudioPort]
+	binding, ok := m.binding(call.AudioPort)
 	if !ok {
 		return backendOpenResult{
 			err: NewError(
 				ErrorUnboundAudioPort,
 				operation,
-				"audio_port has no explicit media binding",
+				"audio_port has no media binding, and none could be derived for it",
 				nil,
 			),
 		}
@@ -678,16 +683,46 @@ func (m *Manager) Close() error {
 	return closeError
 }
 
+// binding resolves a port to its backend and endpoint.
+//
+// The bindings FILE wins wherever it names a port: it is the override for a
+// board the derivation gets wrong, and an operator who wrote one should not
+// have it second-guessed. Only a port the file does not mention is derived.
+func (m *Manager) binding(audioPort string) (Binding, bool) {
+	if m == nil {
+		return Binding{}, false
+	}
+	port := strings.TrimSpace(audioPort)
+	if port == "" {
+		return Binding{}, false
+	}
+	if binding, found := m.bindings[port]; found {
+		return binding, true
+	}
+	binding, found := m.resolver.resolve(port)
+	if !found {
+		return Binding{}, false
+	}
+	// A derived binding is only usable if its backend was actually built. The
+	// ALSA backend needs arecord and aplay on the host, and reporting a port as
+	// configured when nothing can open it would put the call back in the state
+	// this whole path exists to fix, one step further along.
+	if m.backends[binding.Backend] == nil {
+		return Binding{}, false
+	}
+	return binding, true
+}
+
 func (m *Manager) IsConfigured(audioPort string) bool {
 	if m == nil {
 		return false
 	}
-	binding, exists := m.bindings[strings.TrimSpace(audioPort)]
+	binding, exists := m.binding(audioPort)
 	return exists && m.backends[binding.Backend] != nil
 }
 
 func (m *Manager) Configured() bool {
-	return m != nil && len(m.bindings) > 0
+	return m != nil && (len(m.bindings) > 0 || m.backends[BackendALSAPCM] != nil)
 }
 
 func (m *Manager) IsActive(callID string) bool {
