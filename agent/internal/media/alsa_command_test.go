@@ -345,6 +345,18 @@ func TestTheDeviceReportsBothSidesOfTheGainStage(t *testing.T) {
 			)
 		}
 	}
+	// A clipped module output has to be distinguishable from a merely hot one.
+	// The fixture above is a square wave at full scale, so every sample is
+	// pinned; a peak of 32767 alone would look the same for one stray sample.
+	if pct := fieldOf(logLine(lines, "direction=capture"), "module_pinned_pct"); pct != "100" {
+		t.Fatalf(
+			"the capture line reports module_pinned_pct=%s for a fully clipped block; "+
+				"without it a hot signal and a clipped one read identically: %s",
+			pct,
+			lines,
+		)
+	}
+
 	// The module's own clipping has to survive the attenuation in the log,
 	// asserted on the CAPTURE line specifically. Searching the whole log for
 	// module_peak=32767 passed even with the measurement taken after the gain,

@@ -64,6 +64,7 @@ type levelMeter struct {
 	moduleSamples    int64
 	moduleSumSquares float64
 	modulePeak       int
+	pinned           int64
 	clamped          int64
 	hasModuleSide    bool
 }
@@ -77,8 +78,8 @@ func (m *levelMeter) observeModuleSide(pcm []byte, clamped int64) {
 	if m == nil || len(pcm) < 2 {
 		return
 	}
-	samples, sumSquares, peak := measurePCM(pcm)
-	m.noteModuleSide(samples, sumSquares, peak, clamped)
+	samples, sumSquares, peak, pinned := measurePCM(pcm)
+	m.noteModuleSide(samples, sumSquares, peak, pinned, clamped)
 }
 
 // noteModuleSide records module-side statistics that were measured elsewhere.
@@ -89,7 +90,13 @@ func (m *levelMeter) observeModuleSide(pcm []byte, clamped int64) {
 // full-scale peaks -- the distortion the attenuation was added for -- have been
 // halved out of the log. Measuring before the gain and reporting the numbers
 // afterwards keeps that visible without copying every block.
-func (m *levelMeter) noteModuleSide(samples int64, sumSquares float64, peak int, clamped int64) {
+func (m *levelMeter) noteModuleSide(
+	samples int64,
+	sumSquares float64,
+	peak int,
+	pinned int64,
+	clamped int64,
+) {
 	if m == nil || samples == 0 {
 		return
 	}
@@ -101,6 +108,7 @@ func (m *levelMeter) noteModuleSide(samples int64, sumSquares float64, peak int,
 	if peak > m.modulePeak {
 		m.modulePeak = peak
 	}
+	m.pinned += pinned
 	m.clamped += clamped
 }
 
@@ -109,14 +117,31 @@ func newLevelMeter(label string, now time.Time) *levelMeter {
 }
 
 // measurePCM summarises a block of little-endian signed 16-bit mono PCM: how
-// many samples it holds, the sum of their squares (for RMS) and the largest
-// magnitude seen. Partial trailing bytes are ignored.
-func measurePCM(pcm []byte) (int64, float64, int) {
+// many samples it holds, the sum of their squares (for RMS), the largest
+// magnitude seen, and how many samples sit AT full scale. Partial trailing
+// bytes are ignored.
+//
+// The pinned count is what tells a hot signal apart from a clipped one, and
+// the difference decides whether anything on this side of the module can help.
+// A peak of 32767 alone says nothing: one sample touching full scale in a two
+// second window is ordinary for speech. Clipping is many consecutive samples
+// stuck there, and it is destructive -- the tops of the waveform are already
+// flat when the audio reaches us, so attenuating afterwards only makes the
+// distortion quieter.
+func measurePCM(pcm []byte) (int64, float64, int, int64) {
 	var sumSquares float64
 	var peak int
 	samples := int64(0)
+	pinned := int64(0)
 	for index := 0; index+1 < len(pcm); index += 2 {
 		sample := int(int16(binary.LittleEndian.Uint16(pcm[index:])))
+		// Both rails, and >= rather than == : a clipper may stop at -32767 or
+		// at -32768 depending on how it rounds, and counting only one of them
+		// reports half the damage -- a symmetric square wave would look half
+		// clean.
+		if sample >= math.MaxInt16 || sample <= -math.MaxInt16 {
+			pinned++
+		}
 		if sample < 0 {
 			// Negating the minimum sample overflows, so clamp it to the
 			// largest magnitude it can represent.
@@ -132,7 +157,7 @@ func measurePCM(pcm []byte) (int64, float64, int) {
 		sumSquares += float64(sample) * float64(sample)
 		samples++
 	}
-	return samples, sumSquares, peak
+	return samples, sumSquares, peak, pinned
 }
 
 // dbfsOf converts a root-mean-square sample magnitude to dBFS, clamping digital
@@ -150,7 +175,7 @@ func (m *levelMeter) observe(pcm []byte) {
 	if m == nil || len(pcm) < 2 {
 		return
 	}
-	windowSamples, windowSumSquares, windowPeak := measurePCM(pcm)
+	windowSamples, windowSumSquares, windowPeak, _ := measurePCM(pcm)
 	if windowSamples == 0 {
 		return
 	}
@@ -177,6 +202,11 @@ func (m *levelMeter) observe(pcm []byte) {
 		moduleRMS = math.Sqrt(m.moduleSumSquares / float64(m.moduleSamples))
 	}
 	modulePeak := m.modulePeak
+	pinned := m.pinned
+	pinnedShare := 0.0
+	if m.moduleSamples > 0 {
+		pinnedShare = 100 * float64(pinned) / float64(m.moduleSamples)
+	}
 	clamped := m.clamped
 	clampedShare := 0.0
 	if m.moduleSamples > 0 {
@@ -189,6 +219,7 @@ func (m *levelMeter) observe(pcm []byte) {
 	m.moduleSamples = 0
 	m.moduleSumSquares = 0
 	m.modulePeak = 0
+	m.pinned = 0
 	m.clamped = 0
 	m.mu.Unlock()
 
@@ -206,6 +237,8 @@ func (m *levelMeter) observe(pcm []byte) {
 			fields,
 			"module_peak", modulePeak,
 			"module_rms_dbfs", math.Round(dbfsOf(moduleRMS)*10)/10,
+			"module_pinned", pinned,
+			"module_pinned_pct", math.Round(pinnedShare*100)/100,
 			"clipped", clamped,
 			"clipped_pct", math.Round(clampedShare*10)/10,
 		)

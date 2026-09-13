@@ -62,7 +62,7 @@ func TestMeasurePCM(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			samples, sumSquares, peak := measurePCM(test.pcm)
+			samples, sumSquares, peak, _ := measurePCM(test.pcm)
 			if samples != test.wantSamples {
 				t.Errorf("samples = %d, want %d", samples, test.wantSamples)
 			}
@@ -228,4 +228,84 @@ func pcmBlock(samples int, magnitude int16) []byte {
 		binary.LittleEndian.PutUint16(block[index*2:], uint16(value))
 	}
 	return block
+}
+
+// A hot signal and a clipped one must be distinguishable in the log.
+//
+// module_peak=32767 on its own says nothing: one sample touching full scale in
+// a two second window is ordinary for speech, and a two second peak is pinned
+// by exactly one such sample. The question that decides whether anything on
+// this side of the module can help is how MANY samples sit there -- clipping
+// flattens the tops of the waveform before the audio reaches us, and no amount
+// of attenuation afterwards puts them back.
+//
+// Written because the module's capture was being recorded as a firmware
+// limitation on the strength of the peak alone, while the crest factor in the
+// same measurements looked like ordinary speech.
+func TestPinnedSamplesSeparateAHotSignalFromAClippedOne(t *testing.T) {
+	// Speech-like: one sample at full scale, the rest well below it.
+	hot := make([]byte, 0, 200)
+	binary.LittleEndian.AppendUint16(hot, uint16(32767))
+	hot = append(hot, byte(32767&0xff), byte(32767>>8))
+	for range 99 {
+		hot = append(hot, byte(4000&0xff), byte(4000>>8))
+	}
+	_, _, hotPeak, hotPinned := measurePCM(hot)
+	if hotPeak != 32767 {
+		t.Fatalf("hot peak = %d", hotPeak)
+	}
+	if hotPinned != 1 {
+		t.Fatalf("a single full-scale sample counted as %d pinned", hotPinned)
+	}
+
+	// Clipped: the tops are flat.
+	clipped := make([]byte, 0, 200)
+	for range 100 {
+		clipped = append(clipped, byte(32767&0xff), byte(32767>>8))
+	}
+	_, _, clippedPeak, clippedPinned := measurePCM(clipped)
+	if clippedPeak != hotPeak {
+		t.Fatal("peak cannot tell the two apart, which is the whole point")
+	}
+	if clippedPinned != 100 {
+		t.Fatalf("a fully clipped block counted as %d pinned", clippedPinned)
+	}
+
+	// Both negative rails count, or a clipped waveform reports half its damage
+	// and a symmetric square wave looks half clean. A clipper may stop at
+	// -32767 or at -32768 depending on how it rounds, so both are pinned.
+	for name, negative := range map[string][]byte{
+		"-32768": {0x00, 0x80, 0x00, 0x80},
+		"-32767": {0x01, 0x80, 0x01, 0x80},
+	} {
+		_, _, _, negativePinned := measurePCM(negative)
+		if negativePinned != 2 {
+			t.Fatalf("samples at %s counted as %d pinned", name, negativePinned)
+		}
+	}
+}
+
+// And the count has to reach the log, with its share of the window.
+func TestTheLevelLogReportsPinnedSamples(t *testing.T) {
+	base := time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)
+	meter := newLevelMeter("capture", base)
+	now := base
+	meter.clock = func() time.Time { return now }
+
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(previous)
+
+	meter.observeModuleSide(pcmBlock(100, 32767), 0)
+	now = now.Add(levelMeterInterval)
+	meter.observe(pcmBlock(100, 1000))
+
+	line := logged.String()
+	if fieldOf(line, "module_pinned") != "100" {
+		t.Fatalf("module_pinned missing or wrong: %s", line)
+	}
+	if fieldOf(line, "module_pinned_pct") != "100" {
+		t.Fatalf("module_pinned_pct missing or wrong: %s", line)
+	}
 }

@@ -216,9 +216,9 @@ func (d *alsaCommandDevice) Read(destination []byte) (int, error) {
 		// the halved level -- and the fault the attenuation exists for is the
 		// module delivering peaks pinned at full scale, which is exactly what
 		// halving hides.
-		samples, sumSquares, peak := measurePCM(d.captureTransfer)
+		samples, sumSquares, peak, pinned := measurePCM(d.captureTransfer)
 		clamped := applyGainS16LE(d.captureTransfer, captureGainNum, captureGainDen)
-		d.captureLevel.noteModuleSide(samples, sumSquares, peak, clamped)
+		d.captureLevel.noteModuleSide(samples, sumSquares, peak, pinned, clamped)
 		d.captureOffset = 0
 	}
 	read := copy(destination, d.captureTransfer[d.captureOffset:])
