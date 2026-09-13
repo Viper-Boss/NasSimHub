@@ -325,8 +325,19 @@ func TestALineWithoutAPhysicalDeviceIsIgnored(t *testing.T) {
 // exit status -- every stop failed, the bridge was killed anyway by the
 // SIGTERM, and the retry loop never recovered the route.
 func TestHelperPatternMatchesTheBridgeButNotItsOwnShell(t *testing.T) {
-	helper := "/tmp/modemdeck-qdc507-voice/mavo-pcm-bridge.armv7"
+	// Built from the manifest rather than written out, because the escape is
+	// only correct for a name that contains the substring it brackets. A
+	// hardcoded path keeps this test passing while a renamed helper silently
+	// goes back to killing its own shell -- which cost a day the first time.
+	helper := remoteDirectory + "/" + expectedManifest.Helper
 	pattern := helperPattern(helper)
+	if pattern == helper {
+		t.Fatalf(
+			"helperPattern left %q unchanged, so it still matches the shell that "+
+				"carries it; the escape does not cover this helper name",
+			helper,
+		)
+	}
 
 	bridgeMatch, err := regexp.MatchString(pattern, helper)
 	if err != nil {
@@ -343,5 +354,46 @@ func TestHelperPatternMatchesTheBridgeButNotItsOwnShell(t *testing.T) {
 	}
 	if shellMatch {
 		t.Fatalf("pattern %q matches the carrying shell's own cmdline and would kill it", pattern)
+	}
+}
+
+// The property has to hold for ANY helper name, not just today's.
+//
+// The first version of helperPattern bracketed the literal substring "bridge"
+// and escaped the dots, so it worked only because the helper happens to be
+// called mavo-pcm-bridge.armv7. A rename to a name with no dot and no "bridge"
+// in it turned the escape into a no-op and restored the self-kill, with every
+// test still green. These cases are the ones that would have caught that.
+func TestHelperPatternNeverMatchesItsOwnTextForAnyHelperName(t *testing.T) {
+	for _, helper := range []string{
+		"/tmp/modemdeck-qdc507-voice/mavo-pcm-bridge.armv7",
+		// No dot in the name: dot escaping alone does nothing.
+		"/tmp/modemdeck-qdc507-voice/mavo-pcm-bridge",
+		// No "bridge" either: substring bracketing alone does nothing.
+		"/tmp/modemdeck-qdc507-voice/pcmhelper",
+		// Single-character name, the smallest thing the bracketing must handle.
+		"/tmp/x/h",
+	} {
+		pattern := helperPattern(helper)
+		matchesBridge, err := regexp.MatchString(pattern, helper)
+		if err != nil {
+			t.Fatalf("%s: pattern %q is not a valid regexp: %v", helper, pattern, err)
+		}
+		if !matchesBridge {
+			t.Fatalf("%s: pattern %q no longer matches the bridge it must kill", helper, pattern)
+		}
+		carrier := "sh -c pkill -TERM -f '" + pattern + "'"
+		matchesItself, err := regexp.MatchString(pattern, carrier)
+		if err != nil {
+			t.Fatalf("%s: %v", helper, err)
+		}
+		if matchesItself {
+			t.Fatalf(
+				"%s: pattern %q matches the shell carrying it, so the stop command "+
+					"kills itself and every re-arm fails",
+				helper,
+				pattern,
+			)
+		}
 	}
 }

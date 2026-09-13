@@ -78,17 +78,36 @@ const routeRearmBackoffBase = 15 * time.Second
 const routeRearmBackoffMax = 4 * time.Minute
 
 // helperPattern turns the helper path into a pkill -f pattern that cannot
-// match the shell carrying the pkill itself. The path appears verbatim in that
-// shell's command line -- pkill -f matches against the whole command line -- so
-// the shell used to SIGTERM itself before it could report an exit status,
-// making every stop fail with "did not contain an exit status" and the retry
-// loop kill the bridge it had just been asked to replace. Bracketing one
-// character (and escaping the dots) keeps the regex pointing at the bridge
-// while the pattern's own text no longer matches it -- the same trick as
-// grep '[b]ridge'.
+// match the shell carrying the pkill itself.
+//
+// The path appears verbatim in that shell's command line -- pkill -f matches
+// against the whole command line -- so the shell used to SIGTERM itself before
+// it could report an exit status. Every stop then failed with "ADB shell
+// response did not contain an exit status", which reads like a module whose
+// adbd cannot report status for compound commands and is nothing of the kind,
+// while the SIGTERM still killed the bridge the retry was meant to replace.
+// That cost a day.
+//
+// The fix is the grep '[b]ridge' trick: bracket a character so the regex still
+// matches the bridge's path while the pattern's own text does not match itself.
+// The character bracketed is the FIRST of the basename, which every path has.
+// An earlier version bracketed the literal substring "bridge" and escaped the
+// dots, which worked only because this particular helper is named
+// mavo-pcm-bridge.armv7 -- rename it to something without a dot or without
+// that substring and the escape silently became a no-op, restoring the
+// self-kill. Depending on the filename for a safety property is how the bug
+// comes back.
 func helperPattern(helper string) string {
 	escaped := strings.ReplaceAll(helper, ".", "[.]")
-	return strings.Replace(escaped, "bridge", "bridg[e]", 1)
+	slash := strings.LastIndex(escaped, "/")
+	base := escaped[slash+1:]
+	if base == "" {
+		return escaped
+	}
+	// One rune, so a multi-byte name is not cut in half.
+	first := []rune(base)
+	bracketed := "[" + string(first[0]) + "]" + string(first[1:])
+	return escaped[:slash+1] + bracketed
 }
 
 // routeArmState tracks one line's bridge across calls.

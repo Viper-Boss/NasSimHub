@@ -211,7 +211,14 @@ func (d *alsaCommandDevice) Read(destination []byte) (int, error) {
 			}
 			return 0, commandIOError("arecord", d.captureErrors, err)
 		}
-		applyGainS16LE(d.captureTransfer, captureGainNum, captureGainDen)
+		// Measured BEFORE the attenuation, and reported after it. The gain is
+		// applied in place, so measuring the buffer afterwards would report
+		// the halved level -- and the fault the attenuation exists for is the
+		// module delivering peaks pinned at full scale, which is exactly what
+		// halving hides.
+		samples, sumSquares, peak := measurePCM(d.captureTransfer)
+		clamped := applyGainS16LE(d.captureTransfer, captureGainNum, captureGainDen)
+		d.captureLevel.noteModuleSide(samples, sumSquares, peak, clamped)
 		d.captureOffset = 0
 	}
 	read := copy(destination, d.captureTransfer[d.captureOffset:])
@@ -227,16 +234,23 @@ func (d *alsaCommandDevice) Write(source []byte) (int, error) {
 	d.playbackMu.Lock()
 	defer d.playbackMu.Unlock()
 
-	d.playbackLevel.observe(source)
-	// The level meter above reports what the browser delivered; what the
-	// module receives is this buffer with the playback gain applied. The
-	// caller's slice is left untouched.
+	// Gain first, measure the module side, then observe the browser side --
+	// in that order, so the window that closes carries both sides of the same
+	// audio (observe is what flushes it). The caller's slice is untouched.
+	delivered := source
 	if playbackGainNum != playbackGainDen {
 		gained := make([]byte, len(source))
 		copy(gained, source)
-		applyGainS16LE(gained, playbackGainNum, playbackGainDen)
+		clamped := applyGainS16LE(gained, playbackGainNum, playbackGainDen)
+		// What the MODULE receives. The primary measurement below stays what
+		// the BROWSER delivered -- that is the one that proved the browser was
+		// sending digital silence -- and on its own it cannot show this
+		// amplification clipping: a pre-gain level looks perfect right up to
+		// the point the far end hears a square wave.
+		d.playbackLevel.observeModuleSide(gained, clamped)
 		source = gained
 	}
+	d.playbackLevel.observe(delivered)
 	consumed := 0
 	for consumed < len(source) {
 		copied := copy(d.playbackTransfer[d.playbackOffset:], source[consumed:])
@@ -411,19 +425,31 @@ func commandIOError(command string, output *boundedCommandOutput, err error) err
 // sinusoidal, so the truncation is toward zero and the clamp is symmetric;
 // anything fancier (soft knee, AGC) belongs in a follow-up with its own
 // listening test.
-func applyGainS16LE(buffer []byte, numerator, denominator int) {
+//
+// It returns how many samples had to be clamped, because a fixed gain is only
+// as good as the measurement it was tuned against and clipping is the way it
+// goes wrong. The playback amplification in particular was calibrated on a
+// microphone delivering -60 dBFS; at 50x every sample above -34 dBFS clips, so
+// the moment that microphone works normally the far end hears a square wave.
+// The count makes that visible in the level log instead of leaving it to be
+// reported as "it sounds bad" -- see levelMeter.observeModuleSide.
+func applyGainS16LE(buffer []byte, numerator, denominator int) int64 {
 	if numerator == denominator || denominator == 0 {
-		return
+		return 0
 	}
+	clamped := int64(0)
 	for index := 0; index+1 < len(buffer); index += 2 {
 		sample := int16(uint16(buffer[index]) | uint16(buffer[index+1])<<8)
 		scaled := int32(sample) * int32(numerator) / int32(denominator)
 		if scaled > 32767 {
 			scaled = 32767
+			clamped++
 		} else if scaled < -32768 {
 			scaled = -32768
+			clamped++
 		}
 		buffer[index] = byte(scaled)
 		buffer[index+1] = byte(uint16(scaled) >> 8)
 	}
+	return clamped
 }

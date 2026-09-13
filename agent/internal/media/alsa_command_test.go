@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"testing"
@@ -279,4 +280,118 @@ func TestApplyGainS16LEIdentityWhenUnity(t *testing.T) {
 	if string(buffer) != string(original) {
 		t.Fatalf("unity gain mutated the buffer: % x; want % x", buffer, original)
 	}
+}
+
+// The device must report BOTH sides of the gain stage to the level log.
+//
+// A test on the meter alone is not enough, and that gap is the one this
+// project has been caught by before: a helper that works perfectly while
+// nothing calls it fails as a feature that is simply absent, with every other
+// signal looking healthy. So this exercises the real Read and Write paths and
+// reads the log they produce.
+//
+// What each side is for: the module-side capture level is the only place the
+// module's own clipping is still visible once the attenuation has halved it,
+// and the module-side playback level is the only place the 50x amplification's
+// clipping is visible at all -- the browser-side measurement is taken before
+// the gain and looks perfect right up to the point the far end hears a square
+// wave.
+func TestTheDeviceReportsBothSidesOfTheGainStage(t *testing.T) {
+	format := mustFormat(t, 8000)
+	// Loud capture: the module pinning full scale, which is the fault the
+	// capture attenuation was added for.
+	capture := pcmBlock(transferBytes(format, quectelUACCaptureDuration)/2, 32767)
+	playback := &writeBufferCloser{}
+	device := &alsaCommandDevice{
+		capture:          io.NopCloser(bytes.NewReader(capture)),
+		playback:         playback,
+		captureTransfer:  make([]byte, len(capture)),
+		captureOffset:    len(capture),
+		playbackTransfer: make([]byte, transferBytes(format, quectelUACPlaybackDuration)),
+		captureLevel:     newLevelMeter("capture", time.Now()),
+		playbackLevel:    newLevelMeter("playback", time.Now()),
+	}
+	// Windows that close on the first block, so one read and one write are
+	// enough to produce both log lines.
+	elapsed := time.Now().Add(levelMeterInterval)
+	device.captureLevel.clock = func() time.Time { return elapsed }
+	device.playbackLevel.clock = func() time.Time { return elapsed }
+
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(previous)
+
+	if _, err := device.Read(make([]byte, format.FrameBytes)); err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	// A browser level of about -30 dBFS: normal quiet speech, and far above
+	// the -60 dBFS the amplification was tuned against, so it clips.
+	if _, err := device.Write(pcmBlock(format.FrameBytes/2, 1000)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	lines := logged.String()
+	if !strings.Contains(lines, "direction=capture") || !strings.Contains(lines, "direction=playback") {
+		t.Fatalf("both directions did not report: %s", lines)
+	}
+	for _, field := range []string{"module_peak=", "clipped="} {
+		if strings.Count(lines, field) < 2 {
+			t.Fatalf(
+				"%s is missing from one direction, so that side of the gain stage is "+
+					"unmeasured: %s",
+				field,
+				lines,
+			)
+		}
+	}
+	// The module's own clipping has to survive the attenuation in the log,
+	// asserted on the CAPTURE line specifically. Searching the whole log for
+	// module_peak=32767 passed even with the measurement taken after the gain,
+	// because the playback line is fully clipped and carries the same number --
+	// found by sabotaging the order and watching this test not fail.
+	if peak := fieldOf(logLine(lines, "direction=capture"), "module_peak"); peak != "32767" {
+		t.Fatalf(
+			"the capture line reports module_peak=%s; the attenuation has hidden the "+
+				"module's full-scale peaks, which is the distortion it was added for: %s",
+			peak,
+			lines,
+		)
+	}
+	// And the amplification's clipping has to be counted rather than inferred.
+	// Checked on the playback line specifically: the capture line legitimately
+	// reports clipped=0, because attenuation cannot clamp.
+	if playbackGainNum > playbackGainDen {
+		playbackLine := logLine(lines, "direction=playback")
+		if playbackLine == "" {
+			t.Fatalf("no playback line: %s", lines)
+		}
+		if fieldOf(playbackLine, "clipped") == "0" {
+			t.Fatalf("an amplified clipping block reported no clamped samples: %s", playbackLine)
+		}
+	}
+}
+
+// logLine returns the last logged line containing marker, so an assertion can
+// be made against one direction rather than against the whole log. Searching
+// the whole log lets one direction satisfy an assertion meant for the other.
+func logLine(lines, marker string) string {
+	found := ""
+	for _, line := range strings.Split(lines, "\n") {
+		if strings.Contains(line, marker) {
+			found = line
+		}
+	}
+	return found
+}
+
+// fieldOf reads one key=value field out of a slog text line.
+func fieldOf(line, key string) string {
+	for _, field := range strings.Fields(line) {
+		name, value, found := strings.Cut(field, "=")
+		if found && name == key {
+			return value
+		}
+	}
+	return ""
 }
