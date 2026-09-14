@@ -182,6 +182,91 @@ export function buildField(options: FieldOptions = defaultFieldOptions): MeshFie
   return { nodes, links, signals: [], rotation: 0, nextEvent: 2200 }
 }
 
+/**
+ * A star in the sky the mesh hangs in.
+ *
+ * Stars carry NO network meaning, and that separation is the point. The mesh --
+ * nodes, links, signals -- is the part that reports something, and every claim
+ * it makes is bounded by what this gateway has actually verified. The sky is
+ * scenery: it exists so the field reads as a patch of space rather than a
+ * wireframe on a panel, and it is deliberately built from a different shape of
+ * mark (tiny, pure, ringless points) so it cannot be mistaken for a peer.
+ */
+export interface SkyStar {
+  /** Position in the same -1..1 space as the nodes, unprojected. */
+  x: number
+  y: number
+  /** Radius in CSS pixels at the card's drawing size. */
+  size: number
+  /** 0..1. Most stars are faint; a few carry the image. */
+  brightness: number
+  /** 0 cool blue-white, 1 warm amber. Real skies are mostly cool. */
+  warmth: number
+  /** Twinkle offset, so the sky does not pulse in unison. */
+  phase: number
+  /** Whether to draw the four-point diffraction cross. */
+  sparkle: boolean
+}
+
+/**
+ * buildSky lays out the stars, once and deterministically.
+ *
+ * Deterministic for the same reason the mesh is: a sky that reshuffles on every
+ * remount reads as a glitch. The distribution is uniform rather than clustered
+ * because the mesh in front of it already provides the structure -- a clustered
+ * sky competes with it.
+ *
+ * The brightness curve is what makes it look like a photograph instead of
+ * confetti. Raising a uniform random to the fourth power leaves most stars
+ * nearly invisible and a handful bright, which is roughly how a real field of
+ * stars is distributed across a sensor.
+ */
+export function buildSky(count = 260, seed = 0x57a25): SkyStar[] {
+  const random = seeded(seed)
+  const stars: SkyStar[] = []
+
+  // Two populations, because one uniform population reads as noise.
+  //
+  // A real field of stars has a band across it, and the band is what makes the
+  // difference between "dots scattered on black" and "a piece of sky". A third
+  // of the stars are drawn into a diagonal band; the rest are spread evenly.
+  // The band runs corner to corner rather than through the middle, so it does
+  // not sit behind the densest part of the mesh and compete with it.
+  const banded = Math.round(count / 3)
+  for (let index = 0; index < count; index += 1) {
+    const inBand = index < banded
+    let x = random() * 2 - 1
+    let y = random() * 2 - 1
+    if (inBand) {
+      // y = -x is the band's line; the offset is the sum of two randoms, which
+      // clusters toward the middle far more naturally than one random does.
+      const along = random() * 2 - 1
+      const spread = (random() + random() - 1) * 0.34
+      x = along
+      y = -along + spread
+      if (y < -1 || y > 1) y = spread
+    }
+    // Raising a uniform random to the fourth power leaves most stars nearly
+    // invisible and a handful bright, which is roughly how a real field is
+    // distributed across a sensor. Band stars sit a little brighter.
+    const brightness = Math.min(1, Math.pow(random(), 4) + (inBand ? 0.1 : 0))
+    stars.push({
+      x,
+      y,
+      size: 0.3 + brightness * 0.95,
+      brightness,
+      // Warm stars are rare, and a handful of amber specks among blue-white
+      // ones is what stops the sky reading as a single flat tint.
+      warmth: random() < 0.12 ? 0.55 + random() * 0.45 : random() * 0.22,
+      phase: random(),
+      // Only the brightest few get a cross. Sparkles on everything is the
+      // difference between a night sky and a glitter sticker.
+      sparkle: brightness > 0.66
+    })
+  }
+  return stars
+}
+
 /** litTarget is how many nodes should be lit for a given real peer count. */
 export function litTarget(peers: number, total: number): number {
   if (peers <= 0) return 0
@@ -329,9 +414,13 @@ export function project(
   // The spread is bounded so that even the nearest node at the widest point of
   // the turn lands inside the canvas. A node clipped by the edge reads as a
   // rendering fault rather than a network that continues past the frame.
+  // The spread is bounded well inside the frame, and not only to avoid
+  // clipping: the sky has to be visible AROUND the graph. A mesh that reaches
+  // the edges reads as a net stretched across the card, where one with a
+  // margin of stars around it reads as a constellation sitting in space.
   return {
-    x: width / 2 + x * width * 0.43 * scale,
-    y: height / 2 + node.y * height * 0.455 * scale,
+    x: width / 2 + x * width * 0.38 * scale,
+    y: height / 2 + node.y * height * 0.4 * scale,
     depth,
     scale
   }

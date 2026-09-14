@@ -5,15 +5,15 @@ import { Share2 } from '@lucide/vue'
 import { meshNote } from '../i18n/networkCardNotes'
 import {
   buildField,
+  buildSky,
   litTarget,
-  pointOnLink,
-  project,
   reconcileLit,
   seeded,
   step,
   type MeshField,
-  type Projected
+  type SkyStar
 } from './dhtMeshField'
+import { paintMesh } from './dhtMeshPainter'
 import { getDHTSettings, type DHTStatus } from '../api/client'
 
 // The DHT's own picture, beside the globe rather than sharing it.
@@ -25,11 +25,26 @@ import { getDHTSettings, type DHTStatus } from '../api/client'
 // picture of that is a mesh with no middle.
 //
 // What is real and what is scenery, stated plainly because it would otherwise
-// be guesswork: the LIT nodes count the routing table -- one lit node per peer
-// this gateway has actually verified -- and signals only ever travel between
-// two lit nodes. The dim nodes are the rest of the DHT, which this gateway has
-// not mapped and makes no claim about. When the DHT is off or isolated nothing
-// is lit and nothing moves.
+// be guesswork. Three layers, and only one of them reports anything:
+//
+//   the SKY (stars, nebula) is scenery. It carries no network meaning at all,
+//   it may twinkle, and it is drawn as tiny ringless points so it cannot be
+//   confused with a peer.
+//
+//   the MESH (dim nodes and the lines between them) is the shape of a DHT: no
+//   centre, every node knowing a few others. It is fixed scenery too -- this
+//   gateway does not know who those peers are -- so it never claims traffic.
+//   Its lines shimmer, slowly and all together, which is ambient rather than
+//   directional: nothing appears to travel along them.
+//
+//   the LIT nodes and the SIGNALS are the only claims. One lit node per peer
+//   this gateway has actually verified, and a signal only ever travels between
+//   two lit nodes. With the DHT off or isolated nothing is lit and nothing
+//   travels -- the sky stays, the traffic does not.
+//
+// The field does not turn. An earlier version rotated slowly like the globe
+// beside it; on the operator's request it now holds still and the life in the
+// picture comes from the connections instead of from the camera.
 
 const i18n = useI18n()
 const { t } = i18n
@@ -65,6 +80,7 @@ const routingPeers = computed(() => (ready.value ? dht.value?.routing_peers ?? 0
 
 const canvas = ref<HTMLCanvasElement | null>(null)
 const field: MeshField = buildField()
+const sky: SkyStar[] = buildSky()
 const random = seeded(0xbeef)
 let frame = 0
 let lastFrameAt = 0
@@ -100,143 +116,31 @@ function draw(now: number): void {
 
   step(field, {
     elapsed,
-    // Slow enough that you notice it has moved rather than watch it move.
-    spin: 0.085,
+    // Zero: the field holds still. The rotation machinery stays in the field
+    // module because its frame-rate independence and its bounds are tested
+    // there, and a future picture may want it -- but this one does not turn.
+    spin: 0,
     target: litTarget(routingPeers.value, field.nodes.length),
     animate: !reducedMotion,
     random
   })
 
-  const hue = cssVar('--dht-hue', '#b07cff')
-  const dim = cssVar('--mesh-dim', 'rgb(150 170 210 / 26%)')
-  const signalColour = cssVar('--mesh-signal', '#ffc542')
-  const wash = cssVar('--mesh-wash', 'rgb(90 140 220 / 12%)')
-
-  // A soft pool of light behind the field. Without it the mesh floats on a
-  // flat panel; with it the far nodes sit in something and the depth cue the
-  // projection provides actually lands.
-  const pool = context.createRadialGradient(
-    width / 2, height / 2, 0,
-    width / 2, height / 2, Math.max(width, height) * 0.62
-  )
-  pool.addColorStop(0, wash)
-  pool.addColorStop(1, 'rgba(0,0,0,0)')
-  context.fillStyle = pool
-  context.fillRect(0, 0, width, height)
-
-  const projected: Projected[] = field.nodes.map(node =>
-    project(node, field.rotation, width, height)
-  )
-
-  // Edges first, so nodes sit on top of them.
-  for (const link of field.links) {
-    const from = projected[link.from]!
-    const to = projected[link.to]!
-    const a = field.nodes[link.from]!
-    const b = field.nodes[link.to]!
-    const strength = Math.min(a.glow, b.glow)
-    const depth = (from.depth + to.depth) / 2
-    // Depth fades the far edges out, which is what keeps a mesh of this
-    // density from reading as a flat tangle.
-    context.globalAlpha = (0.3 + depth * 0.4) * (0.5 + strength * 0.5)
-    context.strokeStyle = strength > 0.5 ? hue : dim
-    context.lineWidth = 0.6 + depth * 0.5
-    context.beginPath()
-    context.moveTo(from.x, from.y)
-    context.lineTo(to.x, to.y)
-    context.stroke()
-  }
-  context.globalAlpha = 1
-
-  // Nodes, far ones first so near ones overlap them correctly.
-  const order = field.nodes
-    .map((_, index) => index)
-    .sort((first, second) => projected[first]!.depth - projected[second]!.depth)
-  for (const index of order) {
-    const node = field.nodes[index]!
-    const point = projected[index]!
-    const radius = node.size * point.scale
-    // A node that is on, but still climbing to full brightness, breathes. Once
-    // settled it holds steady -- the breathing is what says "joining", so it
-    // has to stop when the joining is done.
-    const settling = node.glow > 0.02 && node.glow < 0.985
-    const breath = settling
-      ? 0.55 + 0.45 * Math.sin((now / 620) + node.phase * Math.PI * 2)
-      : 1
-    const lit = node.glow * breath
-
-    if (lit > 0.05) {
-      context.globalAlpha = Math.min(1, lit * (0.45 + point.depth * 0.55))
-      context.fillStyle = hue
-      context.shadowColor = hue
-      context.shadowBlur = 10 * lit
-      context.beginPath()
-      context.arc(point.x, point.y, radius * (1 + lit * 0.35), 0, Math.PI * 2)
-      context.fill()
-      context.shadowBlur = 0
-      // The halo is what makes an arrival read from across the room.
-      context.globalAlpha = Math.min(1, lit * 0.3)
-      context.strokeStyle = hue
-      context.lineWidth = 1
-      context.beginPath()
-      context.arc(point.x, point.y, radius * (2.4 + lit * 1.6), 0, Math.PI * 2)
-      context.stroke()
+  paintMesh(context, field, sky, {
+    width,
+    height,
+    now,
+    reducedMotion,
+    palette: {
+      hue: cssVar('--dht-hue', '#b07cff'),
+      dim: cssVar('--mesh-dim', 'rgb(150 188 246 / 72%)'),
+      signal: cssVar('--mesh-signal', '#ffc542'),
+      deep: cssVar('--sky-deep', '#050916'),
+      cloudCool: cssVar('--sky-cloud-cool', 'rgb(38 72 148 / 30%)'),
+      cloudWarm: cssVar('--sky-cloud-warm', 'rgb(94 56 148 / 26%)'),
+      starCool: cssVar('--star-cool', '226 236 255'),
+      starWarm: cssVar('--star-warm', '255 212 168')
     }
-    // The unlit remainder is always drawn, including under a lit node, so a
-    // node fading out lands back on the scenery rather than disappearing.
-    // Two circles rather than a canvas shadow: a wide faint disc for the bloom
-    // and a tight one for the core. Shadows on 130 nodes a frame are the one
-    // thing in this drawing expensive enough to drop frames on a NAS-class
-    // browser, and this reads the same.
-    const base = (1 - node.glow) * (0.45 + point.depth * 0.55)
-    context.fillStyle = dim
-    context.globalAlpha = base * 0.22
-    context.beginPath()
-    context.arc(point.x, point.y, radius * 2.6, 0, Math.PI * 2)
-    context.fill()
-    context.globalAlpha = base
-    context.beginPath()
-    context.arc(point.x, point.y, radius * 0.95, 0, Math.PI * 2)
-    context.fill()
-  }
-  context.globalAlpha = 1
-
-  // Signals last, over everything, because they are the thing to look at.
-  for (const signal of field.signals) {
-    const link = field.links[signal.link]
-    if (!link) continue
-    const from = projected[link.from]!
-    const to = projected[link.to]!
-    const head = pointOnLink(from, to, signal)
-    const trail = pointOnLink(from, to, {
-      ...signal,
-      progress: Math.max(0, signal.progress - 0.34)
-    })
-    // Bright at the start of the hop, fading as it lands, so the eye is caught
-    // by the departure rather than a bead sliding along a wire.
-    const fade = 1 - Math.pow(signal.progress, 2.2)
-
-    const gradient = context.createLinearGradient(trail.x, trail.y, head.x, head.y)
-    gradient.addColorStop(0, signalColour + '00')
-    gradient.addColorStop(1, signalColour)
-    context.globalAlpha = fade
-    context.strokeStyle = gradient
-    context.lineWidth = 1.9
-    context.lineCap = 'round'
-    context.beginPath()
-    context.moveTo(trail.x, trail.y)
-    context.lineTo(head.x, head.y)
-    context.stroke()
-
-    context.fillStyle = signalColour
-    context.shadowColor = signalColour
-    context.shadowBlur = 12
-    context.beginPath()
-    context.arc(head.x, head.y, 2.2, 0, Math.PI * 2)
-    context.fill()
-    context.shadowBlur = 0
-  }
-  context.globalAlpha = 1
+  })
 
   frame = requestAnimationFrame(draw)
 }
@@ -362,18 +266,50 @@ function metric(value: number | null | undefined): string {
      far taller than the globe -- which then stretches to match and carries the
      difference as dead space. */
   max-width: 320px;
-  /* The scenery is tinted toward the app's blue rather than left neutral: a
-     grey mesh reads as a wireframe diagram, a blue one as a lit network. */
-  --mesh-dim: rgb(140 180 240 / 70%);
-  --mesh-wash: rgb(70 130 220 / 15%);
+  /* The sky is painted corner to corner and rounded HERE rather than in the
+     canvas: a hairline drawn in canvas cannot meet a pale panel at sub-pixel
+     precision, and the seam reads as a bright ring around the picture. The
+     browser composites this exactly. */
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--sky-frame);
+
+  /* The palette has three roles and they must stay separable, because two of
+     them are claims and one is not: the sky is scenery, violet is a verified
+     peer, amber is traffic between two of them. Anything that blurs those
+     reads as the card claiming more than it knows.
+
+     The sky is nearly black in both themes, and that is deliberate. A light
+     sky with light stars has nowhere to put a star, so the picture would stop
+     being a sky and go back to being a diagram. It dissolves to transparent at
+     the edges (see the draw code) so a dark disc on a light card reads as a
+     view into space rather than a hole punched in the panel. */
+  --sky-deep: #050916;
+  --sky-cloud-cool: rgb(38 72 148 / 30%);
+  --sky-cloud-warm: rgb(94 56 148 / 26%);
+  /* Space-separated channels, not a colour: the draw code composes the alpha
+     per star, and `rgb(R G B / A%)` needs the channels on their own. */
+  --star-cool: 226 236 255;
+  --star-warm: 255 212 168;
+  /* The mesh is tinted toward the app's blue rather than left neutral: a grey
+     mesh reads as a wireframe diagram, a blue one as a lit network. */
+  --mesh-dim: rgb(150 188 246 / 72%);
   --mesh-signal: #ffc542;
+  --sky-frame: rgb(255 255 255 / 8%);
 }
 
 :root[data-theme='light'] .mesh-canvas,
 html[data-theme='light'] .mesh-canvas {
-  --mesh-dim: rgb(60 100 160 / 45%);
-  --mesh-wash: rgb(70 130 220 / 8%);
-  --mesh-signal: #b26a00;
+  /* Lifted off black and pulled in slightly, so on a light page it reads as an
+     inset porthole rather than a void. The stars keep their brightness -- they
+     are what the sky is for. */
+  --sky-deep: #0a1226;
+  --sky-cloud-cool: rgb(48 88 172 / 34%);
+  --sky-cloud-warm: rgb(104 64 160 / 28%);
+  --mesh-dim: rgb(168 200 250 / 66%);
+  --mesh-signal: #ffc861;
+  /* A dark edge, not a light one: the same faint white line that reads as a
+     highlight on a dark card reads as a bright ring on a pale panel. */
+  --sky-frame: rgb(16 28 56 / 24%);
 }
 
 .mesh-stats {
