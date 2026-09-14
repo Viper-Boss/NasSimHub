@@ -29,19 +29,19 @@ const (
 	// quarter (-12 dB) measured -22 dBFS RMS and the operator called it too
 	// quiet.
 	//
-	// The opposite direction arrives some 50 dB too quiet: the browser's
-	// microphone measured -60 dBFS RMS on a live call while the speaker
-	// talked at a normal level, which is inaudible on a phone. The playback
-	// stream is amplified 50x before it reaches the module's AFE TX path, and
-	// hard clipping is the only peak protection -- a shout into the browser
-	// microphone distorts rather than explodes.
+	// Browser uplink uses unity gain. The former 50x compensation was tuned
+	// against an almost-silent microphone, not the module's playback path.
+	// Live acceptance on 2026-09-14 02:22:08 UTC measured input -19.2 dBFS
+	// RMS / peak 18158, but after 50x gain 84.46% of samples clipped. The
+	// phone user reported severe distortion. Input selection/gain belongs
+	// in the browser; the bridge must not multiply valid speech by 50.
 	//
 	// Both numbers come from one live QDC507 on one firmware; if a firmware
 	// update changes the DSP calibration these want re-measuring (the level
 	// logs around "modem call audio level" are the instrument).
 	captureGainNum  = 1
 	captureGainDen  = 2
-	playbackGainNum = 50
+	playbackGainNum = 1
 	playbackGainDen = 1
 )
 
@@ -249,6 +249,9 @@ func (d *alsaCommandDevice) Write(source []byte) (int, error) {
 		// the point the far end hears a square wave.
 		d.playbackLevel.observeModuleSide(gained, clamped)
 		source = gained
+	} else {
+		// Keep both sides observable even when no transform is necessary.
+		d.playbackLevel.observeModuleSide(source, 0)
 	}
 	d.playbackLevel.observe(delivered)
 	consumed := 0

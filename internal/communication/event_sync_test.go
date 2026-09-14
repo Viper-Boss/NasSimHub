@@ -48,6 +48,47 @@ type eventCountingRepository struct {
 	signal  chan struct{}
 }
 
+type firstSnapshotFailsRepository struct {
+	*fakeRepository
+	attempts atomic.Int32
+}
+
+func (r *firstSnapshotFailsRepository) ApplyHardwareSnapshotWithResult(ctx context.Context, snapshot store.HardwareSnapshot) (store.HardwareSnapshotResult, error) {
+	if r.attempts.Add(1) == 1 {
+		return store.HardwareSnapshotResult{}, errors.New("fixture database busy")
+	}
+	return r.fakeRepository.ApplyHardwareSnapshotWithResult(ctx, snapshot)
+}
+
+func TestRunStartsWatcherAfterInitialFailureAndExternalRefresh(t *testing.T) {
+	base := connectedAgent(time.Now())
+	base.health.Provider.Capabilities.Events = true
+	base.health.Provider.Capabilities.Telemetry = true
+	agent := &eventTestAgent{fakeAgent: base, changes: make(chan struct{}, 1), started: make(chan struct{})}
+	repo := &firstSnapshotFailsRepository{fakeRepository: &fakeRepository{}}
+	service, err := New(agent, repo, messageevents.NewBuffer(8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		service.Run(ctx, 20*time.Millisecond, func(error) {
+			// Model a concurrent dashboard refresh recovering the public status
+			// before the Run loop gets its next maintenance tick.
+			_, _ = service.Refresh(ctx)
+		})
+	}()
+	defer func() { cancel(); <-done }()
+	select {
+	case <-agent.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("initial snapshot failure permanently disabled events")
+	}
+	waitForAgentEventsHealthy(t, service)
+}
+
 type controlLeaseEventAgent struct {
 	*fakeAgent
 	started       chan struct{}

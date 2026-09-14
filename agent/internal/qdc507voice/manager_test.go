@@ -17,6 +17,7 @@ type fakeClient struct {
 	bootID        string
 	routeLaunched bool
 	soundReady    bool
+	idleAudio     bool
 	pushes        []string
 	commands      []string
 }
@@ -44,6 +45,9 @@ func (f *fakeClient) Shell(
 	case command == "cat /proc/sys/kernel/random/boot_id":
 		return ShellResult{Output: f.bootID}, nil
 	case strings.Contains(command, "VoLTE route session active on hw:0,4"):
+		if f.idleAudio && strings.Contains(command, "audio_enable") {
+			return ShellResult{Status: 1}, nil
+		}
 		if f.routeLaunched {
 			return ShellResult{}, nil
 		}
@@ -136,6 +140,24 @@ func TestReconcileAdoptsResidentRouteAndKeysItByModuleBoot(t *testing.T) {
 	}
 }
 
+func TestReconcileDoesNotRestartResidentRouteWhenUSBAudioIsIdle(t *testing.T) {
+	client := &fakeClient{
+		devices: []Device{{Selector: "transport:2", State: "device", USB: "usb:1-10"}},
+		bootID:  "idle-module", routeLaunched: true, idleAudio: true,
+	}
+	manager := testManager(client)
+	for range 2 {
+		if _, err := manager.Reconcile(context.Background(), []domain.Line{testLine()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, command := range client.commands {
+		if strings.Contains(command, "nohup") || strings.Contains(command, "pkill") {
+			t.Fatalf("idle resident bridge was restarted: %s", command)
+		}
+	}
+}
+
 func TestReconcileInitializesRouteOnceAndLeavesItResident(t *testing.T) {
 	t.Parallel()
 	client := &fakeClient{
@@ -160,7 +182,7 @@ func TestReconcileInitializesRouteOnceAndLeavesItResident(t *testing.T) {
 		if strings.Contains(command, "--voice-route-session") && strings.Contains(command, "nohup") {
 			launches++
 		}
-		if strings.Contains(command, "kill -TERM") && strings.Contains(command, routePIDFile) {
+		if launches > 0 && strings.Contains(command, "kill -TERM") && strings.Contains(command, routePIDFile) {
 			t.Fatalf("reconciler stopped its resident route: %q", command)
 		}
 	}
@@ -173,6 +195,18 @@ func TestReconcileInitializesRouteOnceAndLeavesItResident(t *testing.T) {
 	}
 	if len(client.pushes) != len(expectedManifest.Files) {
 		t.Fatalf("resident route was reprovisioned: %+v", client.pushes)
+	}
+	stops, starts := 0, 0
+	for _, command := range client.commands {
+		if strings.Contains(command, "pkill -TERM") {
+			stops++
+		}
+		if strings.Contains(command, "nohup") && strings.Contains(command, "--voice-route-session") {
+			starts++
+		}
+	}
+	if stops != 1 || starts != 1 {
+		t.Fatalf("expected one stale-route cleanup and one start, got stops=%d starts=%d", stops, starts)
 	}
 }
 

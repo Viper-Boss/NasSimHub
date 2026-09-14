@@ -283,6 +283,10 @@ func (m *Manager) RearmRoute(ctx context.Context, line domain.Line) error {
 	if !m.Enabled() {
 		return fmt.Errorf("QDC507 voice runtime is not configured")
 	}
+	// Reconcile also starts/adopts the resident bridge. Serialize both paths
+	// so neither can overwrite the other's pidfile or open hw:0,4 twice.
+	m.reconcileMu.Lock()
+	defer m.reconcileMu.Unlock()
 	device, err := m.findDevice(ctx, line.PhysicalDevice)
 	if err != nil {
 		return err

@@ -121,6 +121,15 @@ func TestALSACommandDeviceUsesQuectelUACTransferBlocks(t *testing.T) {
 
 // applyGainS16LECopy is the out-of-place form of applyGainS16LE, for tests
 // that want the expected transform of an input.
+func TestDefaultPlaybackGainPreservesBrowserSpeech(t *testing.T) {
+	pcm := []byte{0xee, 0x46, 0x12, 0xb9} // +/-18158, measured healthy browser speech.
+	original := append([]byte(nil), pcm...)
+	clipped := applyGainS16LE(pcm, playbackGainNum, playbackGainDen)
+	if clipped != 0 || !bytes.Equal(pcm, original) {
+		t.Fatalf("default uplink gain distorted normal speech: clipped=%d pcm=%x", clipped, pcm)
+	}
+}
+
 func applyGainS16LECopy(buffer []byte) []byte {
 	gained := append([]byte(nil), buffer...)
 	applyGainS16LE(gained, playbackGainNum, playbackGainDen)

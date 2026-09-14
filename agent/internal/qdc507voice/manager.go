@@ -367,7 +367,10 @@ func (m *Manager) ensureLine(
 	if err := m.ensureVoiceMixers(ctx, device.Selector); err != nil {
 		slog.Warn("ensure QDC507 VoLTE route mixers", "component", "qdc507voice", "error", err)
 	}
-	ready, readyErr := m.routeReady(ctx, device.Selector)
+	// An idle USB host need not have audio_enable=1. The resident bridge
+	// owns hw:0,4 even then; starting a second bridge makes it fail with
+	// EBUSY and its cleanup disables the first bridge's USB audio route.
+	ready, readyErr := m.routeSessionActive(ctx, device.Selector)
 	if readyErr == nil && ready {
 		state.status = m.readyStatus()
 		return state, nil
@@ -378,7 +381,11 @@ func (m *Manager) ensureLine(
 	if err := m.prepare(ctx, device.Selector); err != nil {
 		return state, err
 	}
-	if err := m.startRoute(ctx, line.PhysicalDevice, device.Selector); err != nil {
+	// A stale pidfile must not leave an untracked bridge holding the PCM.
+	if err := m.stopRoute(ctx, device.Selector); err != nil {
+		return state, err
+	}
+	if err := m.startRouteSession(ctx, device.Selector); err != nil {
 		return state, err
 	}
 	state.status = m.readyStatus()

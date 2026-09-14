@@ -65,8 +65,17 @@ func newJitterBuffer(capacity int) *jitterBuffer {
 }
 
 func (b *jitterBuffer) push(packet *rtp.Packet) error {
-	if b == nil || packet == nil || len(packet.Payload) == 0 || len(packet.Payload) > maxOpusPayloadBytes {
+	if b == nil || packet == nil {
 		return ErrInvalidRTP
+	}
+	// RTP keepalive/padding packets carry no Opus samples. Pion strips the
+	// padding before delivering Payload. They must not start playout, consume
+	// audio time, or terminate an otherwise healthy authenticated transport.
+	if len(packet.Payload) == 0 {
+		return nil
+	}
+	if len(packet.Payload) > maxOpusPayloadBytes {
+		return fmt.Errorf("Opus payload length %d: %w", len(packet.Payload), ErrInvalidRTP)
 	}
 	b.mu.Lock()
 	sequence := b.unwrap.unwrap(packet.SequenceNumber)

@@ -1475,6 +1475,14 @@ func (s *Service) Run(ctx context.Context, every time.Duration, report func(erro
 		case <-maintenanceTimer.C:
 			status := s.CurrentStatus()
 			switch {
+			case !watchStarted:
+				// A failed initial refresh (for example SQLITE_BUSY) must not
+				// permanently skip the event subscription after a later HTTP
+				// refresh discovers Events=true. Without a watcher, call control
+				// stays unavailable and call state is never promptly updated.
+				if refreshed, ok := refresh(); ok {
+					startWatcher(refreshed)
+				}
 			case status.Capabilities.Events && status.Capabilities.Telemetry:
 				reportDistinct(s.refreshTelemetry(ctx), &lastTelemetryError)
 			case !status.Capabilities.Events:

@@ -233,19 +233,19 @@ func newSession(
 func (s *Session) start() {
 	s.startOnce.Do(func() {
 		s.workers.Add(5)
-		go s.runWorker(s.captureLoop)
-		go s.runWorker(s.receiveLoop)
-		go s.runWorker(s.playbackLoop)
-		go s.runWorker(s.rtcpLoop)
-		go s.runWorker(s.connectionLoop)
+		go s.runWorker("capture", s.captureLoop)
+		go s.runWorker("receive", s.receiveLoop)
+		go s.runWorker("playback", s.playbackLoop)
+		go s.runWorker("rtcp", s.rtcpLoop)
+		go s.runWorker("connection", s.connectionLoop)
 		go s.cleanup()
 	})
 }
 
-func (s *Session) runWorker(run func() error) {
+func (s *Session) runWorker(name string, run func() error) {
 	defer s.workers.Done()
 	if err := run(); err != nil && s.ctx.Err() == nil {
-		s.stop(err)
+		s.stop(fmt.Errorf("%s: %w", name, err))
 	}
 }
 
@@ -254,6 +254,11 @@ func (s *Session) stop(reason error) {
 		s.reasonMu.Lock()
 		s.reason = reason
 		s.reasonMu.Unlock()
+		if reason != nil {
+			slog.Warn("call media session stopped", "component", "media", "call_id", s.callID, "error", reason)
+		} else {
+			slog.Info("call media session stopped", "component", "media", "call_id", s.callID, "reason", "requested shutdown")
+		}
 		s.cancel()
 	})
 }
@@ -390,6 +395,9 @@ func (s *Session) receiveLoop() error {
 				return nil
 			}
 			return ErrTransportClosed
+		}
+		if len(packet.Payload) == 0 {
+			slog.Debug("ignored empty audio RTP packet", "component", "media", "call_id", s.callID, "padding", packet.Padding)
 		}
 		if err := s.jitter.push(packet); err != nil {
 			return err

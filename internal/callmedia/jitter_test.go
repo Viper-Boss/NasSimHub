@@ -40,6 +40,45 @@ func TestJitterReordersPacketsBeforePlayout(t *testing.T) {
 	}
 }
 
+func TestJitterIgnoresEmptyRTPWithoutAdvancingAudio(t *testing.T) {
+	for _, padding := range []bool{false, true} {
+		jitter := newJitterBuffer(4)
+		empty := &rtp.Packet{Header: rtp.Header{SequenceNumber: 99, Padding: padding}}
+		if err := jitter.push(empty); err != nil {
+			t.Fatal(err)
+		}
+		if jitter.start() {
+			t.Fatal("empty RTP started audio playout")
+		}
+		format := testFormat(8000)
+		config, _ := (JitterConfig{}).normalized()
+		playout := newRTPPlayout(format, &fakeCodec{format: format}, jitter, config)
+		if err := jitter.push(testRTP(100, 1000, 20, 0x11)); err != nil {
+			t.Fatal(err)
+		}
+		if !jitter.start() {
+			t.Fatal("audio did not start")
+		}
+		frame := make([]byte, format.FrameBytes())
+		if err := playout.nextFrame(frame); err != nil {
+			t.Fatal(err)
+		}
+		empty.SequenceNumber = 101
+		if err := jitter.push(empty); err != nil {
+			t.Fatal(err)
+		}
+		if err := jitter.push(testRTP(102, 1960, 20, 0x22)); err != nil {
+			t.Fatal(err)
+		}
+		if err := playout.nextFrame(frame); err != nil {
+			t.Fatal(err)
+		}
+		if !allBytes(frame, 0x22) {
+			t.Fatal("keepalive inserted audio or a gap")
+		}
+	}
+}
+
 func TestPlayoutSplitsVariableSixtyMillisecondPacket(t *testing.T) {
 	format := testFormat(16000)
 	config, err := (JitterConfig{}).normalized()
