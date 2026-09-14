@@ -1,248 +1,154 @@
-// The painting, extracted from the component for the same reason the geometry
-// was: a drawing decision made inside a requestAnimationFrame callback can only
-// be checked by watching the screen and hoping. Out here the same code that
-// ships can be pointed at a canvas of known size with a known palette, which is
-// how the composition below was reviewed rather than guessed at.
+// The DHT fishnet's painting.
+//
+// Extracted from the component for the same reason the geometry was: a drawing
+// decision made inside a requestAnimationFrame callback can only be checked by
+// watching the screen and hoping. Out here the same code that ships can be
+// pointed at a canvas of known size with a known palette, which is how the
+// composition below was reviewed rather than guessed at.
 //
 // It draws and nothing else: no sizing, no clearing, no clock. The caller owns
 // the canvas and has already advanced the field.
+//
+// Every colour comes in as space-separated RGB channels rather than as a
+// finished colour, because almost every mark here composes its own alpha: the
+// strand from its dimmer end, the node from its fade, the bead from its bloom.
+// A palette of finished `rgba(...)` strings cannot be dimmed without string
+// surgery, which is how a drawing ends up with a colour nobody can re-theme.
 
-import type { MeshField, Projected, SkyStar } from './dhtMeshField'
-import { pointOnLink, project } from './dhtMeshField'
+import { defaultMeshOptions, signalProgress, type MeshField, type MeshOptions } from './dhtMeshField'
 
-/** The three roles in the picture, resolved from CSS by the caller. */
+/** The roles in the picture. One set is illustration, one is a claim. */
 export interface MeshPalette {
-  /** A verified peer, and a line between two of them. */
-  hue: string
-  /** The unmapped mesh: dim nodes and the lines between them. */
-  dim: string
-  /** Traffic between two verified peers. */
+  /** The strands between nodes. */
+  strand: string
+  /** The soft halo around a node. */
+  nodeBloom: string
+  /** The node itself. */
+  nodeCore: string
+  /** The ring that expands once as a node appears. */
+  ring: string
+  /** Traffic: the bead's trail and its halo. The only claim in here. */
   signal: string
-  /** The sky's near-black ground. */
-  deep: string
-  cloudCool: string
-  cloudWarm: string
-  /** Space-separated RGB channels; the alpha is composed per star. */
-  starCool: string
-  starWarm: string
+  /** The bead's bright centre. */
+  signalCore: string
 }
 
 export interface PaintOptions {
   width: number
   height: number
-  /** Milliseconds, for twinkle and shimmer phase only. */
-  now: number
+  /** Seconds. The same clock the field was advanced on. */
+  time: number
   palette: MeshPalette
-  /** True freezes the twinkle and the shimmer. */
-  reducedMotion: boolean
+  /**
+   * 1 while the DHT is ready, lower while it is not.
+   *
+   * The whole net dims rather than disappearing, so the card keeps its shape
+   * and the reader can see there is a picture there at all -- what goes away is
+   * the traffic and the arrival rings, which are the parts that claim something
+   * happened.
+   */
+  strength: number
+  mesh?: MeshOptions
 }
 
 export function paintMesh(
   context: CanvasRenderingContext2D,
   field: MeshField,
-  sky: SkyStar[],
   options: PaintOptions
 ): void {
-  const { width, height, now, palette, reducedMotion } = options
-  const hue = palette.hue
-  const dim = palette.dim
-  const signalColour = palette.signal
-  const deep = palette.deep
-  const cloudCool = palette.cloudCool
-  const cloudWarm = palette.cloudWarm
-  const starCool = palette.starCool
-  const starWarm = palette.starWarm
+  const { palette, strength, time } = options
+  const mesh = options.mesh ?? defaultMeshOptions
+  const live = strength > 0.999
 
-  // The sky fills the canvas, and the FRAME is the element's own.
-  //
-  // Three attempts, worth recording because two of them looked like bugs. A
-  // deep radial fading to transparent dissolved into the card nicely in dark
-  // theme and produced a blown-out white halo in light theme. Clipping to a
-  // rounded path and stroking it fixed the halo but left a bright seam where
-  // the stroke, the untouched canvas corners and the panel behind them met --
-  // a hairline drawn in canvas cannot line up with a pale panel at sub-pixel
-  // precision.
-  //
-  // So the canvas paints an opaque sky corner to corner and the rounding and
-  // the hairline are CSS on the element (border-radius plus an inset shadow),
-  // which the browser composites exactly. Both were found by rendering the two
-  // themes and looking, which is what the painter was pulled out of the
-  // component for.
-  context.fillStyle = deep
-  context.fillRect(0, 0, width, height)
-
-  // Two nebula clouds, off-centre and overlapping. Off-centre because a cloud
-  // centred behind the mesh just looks like a vignette; overlapping because a
-  // single blob reads as a lens flare and two reading through each other read
-  // as depth.
-  const sizeRatio = Math.max(width, height)
-  for (const cloud of [
-    { x: 0.3, y: 0.26, radius: 0.58, colour: cloudCool },
-    { x: 0.72, y: 0.74, radius: 0.5, colour: cloudWarm }
-  ]) {
-    const gradient = context.createRadialGradient(
-      width * cloud.x, height * cloud.y, 0,
-      width * cloud.x, height * cloud.y, sizeRatio * cloud.radius
-    )
-    gradient.addColorStop(0, cloud.colour)
-    gradient.addColorStop(1, 'rgba(0,0,0,0)')
-    context.fillStyle = gradient
-    context.fillRect(0, 0, width, height)
-  }
-
-  // Stars. Drawn before the mesh so the graph sits in front of the sky, and
-  // kept to plain filled points -- the mesh nodes are the things with haloes,
-  // and that is the whole visual difference between scenery and a peer.
-  for (const star of sky) {
-    const twinkle = reducedMotion
-      ? 1
-      : 0.72 + 0.28 * Math.sin(now / 1900 + star.phase * Math.PI * 2)
-    const alpha = Math.min(1, (0.16 + star.brightness * 0.84) * twinkle)
-    const x = width / 2 + star.x * width * 0.49
-    const y = height / 2 + star.y * height * 0.49
-    const tint = star.warmth > 0.5 ? starWarm : starCool
-    context.fillStyle = `rgb(${tint} / ${Math.round(alpha * 100)}%)`
+  // Strands first, so nodes sit on top of them.
+  context.lineWidth = 0.8
+  for (const [a, b] of field.edges) {
+    const from = field.nodes[a]
+    const to = field.nodes[b]
+    if (!from || !to) continue
+    // A strand is only as bright as its dimmer end, which is what makes a node
+    // fading out take its strands with it instead of leaving them hanging.
+    const alpha = 0.22 * Math.min(from.alpha, to.alpha) * strength
     context.beginPath()
-    context.arc(x, y, star.size, 0, Math.PI * 2)
-    context.fill()
-    if (!star.sparkle) continue
-    // The diffraction cross on the brightest few. Thin, and only as long as the
-    // star is bright, so it reads as glare rather than as a drawn asterisk.
-    const arm = star.size * (3.4 + star.brightness * 2.6)
-    context.strokeStyle = `rgb(${tint} / ${Math.round(alpha * 42)}%)`
-    context.lineWidth = 0.6
-    context.beginPath()
-    context.moveTo(x - arm, y)
-    context.lineTo(x + arm, y)
-    context.moveTo(x, y - arm)
-    context.lineTo(x, y + arm)
+    context.moveTo(from.px, from.py)
+    context.lineTo(to.px, to.py)
+    context.strokeStyle = channels(palette.strand, alpha)
     context.stroke()
   }
 
-  const projected: Projected[] = field.nodes.map(node =>
-    project(node, field.rotation, width, height)
-  )
-
-  // Edges first, so nodes sit on top of them.
-  for (let index = 0; index < field.links.length; index += 1) {
-    const link = field.links[index]!
-    const from = projected[link.from]!
-    const to = projected[link.to]!
-    const a = field.nodes[link.from]!
-    const b = field.nodes[link.to]!
-    const strength = Math.min(a.glow, b.glow)
-    const depth = (from.depth + to.depth) / 2
-    // The shimmer, which is the life in the picture now that the field does not
-    // turn. It is AMBIENT on purpose: every line breathes on its own slow
-    // phase, and nothing appears to move along any of them. A travelling bead
-    // would read as a packet, and a packet is a claim -- that mark is reserved
-    // for the signals below, which only exist between two verified peers.
-    //
-    // The phase comes from the endpoint indices rather than stored state, so it
-    // is stable across frames and remounts without another field to keep.
-    const phase = ((link.from * 7 + link.to * 13) % 100) / 100
-    const shimmer = reducedMotion
-      ? 1
-      : 0.74 + 0.26 * Math.sin(now / 2600 + phase * Math.PI * 2)
-    // Depth fades the far edges out, which is what keeps a mesh of this
-    // density from reading as a flat tangle.
-    context.globalAlpha = (0.3 + depth * 0.4) * (0.5 + strength * 0.5) * shimmer
-    context.strokeStyle = strength > 0.5 ? hue : dim
-    context.lineWidth = 0.6 + depth * 0.5
-    context.beginPath()
-    context.moveTo(from.x, from.y)
-    context.lineTo(to.x, to.y)
-    context.stroke()
-  }
-  context.globalAlpha = 1
-
-  // Nodes, far ones first so near ones overlap them correctly.
-  const order = field.nodes
-    .map((_, index) => index)
-    .sort((first, second) => projected[first]!.depth - projected[second]!.depth)
-  for (const index of order) {
-    const node = field.nodes[index]!
-    const point = projected[index]!
-    const radius = node.size * point.scale
-    // A node that is on, but still climbing to full brightness, breathes. Once
-    // settled it holds steady -- the breathing is what says "joining", so it
-    // has to stop when the joining is done.
-    const settling = node.glow > 0.02 && node.glow < 0.985
-    const breath = settling
-      ? 0.55 + 0.45 * Math.sin((now / 620) + node.phase * Math.PI * 2)
-      : 1
-    const lit = node.glow * breath
-
-    if (lit > 0.05) {
-      context.globalAlpha = Math.min(1, lit * (0.45 + point.depth * 0.55))
-      context.fillStyle = hue
-      context.shadowColor = hue
-      context.shadowBlur = 10 * lit
-      context.beginPath()
-      context.arc(point.x, point.y, radius * (1 + lit * 0.35), 0, Math.PI * 2)
-      context.fill()
-      context.shadowBlur = 0
-      // The halo is what makes an arrival read from across the room.
-      context.globalAlpha = Math.min(1, lit * 0.3)
-      context.strokeStyle = hue
-      context.lineWidth = 1
-      context.beginPath()
-      context.arc(point.x, point.y, radius * (2.4 + lit * 1.6), 0, Math.PI * 2)
-      context.stroke()
-    }
-    // The unlit remainder is always drawn, including under a lit node, so a
-    // node fading out lands back on the scenery rather than disappearing.
+  for (const node of field.nodes) {
+    const alpha = node.alpha * strength
     // Two circles rather than a canvas shadow: a wide faint disc for the bloom
-    // and a tight one for the core. Shadows on 130 nodes a frame are the one
-    // thing in this drawing expensive enough to drop frames on a NAS-class
-    // browser, and this reads the same.
-    const base = (1 - node.glow) * (0.45 + point.depth * 0.55)
-    context.fillStyle = dim
-    context.globalAlpha = base * 0.22
+    // and a tight one for the core. Shadows on a few hundred nodes a frame are
+    // the one thing in this drawing expensive enough to drop frames on a
+    // NAS-class browser, and this reads the same.
+    fill(context, node.px, node.py, 5.5, channels(palette.nodeBloom, alpha * 0.055))
+    fill(context, node.px, node.py, 1.65, channels(palette.nodeCore, alpha * 0.74))
+    // A node arriving gets one ring that expands and fades. It reads as
+    // "something appeared here", so it is drawn only on the way IN, and only
+    // while the card is live.
+    if (!live || !node.changing || node.to !== 1) continue
+    const progress = clamp01((time - node.start) / mesh.fadeDuration)
     context.beginPath()
-    context.arc(point.x, point.y, radius * 2.6, 0, Math.PI * 2)
-    context.fill()
-    context.globalAlpha = base
-    context.beginPath()
-    context.arc(point.x, point.y, radius * 0.95, 0, Math.PI * 2)
-    context.fill()
+    context.arc(node.px, node.py, 4 + 12 * progress, 0, Math.PI * 2)
+    context.strokeStyle = channels(palette.ring, Math.sin(progress * Math.PI) * 0.5)
+    context.lineWidth = 1
+    context.stroke()
+    context.lineWidth = 0.8
   }
-  context.globalAlpha = 1
 
-  // Signals last, over everything, because they are the thing to look at.
+  if (!live) return
+
+  // Signals last, over everything, because they are the thing to look at --
+  // and the only mark in this picture that claims a packet moved.
   for (const signal of field.signals) {
-    const link = field.links[signal.link]
-    if (!link) continue
-    const from = projected[link.from]!
-    const to = projected[link.to]!
-    const head = pointOnLink(from, to, signal)
-    const trail = pointOnLink(from, to, {
-      ...signal,
-      progress: Math.max(0, signal.progress - 0.34)
-    })
-    // Bright at the start of the hop, fading as it lands, so the eye is caught
-    // by the departure rather than a bead sliding along a wire.
-    const fade = 1 - Math.pow(signal.progress, 2.2)
+    const progress = signalProgress(signal, time, mesh)
+    const from = field.nodes[signal.edge[0]]
+    const to = field.nodes[signal.edge[1]]
+    if (!from || !to) continue
+    const headX = from.px + (to.px - from.px) * progress
+    const headY = from.py + (to.py - from.py) * progress
+    // The trail starts a third of the strand back, so the bead reads as moving
+    // rather than as a dot that happens to be somewhere.
+    const tail = Math.max(0, progress - 0.3)
+    const tailX = from.px + (to.px - from.px) * tail
+    const tailY = from.py + (to.py - from.py) * tail
 
-    const gradient = context.createLinearGradient(trail.x, trail.y, head.x, head.y)
-    gradient.addColorStop(0, signalColour + '00')
-    gradient.addColorStop(1, signalColour)
-    context.globalAlpha = fade
-    context.strokeStyle = gradient
-    context.lineWidth = 1.9
-    context.lineCap = 'round'
+    // The end points are nudged apart: a gradient between two identical points
+    // is rejected by the canvas and the whole trail silently disappears, which
+    // is exactly what happens on the first frame of every signal.
+    const gradient = context.createLinearGradient(tailX, tailY, headX + 0.001, headY + 0.001)
+    gradient.addColorStop(0, channels(palette.signal, 0))
+    gradient.addColorStop(1, channels(palette.signal, 1))
     context.beginPath()
-    context.moveTo(trail.x, trail.y)
-    context.lineTo(head.x, head.y)
+    context.moveTo(tailX, tailY)
+    context.lineTo(headX, headY)
+    context.strokeStyle = gradient
+    context.lineWidth = 1.8
     context.stroke()
 
-    context.fillStyle = signalColour
-    context.shadowColor = signalColour
-    context.shadowBlur = 12
-    context.beginPath()
-    context.arc(head.x, head.y, 2.2, 0, Math.PI * 2)
-    context.fill()
-    context.shadowBlur = 0
+    fill(context, headX, headY, 5, channels(palette.signal, 0.075))
+    fill(context, headX, headY, 2, channels(palette.signalCore, 1))
   }
-  context.globalAlpha = 1
+}
+
+function channels(rgb: string, alpha: number): string {
+  return `rgb(${rgb} / ${(clamp01(alpha) * 100).toFixed(2)}%)`
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function fill(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  colour: string
+): void {
+  context.beginPath()
+  context.arc(x, y, radius, 0, Math.PI * 2)
+  context.fillStyle = colour
+  context.fill()
 }

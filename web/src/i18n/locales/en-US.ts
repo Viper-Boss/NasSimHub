@@ -865,8 +865,7 @@ export default {
     detailPlaceholder: 'Messages will appear here'
   },
   dashboard: {
-    globeTitle: "Decentralised network",
-    globeScopeNote: "Each count is one topic's on-chain subscriber total. The subscription duration is the window, so these are network-wide and anyone can verify them through any seed.",
+    globeTitle: "NKN global network",
     globeDhtPending: "Second path not built yet",
     globeDhtOff: "DHT off",
     globeDhtStarting: "Joining…",

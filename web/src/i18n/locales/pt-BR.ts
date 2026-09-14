@@ -826,8 +826,7 @@ export default {
     "detailPlaceholder": "As mensagens aparecerão aqui"
   },
   "dashboard": {
-    "globeTitle": "Rede descentralizada",
-    "globeScopeNote": "Cada número é o total de assinantes on-chain de um tópico. A duração da assinatura é a janela, então valem para toda a rede e qualquer um pode verificar por qualquer seed.",
+    "globeTitle": "Rede global NKN",
     "globeDhtPending": "Segundo caminho ainda não construído",
     "globeDhtOff": "DHT desligado",
     "globeDhtStarting": "Entrando…",

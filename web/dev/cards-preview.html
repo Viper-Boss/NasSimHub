@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<script>
+  // Before anything renders, so the stylesheet resolves in the right theme.
+  var t = new URLSearchParams(location.search).get('theme')
+  if (t) document.documentElement.dataset.theme = t
+</script>
+<link rel="stylesheet" href="../src/components/networkCard.css">
+<style>
+  body { margin:0; background:#090f1a; color:#e6edf7;
+         font-family: Inter,"Segoe UI","Microsoft YaHei",sans-serif; }
+  html[data-theme='light'] body { background:#eef2f7; color:#15233a; }
+  .wrap { max-width:1220px; margin:auto; padding:40px 32px; }
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  h2.case { margin:8px 0 18px; font-size:11px; letter-spacing:3px; color:#7ed9fb; font-weight:600; }
+</style></head><body>
+<div class="wrap">
+  <h2 class="case" id="case-label">DARK · NKN ACTIVE · DHT READY</h2>
+  <section class="cards" id="cards"></section>
+</div>
+<script src="./cards-preview.js"></script>
+</body></html>

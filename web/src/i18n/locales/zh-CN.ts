@@ -845,8 +845,7 @@ export default {
     detailPlaceholder: '消息会显示在这里'
   },
   dashboard: {
-    globeTitle: "去中心化网络",
-    globeScopeNote: "每个数字都是某个 topic 的链上订阅者总数。订阅时长就是统计窗口，所以是全网口径，任何人用任何种子节点都能验证。",
+    globeTitle: "NKN 地球网络",
     globeDhtPending: "第二通路尚未启用",
     globeDhtOff: "DHT 已关闭",
     globeDhtStarting: "加入中…",

@@ -1,440 +1,291 @@
-// The geometry and life-cycle behind the DHT mesh animation.
+// The DHT fishnet's geometry and life-cycle.
 //
 // This lives apart from the component for one reason: the interesting parts --
-// which nodes are linked, when a node wakes or goes dark, how a signal travels
+// which nodes are linked, when a node fades, when a signal is allowed to travel
 // -- are decisions, and decisions inside a requestAnimationFrame callback can
 // only be checked by watching the screen and hoping. Here they can be run on a
 // fixed clock and asserted.
 //
-// Nothing here invents network data. The field is scenery whose LIT nodes are
-// driven by a real peer count the caller passes in; the dim ones stand for the
-// rest of the DHT, which this gateway genuinely has not mapped. That
-// distinction is the whole reason the picture is allowed to exist.
+// The layout, the drift, the fade timings and the signal rate all come from the
+// operator's own reference build of this card. What is added is the module
+// boundary, the types, the per-build generator, and the one thing the reference
+// left open: this card is wired to a real DHT, so the traffic has to follow it.
+//
+// WHAT IS REAL AND WHAT IS SCENERY, stated plainly because it would otherwise
+// be guesswork, and because most of this picture is scenery:
+//
+//   the NET -- where the nodes sit, which ones are tied together, how they
+//   drift, and which ones are dim -- is illustration. It is a sample of a mesh
+//   drawn to fill the card. It is NOT this gateway's routing table: a DHT has
+//   no directory, and this gateway does not know who most of the network is.
+//   The card's caption says so, and no figure is ever drawn on the picture.
+//
+//   the SIGNALS -- the amber beads travelling a strand -- are the one mark that
+//   means "traffic", and they are gated on the real DHT being ready with peers.
+//   With the DHT off, starting, isolated or failed, the net dims and nothing
+//   travels. The reference build ran the signals unconditionally off a timer;
+//   that is fine in a demo and would be invented telemetry here.
 
-/** A node's position in the slab, before projection. */
+/** A node in the net. Resting position, plus where the drift has put it. */
 export interface MeshNode {
+  /** Resting position in CSS pixels, in the canvas's own coordinates. */
   x: number
   y: number
-  z: number
-  /** Radius on screen at z = 0, before the depth scale. */
-  size: number
-  /**
-   * live is what the node is *becoming*: 1 while it belongs to the lit set, 0
-   * while it is scenery. glow chases it, which is what produces the slow
-   * breathing fade rather than a node blinking into existence.
-   */
-  live: number
-  glow: number
-  /** Phase offset so breathing nodes are not all in step. */
+  /** Drift offset, so the nodes do not all sway in step. */
   phase: number
-}
-
-export interface MeshLink {
+  /** 0.08 dim, 1 bright. Chases `to` while `changing`. */
+  alpha: number
   from: number
   to: number
+  /** Seconds at which the current fade began. */
+  start: number
+  changing: boolean
+  /** Position after the drift, filled in by advance(). */
+  px: number
+  py: number
 }
 
-/** A signal in flight along one link. */
+/** A strand, by node index. */
+export type MeshEdge = [number, number]
+
+/** A bead in flight along one strand, from the first index to the second. */
 export interface MeshSignal {
-  link: number
-  /** 0 at the from-end, 1 at the to-end. */
-  progress: number
-  /** Travel time in milliseconds. */
-  duration: number
-  /** Direction of travel: 1 from→to, -1 to→from. */
-  direction: 1 | -1
+  edge: MeshEdge
+  /** Seconds at which it set off. */
+  start: number
 }
 
 export interface MeshField {
   nodes: MeshNode[]
-  links: MeshLink[]
+  edges: MeshEdge[]
   signals: MeshSignal[]
-  /** Accumulated rotation, in radians. */
-  rotation: number
-  /** Milliseconds until the next online/offline event is considered. */
-  nextEvent: number
+  /** Seconds after which another signal may be created. */
+  nextSignal: number
+  /** Seconds after which another node may change brightness. */
+  nextLife: number
+  /**
+   * How many choices have been drawn so far.
+   *
+   * The net's own randomness is spent at build time; this is the stream the
+   * life-cycle and the signals draw from afterwards. Kept as a count on the
+   * field rather than as a closure so the field stays plain data -- which is
+   * what lets a test and the preview harness run it forward on a fixed clock
+   * and get the same picture every time.
+   */
+  picks: number
+}
+
+export interface MeshOptions {
+  /** Grid pitch in CSS pixels. Smaller is denser. */
+  spacing: number
+  /** How far a node wanders from its resting position, in pixels. */
+  drift: number
+  driftSpeed: number
+  /** Seconds between attempts to launch a signal. */
+  signalInterval: number
+  /** Seconds a signal takes to cross one strand. */
+  signalDuration: number
+  /** Seconds between one node changing brightness. */
+  lifecycleInterval: number
+  /** Seconds a node takes to fade in or out. */
+  fadeDuration: number
+  seed: number
+}
+
+export const defaultMeshOptions: MeshOptions = {
+  spacing: 59,
+  drift: 9,
+  driftSpeed: 0.22,
+  signalInterval: 0.72,
+  signalDuration: 0.48,
+  lifecycleInterval: 4.5,
+  fadeDuration: 3.2,
+  seed: 9014
 }
 
 /**
  * A small deterministic generator.
  *
- * The field must look identical on every mount: a mesh that reshuffles itself
- * whenever the component remounts (a route change, a poll-driven re-render)
- * reads as a glitch, not as a network. Math.random cannot give that.
+ * One per build, rather than one shared with the draw loop. The reference build
+ * drew the layout and the runtime picks from the same stream, which means the
+ * net comes out differently every time the card is rebuilt -- and it is rebuilt
+ * on every resize, so dragging a window reshuffles the whole picture. Seeded
+ * per build, a given card size always produces the same net.
  */
 export function seeded(seed: number): () => number {
-  let state = seed >>> 0 || 1
+  let state = seed >>> 0
   return () => {
-    state ^= state << 13
-    state >>>= 0
-    state ^= state >> 17
-    state ^= state << 5
-    state >>>= 0
-    return state / 0x100000000
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 4294967296
   }
 }
 
-export interface FieldOptions {
-  /** How many nodes in total, lit and unlit together. */
-  nodes: number
-  /** Two nodes closer than this in the unit slab are linked. */
-  linkRadius: number
-  /** No node keeps more than this many links, so hubs do not turn into blobs. */
-  maxDegree: number
-  seed: number
+/** Smoothstep. Eases both ends of a fade so a node does not snap into motion. */
+export function smooth(fraction: number): number {
+  return fraction * fraction * (3 - 2 * fraction)
 }
 
-export const defaultFieldOptions: FieldOptions = {
-  // Density is the whole character of the picture. Too few and it reads as a
-  // constellation diagram rather than a network; the count and the radius are
-  // tuned together so the typical node has three or four neighbours and the
-  // mesh holds together without turning into a solid wash.
-  nodes: 130,
-  // The radius has to exceed the mean spacing of the cloud or the mesh breaks
-  // into islands with gaps between them, which reads as a constellation chart
-  // rather than a network. The degree cap, not the radius, is what keeps the
-  // dense middle from filling in solid.
-  linkRadius: 0.44,
-  maxDegree: 5,
-  seed: 0x5eed
+function clamp(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(high, value))
 }
 
 /**
- * buildField lays out the nodes and decides which ones are linked.
+ * buildField lays out the net for a canvas of the given size.
  *
- * The slab is wide and shallow (z is compressed) on purpose. A cube of nodes
- * rotating reads as a sphere, which is the neighbouring card's job; a slab
- * reads as a plane seen at an angle, which is what a mesh looks like.
+ * The grid runs one cell PAST every edge, and odd rows are offset by half a
+ * cell. Both matter: the overhang is what makes the net read as a piece cut out
+ * of something larger rather than a panel with a border of loose ends, and the
+ * half-cell offset turns square cells into triangles, which is what a net looks
+ * like and a lattice does not.
  */
-export function buildField(options: FieldOptions = defaultFieldOptions): MeshField {
+export function buildField(
+  width: number,
+  height: number,
+  options: MeshOptions = defaultMeshOptions
+): MeshField {
   const random = seeded(options.seed)
+  const { spacing } = options
+  const columns = Math.ceil(width / spacing) + 3
+  const rows = Math.ceil(height / spacing) + 3
   const nodes: MeshNode[] = []
-  for (let index = 0; index < options.nodes; index += 1) {
-    nodes.push({
-      x: random() * 2 - 1,
-      y: (random() * 2 - 1) * 0.92,
-      z: (random() * 2 - 1) * 0.42,
-      size: 0.9 + random() * 1.3,
-      live: 0,
-      glow: 0,
-      phase: random()
-    })
-  }
-
-  // Links are computed once, from the resting positions. Recomputing them per
-  // frame as the field turns would make edges appear and vanish with the
-  // rotation, which looks like the mesh is broken rather than turning.
-  const degree = new Array<number>(nodes.length).fill(0)
-  const links: MeshLink[] = []
-  const candidates: Array<{ from: number; to: number; distance: number }> = []
-  for (let a = 0; a < nodes.length; a += 1) {
-    for (let b = a + 1; b < nodes.length; b += 1) {
-      const first = nodes[a]!
-      const second = nodes[b]!
-      const distance = Math.hypot(first.x - second.x, first.y - second.y, first.z - second.z)
-      if (distance <= options.linkRadius) candidates.push({ from: a, to: b, distance })
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const x =
+        (column - 1) * spacing + (row % 2) * spacing * 0.5 + (random() - 0.5) * 25
+      const y = (row - 1) * spacing + (random() - 0.5) * 20
+      nodes.push({
+        x,
+        y,
+        phase: random() * Math.PI * 2,
+        // A few nodes start dim. It is what gives the net texture before the
+        // first fade has had time to happen.
+        alpha: random() < 0.09 ? 0.08 : 1,
+        from: 1,
+        to: 1,
+        start: -100,
+        changing: false,
+        px: x,
+        py: y
+      })
     }
   }
-  // Shortest first, so when the degree cap bites it is the long straggling
-  // edges that get dropped and the local structure that survives.
-  candidates.sort((first, second) => first.distance - second.distance)
-  for (const candidate of candidates) {
-    if (degree[candidate.from]! >= options.maxDegree) continue
-    if (degree[candidate.to]! >= options.maxDegree) continue
-    degree[candidate.from] = degree[candidate.from]! + 1
-    degree[candidate.to] = degree[candidate.to]! + 1
-    links.push({ from: candidate.from, to: candidate.to })
-  }
 
-  // A node the cap left with no edges at all floats unattached, and a handful
-  // of those is what makes a mesh read as scattered dots. Each one gets its
-  // nearest neighbour regardless of that neighbour's degree: one edge over the
-  // cap is invisible, an orphan is not.
-  for (let index = 0; index < nodes.length; index += 1) {
-    if (degree[index]! > 0) continue
-    let nearest = -1
-    let best = Infinity
-    for (let other = 0; other < nodes.length; other += 1) {
-      if (other === index) continue
-      const a = nodes[index]!
-      const b = nodes[other]!
-      const distance = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
-      if (distance < best) {
-        best = distance
-        nearest = other
+  // Strands: across, down, and one diagonal per cell, with about a sixth
+  // dropped. The dropped ones are the difference between a net someone tied
+  // and a mesh a computer generated.
+  const edges: MeshEdge[] = []
+  const add = (a: number, b: number): void => {
+    if (b < nodes.length && random() > 0.16) edges.push([a, b])
+  }
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const index = row * columns + column
+      if (column < columns - 1) add(index, index + 1)
+      if (row < rows - 1) {
+        add(index, index + columns)
+        // The diagonal leans the way the half-cell offset went, so it joins the
+        // two nodes that actually sit either side of it.
+        if (row % 2 && column < columns - 1) add(index, index + columns + 1)
+        else if (!(row % 2) && column > 0) add(index, index + columns - 1)
       }
     }
-    if (nearest >= 0) {
-      degree[index] = degree[index]! + 1
-      degree[nearest] = degree[nearest]! + 1
-      links.push({ from: index, to: nearest })
+  }
+
+  return {
+    nodes,
+    edges,
+    signals: [],
+    nextSignal: 0,
+    nextLife: options.lifecycleInterval,
+    picks: 0
+  }
+}
+
+/**
+ * advance moves the net on to the given moment.
+ *
+ * Absolute time in seconds rather than a delta, so a stalled frame does not
+ * make the drift lurch and a fast display does not speed it up -- and so the
+ * same moment always produces the same picture, which is what makes the preview
+ * harness able to render a frame at all.
+ *
+ * `live` is the honesty gate. False -- the DHT is off, starting, isolated or
+ * failed -- freezes the life-cycle, clears the signals in flight and refuses
+ * new ones. The net still drifts, because the net is illustration; the traffic
+ * does not, because traffic is a claim.
+ */
+export function advance(
+  field: MeshField,
+  time: number,
+  live: boolean,
+  options: MeshOptions = defaultMeshOptions
+): void {
+  if (live && time >= field.nextLife) {
+    const node = field.nodes[Math.floor(draw(field, options) * field.nodes.length)]
+    if (node && !node.changing) {
+      node.from = node.alpha
+      node.to = node.alpha > 0.5 ? 0.08 : 1
+      node.start = time
+      node.changing = true
     }
+    field.nextLife = time + options.lifecycleInterval
   }
 
-  // Size follows degree. A well-connected node drawing bigger is the one piece
-  // of visual weight here that encodes something true about the graph rather
-  // than decorating it -- and it is what stops the field reading as 130
-  // identical specks.
-  for (let index = 0; index < nodes.length; index += 1) {
-    nodes[index]!.size = 0.85 + Math.min(degree[index]!, 6) * 0.28
-  }
-
-  return { nodes, links, signals: [], rotation: 0, nextEvent: 2200 }
-}
-
-/**
- * A star in the sky the mesh hangs in.
- *
- * Stars carry NO network meaning, and that separation is the point. The mesh --
- * nodes, links, signals -- is the part that reports something, and every claim
- * it makes is bounded by what this gateway has actually verified. The sky is
- * scenery: it exists so the field reads as a patch of space rather than a
- * wireframe on a panel, and it is deliberately built from a different shape of
- * mark (tiny, pure, ringless points) so it cannot be mistaken for a peer.
- */
-export interface SkyStar {
-  /** Position in the same -1..1 space as the nodes, unprojected. */
-  x: number
-  y: number
-  /** Radius in CSS pixels at the card's drawing size. */
-  size: number
-  /** 0..1. Most stars are faint; a few carry the image. */
-  brightness: number
-  /** 0 cool blue-white, 1 warm amber. Real skies are mostly cool. */
-  warmth: number
-  /** Twinkle offset, so the sky does not pulse in unison. */
-  phase: number
-  /** Whether to draw the four-point diffraction cross. */
-  sparkle: boolean
-}
-
-/**
- * buildSky lays out the stars, once and deterministically.
- *
- * Deterministic for the same reason the mesh is: a sky that reshuffles on every
- * remount reads as a glitch. The distribution is uniform rather than clustered
- * because the mesh in front of it already provides the structure -- a clustered
- * sky competes with it.
- *
- * The brightness curve is what makes it look like a photograph instead of
- * confetti. Raising a uniform random to the fourth power leaves most stars
- * nearly invisible and a handful bright, which is roughly how a real field of
- * stars is distributed across a sensor.
- */
-export function buildSky(count = 260, seed = 0x57a25): SkyStar[] {
-  const random = seeded(seed)
-  const stars: SkyStar[] = []
-
-  // Two populations, because one uniform population reads as noise.
-  //
-  // A real field of stars has a band across it, and the band is what makes the
-  // difference between "dots scattered on black" and "a piece of sky". A third
-  // of the stars are drawn into a diagonal band; the rest are spread evenly.
-  // The band runs corner to corner rather than through the middle, so it does
-  // not sit behind the densest part of the mesh and compete with it.
-  const banded = Math.round(count / 3)
-  for (let index = 0; index < count; index += 1) {
-    const inBand = index < banded
-    let x = random() * 2 - 1
-    let y = random() * 2 - 1
-    if (inBand) {
-      // y = -x is the band's line; the offset is the sum of two randoms, which
-      // clusters toward the middle far more naturally than one random does.
-      const along = random() * 2 - 1
-      const spread = (random() + random() - 1) * 0.34
-      x = along
-      y = -along + spread
-      if (y < -1 || y > 1) y = spread
-    }
-    // Raising a uniform random to the fourth power leaves most stars nearly
-    // invisible and a handful bright, which is roughly how a real field is
-    // distributed across a sensor. Band stars sit a little brighter.
-    const brightness = Math.min(1, Math.pow(random(), 4) + (inBand ? 0.1 : 0))
-    stars.push({
-      x,
-      y,
-      size: 0.3 + brightness * 0.95,
-      brightness,
-      // Warm stars are rare, and a handful of amber specks among blue-white
-      // ones is what stops the sky reading as a single flat tint.
-      warmth: random() < 0.12 ? 0.55 + random() * 0.45 : random() * 0.22,
-      phase: random(),
-      // Only the brightest few get a cross. Sparkles on everything is the
-      // difference between a night sky and a glitter sticker.
-      sparkle: brightness > 0.66
-    })
-  }
-  return stars
-}
-
-/** litTarget is how many nodes should be lit for a given real peer count. */
-export function litTarget(peers: number, total: number): number {
-  if (peers <= 0) return 0
-  // One lit node per peer, which is the honest mapping, capped so a large
-  // routing table does not light the entire field and erase the distinction
-  // between "peers we know" and "the rest of the DHT".
-  return Math.min(peers, Math.floor(total * 0.55))
-}
-
-/**
- * reconcileLit moves nodes into and out of the lit set, a few at a time.
- *
- * It returns the indices it changed. Changing every node at once when the poll
- * arrives would make the whole field flash; the point of the animation is that
- * joining and leaving are things you watch happen.
- */
-export function reconcileLit(field: MeshField, target: number, random: () => number, budget = 1): number[] {
-  const live: number[] = []
-  const dark: number[] = []
-  field.nodes.forEach((node, index) => {
-    if (node.live > 0.5) live.push(index)
-    else dark.push(index)
-  })
-  const changed: number[] = []
-  let remaining = budget
-  while (live.length < target && dark.length > 0 && remaining > 0) {
-    const pick = Math.floor(random() * dark.length)
-    const index = dark.splice(pick, 1)[0]!
-    field.nodes[index]!.live = 1
-    live.push(index)
-    changed.push(index)
-    remaining -= 1
-  }
-  while (live.length > target && live.length > 0 && remaining > 0) {
-    const pick = Math.floor(random() * live.length)
-    const index = live.splice(pick, 1)[0]!
-    field.nodes[index]!.live = 0
-    changed.push(index)
-    remaining -= 1
-  }
-  return changed
-}
-
-/** How long a node takes to fade fully in or out, in milliseconds. */
-export const GLOW_RISE_MS = 2600
-
-export interface StepOptions {
-  /** Milliseconds since the previous step. */
-  elapsed: number
-  /** Radians per second. */
-  spin: number
-  /** How many nodes should be lit right now. */
-  target: number
-  /** False freezes rotation, signals and life events but keeps the picture. */
-  animate: boolean
-  random: () => number
-}
-
-/**
- * step advances the field by one frame.
- *
- * Everything here is driven by elapsed milliseconds rather than frame count, so
- * the mesh turns at the same rate on a 60Hz laptop and a 144Hz monitor, and a
- * stalled frame does not make the animation lurch.
- */
-export function step(field: MeshField, options: StepOptions): void {
-  const { elapsed, animate, random } = options
-
-  // Glow walks toward live at a fixed rate, and ARRIVES. An eased chase
-  // (glow += difference * rate) approaches 1 without ever reaching it, which
-  // would leave every joined node stuck in the "settling" state, breathing for
-  // as long as the page is open instead of going steady once it has joined.
-  // The breathing means "joining"; it has to be able to stop.
-  const stride = elapsed / GLOW_RISE_MS
   for (const node of field.nodes) {
-    const gap = node.live - node.glow
-    if (Math.abs(gap) <= stride) node.glow = node.live
-    else node.glow += Math.sign(gap) * stride
+    if (node.changing) {
+      const progress = clamp((time - node.start) / options.fadeDuration, 0, 1)
+      node.alpha = node.from + (node.to - node.from) * smooth(progress)
+      if (progress === 1) node.changing = false
+    }
+    // Two sways. The small one is per node and gives the net its shimmer; the
+    // large slow one varies with y, so whole bands of the net lean together --
+    // that is what reads as the sheet moving rather than the dots vibrating.
+    node.px =
+      node.x +
+      Math.sin(time * options.driftSpeed + node.phase) * options.drift +
+      Math.sin(time * 0.09 + node.y * 0.01) * 12
+    node.py = node.y + Math.cos(time * options.driftSpeed * 0.8 + node.phase) * options.drift
   }
 
-  if (!animate) return
-
-  field.rotation += (options.spin * elapsed) / 1000
-
-  // Life events are rare on purpose. A mesh where nodes are constantly winking
-  // in and out reads as noise; the point is that an arrival is noticeable.
-  field.nextEvent -= elapsed
-  if (field.nextEvent <= 0) {
-    field.nextEvent = 3800 + random() * 4200
-    reconcileLit(field, options.target, random, 1)
-  }
-
-  // Signals travel only between nodes that are both lit, because a signal is
-  // the one thing here that claims traffic happened.
   for (let index = field.signals.length - 1; index >= 0; index -= 1) {
-    const signal = field.signals[index]!
-    signal.progress += elapsed / signal.duration
-    if (signal.progress >= 1) field.signals.splice(index, 1)
+    if (time - field.signals[index]!.start >= options.signalDuration) {
+      field.signals.splice(index, 1)
+    }
   }
-  const lit = field.links.filter(link =>
-    field.nodes[link.from]!.glow > 0.6 && field.nodes[link.to]!.glow > 0.6
-  )
-  // Roughly one new signal every 320ms while there is anywhere for one to go,
-  // and never more than a handful at once so each one can be followed.
-  if (lit.length > 0 && field.signals.length < 5 && random() < elapsed / 320) {
-    const chosen = lit[Math.floor(random() * lit.length)]!
-    field.signals.push({
-      link: field.links.indexOf(chosen),
-      progress: 0,
-      duration: 420 + random() * 320,
-      direction: random() < 0.5 ? 1 : -1
-    })
+
+  if (!live) {
+    field.signals.length = 0
+    return
+  }
+
+  if (time >= field.nextSignal && field.edges.length > 0) {
+    const edge = field.edges[Math.floor(draw(field, options) * field.edges.length)]!
+    // Both ends bright, or the bead appears to leave from nothing.
+    if (field.nodes[edge[0]]!.alpha > 0.6 && field.nodes[edge[1]]!.alpha > 0.6) {
+      field.signals.push({
+        edge: draw(field, options) > 0.5 ? edge : [edge[1], edge[0]],
+        start: time
+      })
+    }
+    field.nextSignal = time + options.signalInterval
   }
 }
 
-export interface Projected {
-  x: number
-  y: number
-  /** 0 at the far edge of the slab, 1 at the near edge. */
-  depth: number
-  scale: number
+/** draw takes the next choice from the field's own stream. */
+function draw(field: MeshField, options: MeshOptions): number {
+  field.picks += 1
+  // Re-seeded from the count rather than kept as a running generator, for the
+  // same reason `picks` is a number: the field has to stay plain data. The
+  // multiply is what keeps consecutive counts from giving neighbouring values,
+  // which a linear generator seeded 1, 2, 3 would.
+  return seeded((options.seed ^ (field.picks * 2654435761)) >>> 0)()
 }
 
-/**
- * project turns a slab position into canvas coordinates.
- *
- * The perspective is deliberately weak. A strong one would swing the near
- * nodes across the card as it turns, which draws the eye to the motion instead
- * of the mesh; a weak one gives just enough parallax to read as depth.
- */
-export function project(
-  node: MeshNode,
-  rotation: number,
-  width: number,
-  height: number
-): Projected {
-  const cos = Math.cos(rotation)
-  const sin = Math.sin(rotation)
-  const x = node.x * cos - node.z * sin
-  const z = node.x * sin + node.z * cos
-  // z spans the slab's half-depth, not [-1,1], so normalise against that or
-  // the near half of the field never reaches full brightness.
-  const depth = Math.min(1, Math.max(0, (z / 1.1 + 1) / 2))
-  const scale = 0.8 + depth * 0.36
-  // The spread is bounded so that even the nearest node at the widest point of
-  // the turn lands inside the canvas. A node clipped by the edge reads as a
-  // rendering fault rather than a network that continues past the frame.
-  // The spread is bounded well inside the frame, and not only to avoid
-  // clipping: the sky has to be visible AROUND the graph. A mesh that reaches
-  // the edges reads as a net stretched across the card, where one with a
-  // margin of stars around it reads as a constellation sitting in space.
-  return {
-    x: width / 2 + x * width * 0.38 * scale,
-    y: height / 2 + node.y * height * 0.4 * scale,
-    depth,
-    scale
-  }
-}
-
-/** pointOnLink is where a signal sits, in projected space. */
-export function pointOnLink(
-  from: Projected,
-  to: Projected,
-  signal: MeshSignal
-): { x: number; y: number } {
-  const fraction = signal.direction === 1 ? signal.progress : 1 - signal.progress
-  return {
-    x: from.x + (to.x - from.x) * fraction,
-    y: from.y + (to.y - from.y) * fraction
-  }
+/** signalProgress is how far along its strand a bead has travelled, 0 to 1. */
+export function signalProgress(
+  signal: MeshSignal,
+  time: number,
+  options: MeshOptions = defaultMeshOptions
+): number {
+  return clamp((time - signal.start) / options.signalDuration, 0, 1)
 }

@@ -826,8 +826,7 @@ export default {
     "detailPlaceholder": "Los mensajes aparecerán aquí."
   },
   "dashboard": {
-    "globeTitle": "Red descentralizada",
-    "globeScopeNote": "Cada cifra es el total de suscriptores en cadena de un tema. La duración de la suscripción es la ventana, así que son de toda la red y cualquiera puede verificarlas desde cualquier semilla.",
+    "globeTitle": "Red global NKN",
     "globeDhtPending": "Segunda vía aún no construida",
     "globeDhtOff": "DHT desactivado",
     "globeDhtStarting": "Uniéndose…",

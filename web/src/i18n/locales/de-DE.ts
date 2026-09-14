@@ -826,8 +826,7 @@ export default {
     "detailPlaceholder": "Hier werden Meldungen angezeigt"
   },
   "dashboard": {
-    "globeTitle": "Dezentrales Netz",
-    "globeScopeNote": "Jede Zahl ist die On-Chain-Abonnentenzahl eines Topics. Die Abonnementdauer ist das Fenster, daher gelten sie netzweit und jeder kann sie über jeden Seed prüfen.",
+    "globeTitle": "NKN Weltnetz",
     "globeDhtPending": "Zweiter Pfad noch nicht aufgebaut",
     "globeDhtOff": "DHT aus",
     "globeDhtStarting": "Tritt bei…",

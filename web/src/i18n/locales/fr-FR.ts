@@ -826,8 +826,7 @@ export default {
     "detailPlaceholder": "Les messages apparaîtront ici"
   },
   "dashboard": {
-    "globeTitle": "Réseau décentralisé",
-    "globeScopeNote": "Chaque chiffre est le total des abonnés on-chain d'un sujet. La durée de l'abonnement est la fenêtre : ces chiffres valent pour tout le réseau et chacun peut les vérifier via n'importe quel seed.",
+    "globeTitle": "Réseau mondial NKN",
     "globeDhtPending": "Deuxième voie pas encore construite",
     "globeDhtOff": "DHT désactivé",
     "globeDhtStarting": "Connexion…",

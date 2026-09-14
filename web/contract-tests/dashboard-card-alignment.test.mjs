@@ -102,25 +102,36 @@ test('a stretched card hands the extra height to its content', () => {
   )
 })
 
-test('the two network drawings are capped to the same size', async () => {
-  // Both cards sit in one row and stretch together. If one drawing grows with
-  // the card and the other is capped, the taller card sets the row height and
+test('the two network drawings are the same height, from one rule', async () => {
+  // Both cards sit in one row and stretch together. If one drawing is a
+  // different height from the other, the taller card sets the row height and
   // the shorter one carries the difference as a void.
-  const globe = await readFile(
-    new URL('../src/components/NetworkGlobeCard.vue', import.meta.url),
+  //
+  // The drawings used to be square canvases capped at a shared maximum; they
+  // are now full-bleed panels of a fixed height, so the height is the thing
+  // that has to match. It matches by construction: both cards use the same
+  // `.net-stage` class from the shared stylesheet, and neither may set its own
+  // height. That is stronger than two numbers a test compares -- there is only
+  // one number.
+  const chrome = await readFile(
+    new URL('../src/components/networkCard.css', import.meta.url),
     'utf8'
   )
-  const mesh = await readFile(
-    new URL('../src/components/DHTMeshCard.vue', import.meta.url),
-    'utf8'
-  )
-  const cap = source => {
-    const match = source.match(/max-width:\s*(\d+)px/)
-    return match ? Number(match[1]) : null
+  const stage = chrome.match(/\.net-stage \{[^}]*\}/)
+  assert.ok(stage, 'the shared stage rule is gone')
+  assert.match(stage[0], /height:\s*\d+px/, 'the shared stage no longer fixes a height')
+
+  for (const name of ['NetworkGlobeCard.vue', 'DHTMeshCard.vue']) {
+    const source = await readFile(
+      new URL(`../src/components/${name}`, import.meta.url),
+      'utf8'
+    )
+    assert.match(source, /class="net-stage"/, `${name} no longer uses the shared stage`)
+    const styles = source.split('<style')[1] ?? ''
+    assert.doesNotMatch(
+      styles,
+      /height:\s*\d+px/,
+      `${name} sets its own drawing height; the row will go ragged`
+    )
   }
-  assert.equal(
-    cap(globe.slice(globe.indexOf('.globe-canvas'))),
-    cap(mesh.slice(mesh.indexOf('.mesh-canvas'))),
-    'the globe and the mesh are drawn at different maximum sizes'
-  )
 })

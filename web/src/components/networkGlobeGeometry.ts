@@ -1,161 +1,220 @@
-// Geometry for the rotating dot-matrix globe.
+// The dotted globe's geometry.
 //
-// Kept out of the component so the projection and great-circle maths can be
-// tested on their own — a globe that draws points on the wrong side of the
-// sphere is the kind of bug that is obvious in a test and easy to miss by eye.
+// Kept apart from the component because a projection that puts points on the
+// wrong side of the sphere looks perfectly plausible in a screenshot and is
+// obviously wrong in motion -- out here it can be pinned on fixed inputs.
+//
+// The sphere sampling, the continent outlines and the projection all come from
+// the operator's own reference build of these two cards; what is added here is
+// the module boundary, the types, and the tests that hold the projection still.
+//
+// The outlines are decorative. They are a hand-simplified silhouette of the
+// continents so the globe reads as the Earth, and they map nothing about any
+// peer: this gateway never learns where its peers are, and a map pin for one
+// would be a lie dressed up as telemetry.
 
 export interface LatLon {
   lat: number
   lon: number
 }
 
+/** A sampled point on the sphere, with whether it falls on land. */
+export interface SpherePoint extends LatLon {
+  /** Unit position, x right, y north, z toward the viewer at longitude 0. */
+  x: number
+  y: number
+  z: number
+  land: boolean
+}
+
 export interface Projected {
   x: number
   y: number
-  /** Depth along the view axis: positive is the hemisphere facing the viewer. */
+  /** Unit depth: 1 facing the viewer, negative behind the sphere. */
   z: number
   visible: boolean
 }
 
-const DEGREES = Math.PI / 180
+const DEGREES = 180 / Math.PI
 
 /**
- * Orthographic projection of a point on a unit sphere, rotated by `spin`
- * degrees of longitude. The far hemisphere is reported as not visible so the
- * caller can skip it rather than drawing dots that belong behind the globe.
- */
-export function project(
-  point: LatLon,
-  spin: number,
-  centerX: number,
-  centerY: number,
-  radius: number
-): Projected {
-  const lat = point.lat * DEGREES
-  const lon = (point.lon + spin) * DEGREES
-  const cosLat = Math.cos(lat)
-  const x = cosLat * Math.sin(lon)
-  const y = Math.sin(lat)
-  const z = cosLat * Math.cos(lon)
-  return {
-    x: centerX + x * radius,
-    y: centerY - y * radius,
-    z,
-    visible: z > 0
-  }
-}
-
-/**
- * Points spread evenly over the sphere using the Fibonacci lattice. An even
- * spread matters: latitude/longitude steps bunch up at the poles and the globe
- * ends up with two bright caps.
+ * spherePoints spreads n points evenly over the sphere.
+ *
+ * A latitude/longitude grid piles points onto the poles, which reads as two
+ * bright caps. The Fibonacci spiral -- equal steps in y, each turned by the
+ * golden angle -- gives an even covering with no seam and no cap.
  */
 export function spherePoints(count: number): LatLon[] {
-  const points: LatLon[] = []
   const golden = Math.PI * (3 - Math.sqrt(5))
+  const points: LatLon[] = []
   for (let index = 0; index < count; index += 1) {
-    const y = 1 - (index / Math.max(1, count - 1)) * 2
-    const lat = Math.asin(Math.max(-1, Math.min(1, y))) / DEGREES
-    const lon = ((index * golden) / DEGREES) % 360 - 180
-    points.push({ lat, lon })
+    const y = 1 - (2 * (index + 0.5)) / count
+    const latitude = Math.asin(Math.min(1, Math.max(-1, y)))
+    const longitude = ((index * golden) % (2 * Math.PI)) - Math.PI
+    points.push({ lat: latitude * DEGREES, lon: longitude * DEGREES })
   }
   return points
 }
 
-// A 180x90 land/sea grid (2 degrees per cell), generated offline from Natural
-// Earth's 110m land geometry and packed into base64. It is baked in rather than
-// fetched or computed so the globe needs no geo dependency at runtime and costs
-// the bundle about 2.7 KB.
-//
-// The alternative — approximating continents with hand-written boxes — was
-// tried first and rendered as unrecognisable blobs. A wrong map is worse than
-// no map.
-const LAND_MASK_COLUMNS = 180
-const LAND_MASK_ROWS = 90
-const LAND_MASK_BASE64 =
-  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf4AP/AAAAAAAAAAAAAAAAAAAAAAAAX/z///+AAAAAAAABAAAAAAAAAAAAAYd8P///wAA+AAAAAA8AAAAAAAAAAAwAnw////4AAIAAAAAAGAAAAAAAAAAADivwAf//wAAAAADAAf/wAHYAAAAAADoi3sAP//gAAAAAMAD///sAAAAgBgACfwz/AD/+gAAAwAEHf///////+AP//////////////4A//EgAAAAAAAgH///////////////gAFAAgAAAAAAAAz///////////////BhQAAAAAAAAAAAAP/////4A0B4AAAD5/////////////Af3////gHgA4AAAH5///////////LwAHgH///gHkAAAAAH4/////////+CIAABAB///4D+AAAAGCx/////////4A8AAIAAf///n/gAAAOCD/////////wA4AAAAAf///n/wAAAbP///////////AgAAAAAP/////wAAADf//////////9AAAAAAAF////0YAAAB///////////9AAAAAAAD////8EAAAB///////////5AAAAAAAD////2AAAAB/f5fP//////wAAAAAAAD////gAAAAfxnwPP//////jAAAAAAAD////AAAAAPCb3/n/////+CAAAAAAAD///8AAAAAfALf/n////+ECAAAAAAAB///8AAAAAGHQP/n/////mMAAAAAAAA///8AAAAAH+Ai///////E8AAAAAAAAf//wAAAAAP/AA///////BgAAAAAAAAP//gAAAAAf/73///////gAAAAAAAAAD/AQAAAAAf////f/////gAAAAAAAAAF+AQAAAAB///+/n/////AAAAAAAAAAC+AAAAAAB///+f0H////AAAAAAAAAAAeAwAAAAD////f/B///8gAAAAAAAAAAeGEAAAAH////v+B/z/AAAAAAAAAAAAPMAgAAAD////n+A/B+gAAAAAAAAAAAD8AAAAAD////n4AeB/AgAAAAAAAAAAAPAAAAAH////3gAcAfAgAAAAAAAAAAADAAAAAD////6AAcAfggAAAAAAAAAAABDwAAAD////8wAMATAIAAAAAAAAAAAAr/AAAB/////gAKASAAAAAAAAAAAAAAH/gAAA/////gACAAAIAAAAAAAAAAAAH/8AAAaH///AAAAsGAAAAAAAAAAAAAH/+AAAAB//+AAAAUOAAAAAAAAAAAAAP/+AAAAB//8AAAAYegAAAAAAAAAAAAP//gAAAD//4AAAAMeBgAAAAAAAAAAAP//8AAAB//wAAAAGdiuAAAAAAAAAAAf///AAAA//wAAAACAQHgAAAAAAAAAAP///gAAA//wAAAABwAHwgAAAAAAAAAH///AAAA//wAAAAACIDQIAAAAAAAAAH//+AAAAf/wAAAAAAAAAAAAAAAAAAAD//+AAAA//wgAAAAABxAAAAAAAAAAAD//+AAAA//wgAAAAAPxgBAAAAAAAAAA//8AAAA//jgAAAAAf5gAAAAAAAAAAAf/8AAAA//DgAAAAAf/gAAAAAAAAAAAf/8AAAAf/DAAAAAD//4CAAAAAAAAAAf/wAAAAf/DAAAAAH//4AAAAAAAAAAAf/AAAAAf+CAAAAAH//8AAAAAAAAAAAf/AAAAAP8AAAAAAH//+AAAAAAAAAAA/+AAAAAP8AAAAAAH//+AAAAAAAAAAA/+AAAAAH4AAAAAAD//+AAAAAAAAAAA/8AAAAAHwAAAAAADwf8AAAAAAAAAAA/gAAAAAAAAAAAAACAH4AIAAAAAAAAB/wAAAAAAAAAAAAAAAD4AEAAAAAAAAB+AAAAAAAAAAAAAAAAAAAGAAAAAAAAB6AAAAAAAAAAAAAAAAAwAMAAAAAAAAA8AAAAAAAAAAAAAAAAAQAYAAAAAAAAB4AAAAAAAAAAAAAAAAAAAwAAAAAAAAB4AAAAAAAAAAAAAAAAAAAAAAAAAAAADwAAAAAAAAAACAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAeAAIP+f/gAAAAAAAAAAAMAAAAAAABP/+H//////AAAAAAAAAAA+AAAAAf////8////////AAAAAAAOEAPAAAB///////////////gAAAP//T//8AAAH//////////////+AAAH/////4AAAH///////////////8AAE//////4ABw////////////////8AAAD//////gCA////////////////wAAAf/////////////////////////+AAH/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-
-let landBits: Uint8Array | null = null
-
-function maskBytes(): Uint8Array {
-  if (landBits) return landBits
-  // atob, not Buffer. The Buffer fallback that used to stand here was written
-  // so the contract tests could call isLand outside a browser, and it was two
-  // mistakes at once: atob has been a global in Node since 16 so the branch
-  // was never taken, and naming Buffer in browser code is a type error
-  // (TS2591) that would have been a runtime crash in any environment that
-  // actually reached it.
-  const binary = atob(LAND_MASK_BASE64)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
-  landBits = bytes
-  return bytes
-}
-
-export function isLand(point: LatLon): boolean {
-  const column = Math.floor(((point.lon + 180) / 360) * LAND_MASK_COLUMNS)
-  const row = Math.floor(((90 - point.lat) / 180) * LAND_MASK_ROWS)
-  if (column < 0 || column >= LAND_MASK_COLUMNS || row < 0 || row >= LAND_MASK_ROWS) return false
-  const bit = row * LAND_MASK_COLUMNS + column
-  const bytes = maskBytes()
-  const byte = bytes[bit >> 3]
-  if (byte === undefined) return false
-  return (byte & (128 >> (bit & 7))) !== 0
-}
-
 /**
- * How far a link bows above the surface at its midpoint, as a fraction of the
- * globe's radius. Small on purpose: under an orthographic projection a lifted
- * point moves straight out from the centre of the disc, so a link whose far end
- * sits near the limb leaves the globe's silhouette by exactly this fraction. Too
- * much lift and the beam shoots off the edge of the card.
+ * buildGlobe samples the sphere once and keeps the unit positions with it.
+ *
+ * The land test is the expensive part -- a point against a dozen polygons --
+ * and it is answered once at build rather than every frame. The unit position
+ * is cached with it for the same reason: the draw loop then only rotates.
  */
-export const ARC_LIFT = 0.11
-
-/** The radius multiplier for a point `fraction` of the way along a link. */
-export function arcAltitude(fraction: number): number {
-  return 1 + ARC_LIFT * Math.sin(Math.max(0, Math.min(1, fraction)) * Math.PI)
+export function buildGlobe(count = 5200): SpherePoint[] {
+  return spherePoints(count).map(point => {
+    const latitude = point.lat / DEGREES
+    const longitude = point.lon / DEGREES
+    return {
+      ...point,
+      x: Math.cos(latitude) * Math.sin(longitude),
+      y: Math.sin(latitude),
+      z: Math.cos(latitude) * Math.cos(longitude),
+      land: isLand(point)
+    }
+  })
 }
 
-/**
- * How strongly a point on a link is drawn, given its depth. Links fade out as
- * they approach the terminator instead of stopping dead, so a beam whose far end
- * is over the horizon dissolves rather than ending in a stray line.
- */
-export function arcOpacity(z: number): number {
-  if (z <= 0) return 0
-  return Math.min(1, z * 3.2)
-}
+// Hand-simplified continent silhouettes, in longitude/latitude pairs.
+// Decorative geometry, not a geographic dataset and not node locations.
+const LAND: Array<Array<[number, number]>> = [
+  [[-168, 70], [-140, 71], [-128, 57], [-110, 52], [-95, 51], [-82, 60], [-58, 51],
+    [-67, 44], [-82, 25], [-99, 18], [-111, 29], [-124, 40], [-132, 54], [-166, 60]],
+  [[-81, 12], [-66, 10], [-50, 0], [-35, -7], [-42, -23], [-54, -35], [-68, -55],
+    [-75, -42], [-79, -15]],
+  [[-53, 60], [-43, 60], [-20, 76], [-38, 83], [-61, 79]],
+  [[-17, 35], [5, 37], [30, 31], [35, 15], [50, 11], [41, -12], [30, -34], [18, -35],
+    [8, -20], [-4, 4], [-17, 15]],
+  [[-10, 36], [-9, 44], [5, 49], [9, 58], [25, 71], [45, 68], [61, 73], [95, 77],
+    [138, 71], [178, 65], [163, 53], [144, 47], [139, 35], [123, 25], [110, 20],
+    [106, 3], [98, 8], [90, 22], [80, 7], [70, 24], [53, 26], [44, 12], [34, 29],
+    [28, 41], [15, 39]],
+  [[112, -11], [131, -12], [141, -10], [154, -25], [146, -39], [130, -33], [114, -35]],
+  [[47, -13], [50, -16], [48, -26], [44, -24]],
+  [[130, 32], [142, 44], [146, 43], [140, 34]],
+  [[96, 5], [109, -6], [120, -8], [130, -4], [140, -6], [148, -10], [132, -11],
+    [113, -9], [103, -4]],
+  [[-8, 50], [-3, 59], [1, 58], [1, 51]],
+  [[166, -34], [178, -38], [173, -47], [166, -45]]
+]
 
-/**
- * Points along the great circle between two coordinates — the path a link
- * actually follows on a sphere. A straight screen-space line between two
- * projected points would cut through the globe instead of lying on it.
- */
-export function greatCircle(from: LatLon, to: LatLon, segments = 48): LatLon[] {
-  const lat1 = from.lat * DEGREES
-  const lon1 = from.lon * DEGREES
-  const lat2 = to.lat * DEGREES
-  const lon2 = to.lon * DEGREES
-
-  const delta = 2 * Math.asin(Math.sqrt(
-    Math.sin((lat2 - lat1) / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2
-  ))
-  if (!Number.isFinite(delta) || delta === 0) return [from, to]
-
-  const path: LatLon[] = []
-  for (let step = 0; step <= segments; step += 1) {
-    const fraction = step / segments
-    const a = Math.sin((1 - fraction) * delta) / Math.sin(delta)
-    const b = Math.sin(fraction * delta) / Math.sin(delta)
-    const x = a * Math.cos(lat1) * Math.cos(lon1) + b * Math.cos(lat2) * Math.cos(lon2)
-    const y = a * Math.cos(lat1) * Math.sin(lon1) + b * Math.cos(lat2) * Math.sin(lon2)
-    const z = a * Math.sin(lat1) + b * Math.sin(lat2)
-    path.push({
-      lat: Math.atan2(z, Math.sqrt(x * x + y * y)) / DEGREES,
-      lon: Math.atan2(y, x) / DEGREES
-    })
+function inPolygon(x: number, y: number, polygon: Array<[number, number]>): boolean {
+  let inside = false
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const a = polygon[index]!
+    const b = polygon[previous]!
+    if (
+      a[1] > y !== b[1] > y &&
+      x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]
+    ) {
+      inside = !inside
+    }
   }
-  return path
+  return inside
 }
+
+/** isLand answers whether a coordinate falls inside the decorative outlines. */
+export function isLand(point: LatLon): boolean {
+  return LAND.some(polygon => inPolygon(point.lon, point.lat, polygon))
+}
+
+// The globe is tipped slightly rather than drawn face on, which is what stops
+// it reading as a flat disc of dots. The pair below is a shear, not a rotation:
+// it leans the axis toward the viewer's right and lifts the north pole. The
+// coefficients are just under one, so a projected point always lands inside the
+// disc -- asserted in the contract tests, because a dot outside the rim reads
+// as a rendering fault.
+const TILT = 0.14
+const KEEP_X = 0.99
+const KEEP_Y = 0.98
+
+/**
+ * project turns a unit sphere position into canvas coordinates.
+ *
+ * Orthographic: no perspective, which is right for a globe drawn as dots --
+ * perspective would swell the middle and the dots would stop reading as an even
+ * covering. Depth comes back as z so the caller can fade the limb.
+ */
+export function project(
+  point: LatLon | SpherePoint,
+  rotationDegrees: number,
+  centreX: number,
+  centreY: number,
+  radius: number
+): Projected {
+  let unitX: number
+  let unitY: number
+  let unitZ: number
+  if ('x' in point) {
+    unitX = point.x
+    unitY = point.y
+    unitZ = point.z
+  } else {
+    const latitude = point.lat / DEGREES
+    const longitude = point.lon / DEGREES
+    unitX = Math.cos(latitude) * Math.sin(longitude)
+    unitY = Math.sin(latitude)
+    unitZ = Math.cos(latitude) * Math.cos(longitude)
+  }
+
+  const angle = rotationDegrees / DEGREES
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const turnedX = unitX * cos + unitZ * sin
+  const depth = unitZ * cos - unitX * sin
+
+  const screenX = turnedX * KEEP_X + unitY * TILT
+  const screenY = unitY * KEEP_Y - turnedX * TILT
+
+  return {
+    x: centreX + screenX * radius,
+    y: centreY - screenY * radius,
+    z: depth,
+    // A shade past the limb rather than exactly at it: the last dots fade out
+    // instead of the covering ending on a hard edge.
+    visible: depth >= HORIZON
+  }
+}
+
+/** How far past the limb a dot is still drawn. */
+export const HORIZON = -0.1
+
+/**
+ * The three markers that ride the sphere.
+ *
+ * Fixed latitudes turning with the globe, spaced so one is usually in view.
+ * They are ornament -- a globe of dots with nothing on it looks unfinished --
+ * and they are drawn only while the channel is actually up, because a marker
+ * pulsing on a disconnected globe is the picture claiming activity.
+ */
+export const MARKER_LATITUDES = [0.58, 0.1, -0.43]
+
+export interface Marker {
+  x: number
+  y: number
+  z: number
+}
+
+export function markerAt(
+  index: number,
+  rotationDegrees: number,
+  centreX: number,
+  centreY: number,
+  radius: number
+): Marker {
+  const angle = rotationDegrees / DEGREES + index * 1.8
+  const latitude = MARKER_LATITUDES[index % MARKER_LATITUDES.length]!
+  const unitX = Math.sin(angle) * Math.cos(latitude)
+  const unitY = Math.sin(latitude)
+  const depth = Math.cos(angle) * Math.cos(latitude)
+  return {
+    x: centreX + (unitX * KEEP_X + unitY * TILT) * radius,
+    y: centreY - (unitY * KEEP_Y - unitX * TILT) * radius,
+    z: depth
+  }
+}
+
+/** A marker nearer the limb than this is not drawn at all. */
+export const MARKER_HORIZON = 0.15

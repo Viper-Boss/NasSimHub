@@ -3,271 +3,336 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
-  GLOW_RISE_MS,
+  advance,
   buildField,
-  buildSky,
-  defaultFieldOptions,
-  litTarget,
-  project,
-  reconcileLit,
+  defaultMeshOptions,
   seeded,
-  step
+  signalProgress,
+  smooth
 } from '../src/components/dhtMeshField.ts'
 
-// The mesh animation's decisions are made here rather than inside the render
-// loop so they can be checked on a fixed clock. The one that matters most is
-// the last test in this file: the picture must never show traffic the gateway
-// did not actually have.
+// The net's decisions are made here rather than inside the render loop so they
+// can be checked on a fixed clock. The one that matters most is the last group
+// in this file: the picture must never show traffic the gateway did not have.
 
-test('the field is the same on every build, so a remount does not reshuffle it', () => {
-  const first = buildField()
-  const second = buildField()
+const SIZE = { width: 560, height: 365 }
+
+test('the net is the same on every build, so a resize does not reshuffle it', () => {
+  // The reference build drew the layout and the running animation from one
+  // shared generator, so a rebuild produced a different net -- and it rebuilds
+  // on every resize, which means dragging a window reshuffled the whole
+  // picture. A net that reshuffles reads as a glitch, not as a network.
+  const first = buildField(SIZE.width, SIZE.height)
+  const second = buildField(SIZE.width, SIZE.height)
   assert.deepEqual(
-    first.nodes.map(node => [node.x, node.y, node.z]),
-    second.nodes.map(node => [node.x, node.y, node.z])
+    first.nodes.map(node => [node.x, node.y, node.phase, node.alpha]),
+    second.nodes.map(node => [node.x, node.y, node.phase, node.alpha])
   )
-  assert.deepEqual(first.links, second.links)
-})
+  assert.deepEqual(first.edges, second.edges)
 
-test('no node is left floating without an edge', () => {
-  const field = buildField()
-  const degree = new Array(field.nodes.length).fill(0)
-  for (const link of field.links) {
-    degree[link.from] += 1
-    degree[link.to] += 1
-  }
-  const orphans = degree.filter(count => count === 0).length
-  assert.equal(orphans, 0, `${orphans} nodes have no links; the mesh would read as scattered dots`)
-})
+  // Running one of them forward must not change what a fresh build produces.
+  for (let time = 0; time < 40; time += 0.1) advance(first, time, true)
+  const third = buildField(SIZE.width, SIZE.height)
+  assert.deepEqual(third.edges, second.edges, 'the layout depends on the animation')
 
-test('node size follows how well connected the node is', () => {
-  const field = buildField()
-  const degree = new Array(field.nodes.length).fill(0)
-  for (const link of field.links) {
-    degree[link.from] += 1
-    degree[link.to] += 1
-  }
-  let mostLinked = 0
-  let leastLinked = 0
-  degree.forEach((count, index) => {
-    if (count > degree[mostLinked]) mostLinked = index
-    if (count < degree[leastLinked]) leastLinked = index
-  })
-  assert.ok(
-    field.nodes[mostLinked].size > field.nodes[leastLinked].size,
-    'the busiest node should draw larger than the quietest one'
+  // And the layout must depend on NOTHING but its arguments.
+  //
+  // The two comparisons above are worth little on their own, and that was
+  // found by sabotage rather than noticed: seeding the build from
+  // `Date.now() / 1000` -- which reshuffles the whole net every second the
+  // reader resizes the window -- passed all of them, because two builds a few
+  // microseconds apart land in the same second. A clock or a global random is
+  // the only way non-determinism can get in here, so the absence of both is
+  // the thing to assert.
+  const module = readFileSync(
+    new URL('../src/components/dhtMeshField.ts', import.meta.url),
+    'utf8'
   )
-})
-
-test('the lit set counts real peers and never takes over the field', () => {
-  const total = defaultFieldOptions.nodes
-  assert.equal(litTarget(0, total), 0)
-  assert.equal(litTarget(6, total), 6)
-  // A large routing table must still leave dim nodes, because the dim ones are
-  // what says "there is more of this network than we can see".
-  assert.ok(litTarget(10_000, total) < total)
-})
-
-test('nodes join and leave a few at a time rather than all at once', () => {
-  const field = buildField()
-  const random = seeded(7)
-  const changed = reconcileLit(field, 20, random, 1)
-  assert.equal(changed.length, 1)
-  assert.equal(field.nodes.filter(node => node.live > 0.5).length, 1)
-})
-
-test('a node fades in over a couple of seconds instead of appearing', () => {
-  const field = buildField()
-  const random = seeded(11)
-  reconcileLit(field, 1, random, 1)
-  const index = field.nodes.findIndex(node => node.live > 0.5)
-  assert.ok(index >= 0)
-
-  // One frame in, the node is on its way but nowhere near lit.
-  step(field, { elapsed: 16, spin: 0, target: 1, animate: true, random })
-  const earlyGlow = field.nodes[index].glow
-  assert.ok(earlyGlow > 0, 'the node should have started to appear')
-  assert.ok(earlyGlow < 0.1, `the node jumped to ${earlyGlow}; it should still be dim one frame in`)
-
-  // Run out the fade and it settles at full brightness.
-  for (let elapsed = 0; elapsed < GLOW_RISE_MS * 4; elapsed += 16) {
-    step(field, { elapsed: 16, spin: 0, target: 1, animate: true, random })
+  for (const source of [/Math\.random/, /Date\.now/, /new Date\b/, /performance\.now/]) {
+    assert.doesNotMatch(
+      module,
+      source,
+      `the net is seeded from ${source.source}; it will reshuffle itself while nobody is looking`
+    )
   }
-  assert.ok(field.nodes[index].glow > 0.99)
 })
 
-test('the mesh turns at the same rate whatever the frame rate', () => {
-  const slow = buildField()
-  const fast = buildField()
-  const random = seeded(3)
-  step(slow, { elapsed: 100, spin: 0.5, target: 0, animate: true, random })
-  for (let frame = 0; frame < 10; frame += 1) {
-    step(fast, { elapsed: 10, spin: 0.5, target: 0, animate: true, random })
+test('the net covers the whole canvas and overhangs every edge', () => {
+  // The overhang is what makes the drawing read as a piece cut out of
+  // something larger. Without it the net ends in a ring of loose ends just
+  // inside the card, which reads as a panel with a border.
+  const field = buildField(SIZE.width, SIZE.height)
+  const xs = field.nodes.map(node => node.x)
+  const ys = field.nodes.map(node => node.y)
+  assert.ok(Math.min(...xs) < 0, 'the net does not reach past the left edge')
+  assert.ok(Math.max(...xs) > SIZE.width, 'the net does not reach past the right edge')
+  assert.ok(Math.min(...ys) < 0, 'the net does not reach past the top edge')
+  assert.ok(Math.max(...ys) > SIZE.height, 'the net does not reach past the bottom edge')
+
+  // And it must not leave a visible hole. Stated as the distance from the
+  // worst point of the canvas to the nearest node, because that is the thing a
+  // reader sees -- an earlier version of this assertion instead demanded a node
+  // in every grid-sized cell, which the real layout fails while looking
+  // perfectly even: odd rows are offset half a cell and every node jitters, so
+  // cell occupancy is not the property being designed. Measured across five
+  // card sizes the worst gap is 0.71 to 0.79 of the spacing; one whole spacing
+  // is clear of that and would catch a grid that actually broke.
+  const spacing = defaultMeshOptions.spacing
+  let worst = 0
+  for (let x = 0; x <= SIZE.width; x += 8) {
+    for (let y = 0; y <= SIZE.height; y += 8) {
+      let nearest = Infinity
+      for (const node of field.nodes) {
+        nearest = Math.min(nearest, Math.hypot(node.x - x, node.y - y))
+      }
+      worst = Math.max(worst, nearest)
+    }
   }
   assert.ok(
-    Math.abs(slow.rotation - fast.rotation) < 1e-9,
-    `one 100ms frame turned ${slow.rotation}, ten 10ms frames turned ${fast.rotation}`
+    worst < spacing,
+    `the emptiest point of the card is ${worst.toFixed(1)}px from any node, against a ${spacing}px spacing`
   )
 })
 
-test('nothing moves when motion is turned off', () => {
-  const field = buildField()
-  const random = seeded(5)
-  reconcileLit(field, 20, random, 20)
-  for (let frame = 0; frame < 400; frame += 1) {
-    step(field, { elapsed: 16, spin: 0.5, target: 20, animate: false, random })
+test('the net is tied into triangles, with some strands left out', () => {
+  const field = buildField(SIZE.width, SIZE.height)
+  // Across, down and one diagonal per cell is three strands per node before
+  // the cap, so a net that had them all would be near three times the nodes.
+  // About a sixth are dropped, and the dropped ones are the difference between
+  // a net someone tied and a mesh a computer generated.
+  const ratio = field.edges.length / field.nodes.length
+  assert.ok(ratio > 1.6, `only ${ratio.toFixed(2)} strands per node; the net would look sparse`)
+  assert.ok(ratio < 2.8, `${ratio.toFixed(2)} strands per node; the net would fill in solid`)
+
+  // No strand may point at a node that does not exist, or the painter skips it
+  // and the net quietly loses pieces at the edges.
+  for (const [a, b] of field.edges) {
+    assert.ok(field.nodes[a] && field.nodes[b], `strand ${a}-${b} has a missing end`)
+    assert.notEqual(a, b, 'a strand joins a node to itself')
   }
-  assert.equal(field.rotation, 0)
-  assert.equal(field.signals.length, 0)
-  // The picture still resolves: glow settles so the mesh is drawn lit, just
-  // still. A reduced-motion reader gets the same information, without motion.
-  assert.ok(field.nodes.filter(node => node.glow > 0.9).length >= 20)
 })
 
-test('no peers means no traffic is ever drawn', () => {
-  // This is the honesty invariant. A mesh animating hops while the DHT is off
-  // or isolated would be inventing telemetry, which is worse than drawing
-  // nothing at all.
-  const field = buildField()
-  const random = seeded(13)
-  for (let frame = 0; frame < 4000; frame += 1) {
-    step(field, { elapsed: 16, spin: 0.2, target: litTarget(0, field.nodes.length), animate: true, random })
-  }
-  assert.equal(field.signals.length, 0)
-  assert.equal(field.nodes.filter(node => node.glow > 0.01).length, 0)
+test('the drift is time-based, so it does not depend on the frame rate', () => {
+  // Absolute seconds rather than a delta: a stalled frame must not make the
+  // net lurch, a fast display must not speed it up, and the same moment has to
+  // produce the same picture or the preview harness cannot render one.
+  const coarse = buildField(SIZE.width, SIZE.height)
+  const fine = buildField(SIZE.width, SIZE.height)
+  advance(coarse, 3, false)
+  // Stepped as exact fractions rather than by repeated addition: accumulating
+  // 0.05 sixty times lands on 2.9999999999999996, and the two runs then differ by a
+  // sliver of a frame for reasons that have nothing to do with the code.
+  for (let step = 0; step <= 60; step += 1) advance(fine, step / 20, false)
+  assert.deepEqual(
+    coarse.nodes.map(node => [node.px, node.py]),
+    fine.nodes.map(node => [node.px, node.py])
+  )
+
+  // And it has to actually move.
+  const before = buildField(SIZE.width, SIZE.height)
+  advance(before, 0, false)
+  const resting = before.nodes.map(node => node.px)
+  advance(before, 4, false)
+  const moved = before.nodes.filter((node, index) => Math.abs(node.px - resting[index]) > 1).length
+  assert.ok(moved > before.nodes.length * 0.5, `only ${moved} nodes drifted`)
 })
 
-test('a signal only ever travels between two lit nodes', () => {
-  const field = buildField()
-  const random = seeded(17)
-  reconcileLit(field, 40, random, 40)
+test('a node fades over seconds rather than blinking', () => {
+  assert.equal(smooth(0), 0)
+  assert.equal(smooth(1), 1)
+  assert.equal(smooth(0.5), 0.5)
+  // Smoothstep, not linear: both ends of the fade have to ease, or a node
+  // appears to snap into motion and snap out of it.
+  assert.ok(smooth(0.1) < 0.1, 'the fade does not ease in')
+  assert.ok(smooth(0.9) > 0.9, 'the fade does not ease out')
+
+  const field = buildField(SIZE.width, SIZE.height)
+  advance(field, defaultMeshOptions.lifecycleInterval, true)
+  const changing = field.nodes.find(node => node.changing)
+  assert.ok(changing, 'no node ever changes brightness; the net would be frozen')
+  const opening = changing.alpha
+  advance(field, defaultMeshOptions.lifecycleInterval + 0.05, true)
+  assert.ok(
+    Math.abs(field.nodes.indexOf(changing) >= 0 ? changing.alpha - opening : 1) < 0.1,
+    'the fade jumped; it should take seconds'
+  )
+  advance(field, defaultMeshOptions.lifecycleInterval + defaultMeshOptions.fadeDuration, true)
+  assert.equal(changing.changing, false, 'the fade never finished')
+  assert.ok(
+    Math.abs(changing.alpha - changing.to) < 1e-9,
+    'the fade settled somewhere other than its target'
+  )
+})
+
+test('a signal crosses one strand and then it is gone', () => {
+  const field = buildField(SIZE.width, SIZE.height)
   let seen = 0
-  for (let frame = 0; frame < 3000; frame += 1) {
-    step(field, { elapsed: 16, spin: 0.2, target: 40, animate: true, random })
+  let most = 0
+  for (let time = 0; time < 60; time += 1 / 60) {
+    advance(field, time, true)
+    seen += field.signals.length
+    most = Math.max(most, field.signals.length)
     for (const signal of field.signals) {
-      const link = field.links[signal.link]
-      assert.ok(link, 'a signal points at a link that exists')
-      assert.ok(
-        field.nodes[link.from].glow > 0.5 && field.nodes[link.to].glow > 0.5,
-        'a signal was drawn on a link whose endpoints are not both lit'
-      )
-      seen += 1
+      const progress = signalProgress(signal, time)
+      assert.ok(progress >= 0 && progress <= 1, `a signal is at ${progress} of its strand`)
+      assert.ok(field.nodes[signal.edge[0]], 'a signal starts nowhere')
+      assert.ok(field.nodes[signal.edge[1]], 'a signal ends nowhere')
     }
   }
   assert.ok(seen > 0, 'no signals were produced at all; the animation would be static')
+  // Few enough at a time that each one can be followed. At one launch every
+  // 0.72s lasting 0.48s, two in flight is the arithmetic; more than a handful
+  // would mean they are not being retired.
+  assert.ok(most <= 3, `${most} signals were in flight at once`)
 })
 
-test('projection keeps every node inside the canvas', () => {
-  const field = buildField()
-  for (let turn = 0; turn < Math.PI * 2; turn += 0.2) {
-    for (const node of field.nodes) {
-      const point = project(node, turn, 320, 320)
-      assert.ok(point.x >= 0 && point.x <= 320, `x ${point.x} escaped the canvas`)
-      assert.ok(point.y >= 0 && point.y <= 320, `y ${point.y} escaped the canvas`)
-      assert.ok(point.depth >= 0 && point.depth <= 1)
+test('a signal only ever leaves from a node that is lit', () => {
+  // A bead setting off from a dim node reads as traffic appearing out of
+  // nothing, and the dim nodes are the part of the picture that is explicitly
+  // "we do not know who this is".
+  const field = buildField(SIZE.width, SIZE.height)
+  for (let time = 0; time < 120; time += 1 / 60) {
+    const before = field.signals.length
+    advance(field, time, true)
+    if (field.signals.length <= before) continue
+    const launched = field.signals[field.signals.length - 1]
+    assert.ok(
+      field.nodes[launched.edge[0]].alpha > 0.6 && field.nodes[launched.edge[1]].alpha > 0.6,
+      'a signal set off along a strand with a dim end'
+    )
+  }
+})
+
+// THE honesty invariant for this card.
+//
+// The reference build ran the life-cycle and the signals off a timer, with
+// nothing behind them -- right for a demo, and invented telemetry here, because
+// this card is wired to a real DHT. An amber bead means a packet moved.
+test('a DHT that is not ready produces no traffic at all, ever', () => {
+  const field = buildField(SIZE.width, SIZE.height)
+  for (let time = 0; time < 200; time += 1 / 60) {
+    advance(field, time, false)
+    assert.equal(field.signals.length, 0, `a signal was drawn at ${time.toFixed(2)}s with the DHT down`)
+  }
+  // Nothing arrives either: an expanding ring reads as "a node appeared here".
+  assert.equal(field.nodes.filter(node => node.changing).length, 0)
+  // The net still drifts, because the net is illustration and a frozen card
+  // looks broken. Only the claims stop.
+  const drifted = field.nodes.filter(node => Math.abs(node.px - node.x) > 1).length
+  assert.ok(drifted > 0, 'the net froze; the card would look like a failed render')
+})
+
+test('traffic in flight is dropped the moment the DHT goes down', () => {
+  // Letting the beads already on screen finish their hop would mean up to half
+  // a second of traffic drawn after the channel was known to be gone.
+  const field = buildField(SIZE.width, SIZE.height)
+  let time = 0
+  for (; time < 20; time += 1 / 60) {
+    advance(field, time, true)
+    if (field.signals.length > 0) break
+  }
+  assert.ok(field.signals.length > 0, 'no signal was ever in flight to drop')
+  advance(field, time + 1 / 60, false)
+  assert.equal(field.signals.length, 0, 'a signal survived the DHT going down')
+})
+
+test('the painter stops drawing traffic when it is handed a dimmed field', () => {
+  // The field gate above is the first line of defence; this is the second. The
+  // painter is given `strength`, and the two claims in the drawing -- the beads
+  // and the arrival rings -- must both sit behind it.
+  const painter = readFileSync(
+    new URL('../src/components/dhtMeshPainter.ts', import.meta.url),
+    'utf8'
+  )
+  assert.match(painter, /const live = strength > 0\.999/)
+  const gate = painter.indexOf('if (!live) return')
+  assert.ok(gate > 0, 'the painter no longer refuses to draw signals on a dimmed field')
+  assert.ok(gate < painter.indexOf('for (const signal of field.signals)'), 'the gate is after the signals')
+  assert.ok(
+    painter.indexOf('if (!live || !node.changing') > 0,
+    'the arrival ring is no longer gated'
+  )
+})
+
+test('both cards pass a strength that follows the real state', () => {
+  const mesh = readFileSync(new URL('../src/components/DHTMeshCard.vue', import.meta.url), 'utf8')
+  assert.match(
+    mesh,
+    /advance\(field,\s*time,\s*ready\.value\)/,
+    'the mesh card no longer gates the animation on the real DHT state'
+  )
+  assert.match(
+    mesh,
+    /strength:\s*ready\.value\s*\?\s*1\s*:/,
+    'the mesh card passes a fixed strength; the net would look live while the DHT is down'
+  )
+  // `ready` must mean ready, not merely configured.
+  assert.match(mesh, /dht\.value\?\.state === 'ready'/)
+})
+
+test('the two network cards share one stylesheet and one stage height', () => {
+  // They sit side by side in one row and stretch together. The moment one gets
+  // a tweak the other does not, the row reads as two cards lifted from
+  // different screens -- and nothing about a copied rule announces itself.
+  for (const name of ['DHTMeshCard.vue', 'NetworkGlobeCard.vue']) {
+    const source = readFileSync(new URL(`../src/components/${name}`, import.meta.url), 'utf8')
+    assert.match(
+      source,
+      /import '\.\/networkCard\.css'/,
+      `${name} no longer imports the shared card chrome`
+    )
+    assert.match(source, /class="net-card /, `${name} no longer uses the shared card frame`)
+    assert.match(source, /class="net-stage"/, `${name} no longer uses the shared stage`)
+    // A card that redeclares the frame has started to drift even while still
+    // importing the shared file.
+    const styles = source.split('<style')[1] ?? ''
+    assert.ok(
+      !/border-radius:\s*23px/.test(styles),
+      `${name} declares its own card frame again`
+    )
+    assert.ok(!/height:\s*365px/.test(styles), `${name} sets its own stage height`)
+  }
+})
+
+test('nothing drawn over a picture reports a number', () => {
+  // The caption on each drawing names what the drawing is. A figure placed
+  // there would read as coming FROM the drawing -- which is exactly the claim
+  // these cards spend their design avoiding, since most of each picture is
+  // illustration. So the overlay carries no interpolation and no figure.
+  const standaloneNumber = /(?:^|[^A-Za-z0-9])\d+(?:[^A-Za-z0-9]|$)/
+  for (const name of ['DHTMeshCard.vue', 'NetworkGlobeCard.vue']) {
+    const source = readFileSync(new URL(`../src/components/${name}`, import.meta.url), 'utf8')
+    const overlay = [...source.matchAll(/class="net-note[^"]*"[^>]*>([\s\S]*?)<\//g)]
+    assert.ok(overlay.length > 0, `${name} has no caption to check`)
+    for (const [, body] of overlay) {
+      assert.ok(!standaloneNumber.test(body), `${name} puts a figure on the drawing: ${body.trim()}`)
+      // A figure can only reach the caption through the two objects a card
+      // holds its measurements in, so those are what is forbidden -- rather
+      // than a keyword list, which an earlier version of this assertion used
+      // and which rejected `nknActive` for containing the word "active" while
+      // it was only choosing between two sentences.
+      assert.ok(
+        !/\b(?:peers|dht)\s*[?.]/.test(body),
+        `${name} binds measured data into the caption: ${body.trim()}`
+      )
     }
   }
 })
 
-// The sky is scenery, and it has to look like a sky rather than confetti.
-test('the sky is deterministic, mostly faint, and banded', () => {
-  const first = buildSky()
-  const second = buildSky()
-  assert.deepEqual(first, second, 'the sky reshuffles between mounts')
-
-  // The brightness curve is what makes it read as a photograph rather than an
-  // even spray of dots. The property that matters is where the MIDDLE of the
-  // field sits, not how long the bright tail is: raising a uniform random to
-  // the fourth power puts the median at 0.5^4, so half the stars are nearly
-  // invisible and the ones you notice are a minority riding on top of them.
-  //
-  // Asserted as a median after an initial version checked the size of the
-  // bright tail against a number picked from intuition -- which the real curve
-  // failed while looking exactly right on screen. The tail is wider than it
-  // feels; the median is the thing being designed.
-  const brightness = first.map(star => star.brightness).sort((a, b) => a - b)
-  const median = brightness[Math.floor(brightness.length / 2)]
-  assert.ok(
-    median < 0.15,
-    `the median star brightness is ${median.toFixed(3)}; the field is not mostly faint`
-  )
-  const bright = first.filter(star => star.brightness > 0.5).length
-  assert.ok(
-    bright > 0 && bright < first.length * 0.3,
-    `${bright} of ${first.length} stars are bright; there should be a minority of them`
-  )
-  // Sparkles: the rule is structural, not a count. A diffraction cross is
-  // glare, so it may only sit on a star bright enough to produce glare --
-  // that is the invariant, and it holds however the density is later tuned.
-  // The exact proportion is a tuning choice, so it is bounded loosely rather
-  // than pinned to a number picked from intuition (two earlier assertions in
-  // this test were exactly that, and both failed against a curve that looked
-  // right on screen).
-  const sparkles = first.filter(star => star.sparkle)
-  assert.ok(sparkles.length > 0, 'nothing sparkles, so the sky has no glare in it')
-  assert.ok(
-    sparkles.length < first.length * 0.2,
-    `${sparkles.length} of ${first.length} stars sparkle; a cross on everything is glitter`
-  )
-  for (const star of sparkles) {
-    assert.ok(
-      star.brightness > 0.5,
-      `a star at brightness ${star.brightness.toFixed(3)} draws a glare cross`
-    )
+test('the generator is the one the reference build used', () => {
+  // Not an aesthetic detail: the net's whole texture -- which nodes start dim,
+  // where each one sits inside its cell, which strands were dropped -- is this
+  // sequence. Swapping the generator redraws the card.
+  const random = seeded(9014)
+  const drawn = [random(), random(), random()]
+  for (const value of drawn) {
+    assert.ok(value >= 0 && value < 1, `the generator produced ${value}`)
   }
-
-  // Every star inside the frame: one drawn outside is invisible work, and a
-  // star half off the edge reads as a rendering fault.
-  for (const star of first) {
-    assert.ok(
-      star.x >= -1 && star.x <= 1 && star.y >= -1 && star.y <= 1,
-      `star at ${star.x},${star.y} is outside the field`
-    )
-  }
-
-  // The band. A third of the stars are drawn toward the y = -x diagonal, and
-  // that is what separates "a piece of sky" from "dots on black".
-  //
-  // The window and the threshold are measured against a uniform field rather
-  // than reasoned about, because the first version of this assertion was
-  // reasoned about and was worthless: x + y for a uniform square is triangular
-  // rather than flat, so about 31% of a uniform field already lands inside
-  // |x + y| < 0.35 -- roughly double what I had assumed -- and the test passed
-  // with the band generator switched off entirely. Found by switching it off.
-  //
-  // Measured in the tighter window: 40% banded against 18% uniform. Thirty is
-  // clear of the uniform case and leaves the density free to be retuned.
-  const near = first.filter(star => Math.abs(star.y + star.x) < 0.2).length
-  const share = (near / first.length) * 100
-  assert.ok(
-    share > 30,
-    `${share.toFixed(1)}% of stars sit in the band window; a uniform field gives about 18%`
-  )
-})
-
-// The card must not turn, and must draw through the extracted painter.
-//
-// Both are decisions that a later edit could undo without anything failing:
-// the rotation machinery is still in this module and still tested, so putting a
-// spin back would work perfectly and silently reverse what the operator asked
-// for; and a painter nobody calls is the failure this project has been caught
-// by before.
-test('the mesh card holds still and paints through the painter', () => {
-  const card = readFileSync(new URL('../src/components/DHTMeshCard.vue', import.meta.url), 'utf8')
-  // `0\b` matched the 0 in `0.085`, because a dot is a word boundary -- the
-  // first version of this assertion passed with the rotation put straight back.
-  // The value has to be the whole value.
-  assert.match(
-    card,
-    /spin:\s*0\s*,/,
-    'the field is spinning again; it was asked to hold still'
-  )
-  assert.match(card, /paintMesh\(/, 'the card no longer draws through the painter')
-  assert.match(card, /buildSky\(/, 'the card no longer builds a sky')
-  // The painting itself must live in the painter, or the preview harness is
-  // reviewing something the card does not use.
-  assert.ok(
-    !/createRadialGradient/.test(card),
-    'the card is painting inline again, so the painter is no longer what ships'
-  )
+  assert.notDeepEqual(drawn, [drawn[0], drawn[0], drawn[0]], 'the generator is stuck')
+  // And it must be seeded, not random: two generators on one seed agree.
+  assert.deepEqual(drawn, [seeded(9014)(), ...[0, 0].map((_, index) => {
+    const again = seeded(9014)
+    for (let skip = 0; skip <= index; skip += 1) again()
+    return again()
+  })])
 })

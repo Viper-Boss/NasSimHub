@@ -826,8 +826,7 @@ export default {
     "detailPlaceholder": "ここにメッセージが表示されます"
   },
   "dashboard": {
-    "globeTitle": "分散ネットワーク",
-    "globeScopeNote": "各数値はトピックごとのオンチェーン購読者数です。購読期間がそのまま集計期間なので、ネットワーク全体の値であり、誰でも任意のシードノードから検証できます。",
+    "globeTitle": "NKN グローバルネットワーク",
     "globeDhtPending": "第 2 の経路は未構築",
     "globeDhtOff": "DHT オフ",
     "globeDhtStarting": "参加中…",
@@ -997,7 +996,7 @@ export default {
     "tooManyEgressDNS": "DNS サーバーは最大 4 件です",
     "invalidEgressDNS": "DNS サーバーは IP アドレスで指定してください",
     "running": "稼働中",
-    "waitingForLine": "回線待ち",
+    "waitingForLine": "åç·å¾ã¡",
     "peerLost": "稼働中 — ピアに到達できません",
     "peerLostHint": "トンネルインターフェースは有効ですが、直近 3 分間ピアとのハンドシェイクがありません。このプロキシ経由の通信はタイムアウトします。",
     "configurationError": "構成エラー",

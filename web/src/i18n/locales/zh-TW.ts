@@ -845,8 +845,7 @@ export default {
     detailPlaceholder: '訊息會顯示在這裡'
   },
   dashboard: {
-    globeTitle: "去中心化網路",
-    globeScopeNote: "每個數字都是某個 topic 的鏈上訂閱者總數。訂閱時長就是統計視窗，所以是全網口徑，任何人用任何種子節點都能驗證。",
+    globeTitle: "NKN 地球網路",
     globeDhtPending: "第二通路尚未啟用",
     globeDhtOff: "DHT 已關閉",
     globeDhtStarting: "加入中…",

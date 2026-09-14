@@ -6,7 +6,13 @@ import test from 'node:test'
 import { homesimEN, homesimZH } from '../src/i18n/homesimData.ts'
 import { messageGuardMessages } from '../src/i18n/messageGuardMessages.ts'
 import { dhtPanelMessages } from '../src/i18n/dhtPanelMessages.ts'
-import { globeScopeNote, meshNote } from '../src/i18n/networkCardNotes.ts'
+import {
+  globeCanvasLabel,
+  globeScopeNote,
+  meshCanvasLabel,
+  meshNote,
+  networkCardLabels
+} from '../src/i18n/networkCardNotes.ts'
 import englishLocale from '../src/i18n/locales/en-US.ts'
 import chineseLocale from '../src/i18n/locales/zh-CN.ts'
 
@@ -71,8 +77,20 @@ const cases = [
     view: 'src/components/DHTMeshCard.vue',
     prefix: 'dashboard',
     lazy: {
-      en: { dashboard: { meshNote: meshNote('en-US') } },
-      zh: { dashboard: { meshNote: meshNote('zh-CN') } }
+      en: {
+        dashboard: {
+          ...networkCardLabels('en-US'),
+          meshNote: meshNote('en-US'),
+          meshCanvasLabel: meshCanvasLabel('en-US')
+        }
+      },
+      zh: {
+        dashboard: {
+          ...networkCardLabels('zh-CN'),
+          meshNote: meshNote('zh-CN'),
+          meshCanvasLabel: meshCanvasLabel('zh-CN')
+        }
+      }
     }
   },
   {
@@ -80,8 +98,20 @@ const cases = [
     view: 'src/components/NetworkGlobeCard.vue',
     prefix: 'dashboard',
     lazy: {
-      en: { dashboard: { globeScopeNote: globeScopeNote('en-US') } },
-      zh: { dashboard: { globeScopeNote: globeScopeNote('zh-CN') } }
+      en: {
+        dashboard: {
+          ...networkCardLabels('en-US'),
+          globeScopeNote: globeScopeNote('en-US'),
+          globeCanvasLabel: globeCanvasLabel('en-US')
+        }
+      },
+      zh: {
+        dashboard: {
+          ...networkCardLabels('zh-CN'),
+          globeScopeNote: globeScopeNote('zh-CN'),
+          globeCanvasLabel: globeCanvasLabel('zh-CN')
+        }
+      }
     }
   }
 ]
@@ -99,6 +129,48 @@ test('the mesh note is translated into every locale the app ships', () => {
       meshNote(locale),
       locale === 'en-US' ? '' : meshNote('en-US'),
       `${locale} falls back to the English mesh note`
+    )
+  }
+})
+
+test('every string that moved out of the locale files is translated', () => {
+  // The mesh note above is one paragraph; these are the twenty short labels and
+  // the two canvas descriptions that moved out of the locale files to keep the
+  // startup budget. Same failure, and just as invisible: the card still renders
+  // a badge, in English, and only a reader of that language ever notices.
+  const shipped = readdirSync(new URL('../src/i18n/locales', import.meta.url))
+    .filter(name => name.endsWith('.ts'))
+    .map(name => name.replace(/\.ts$/, ''))
+  const english = networkCardLabels('en-US')
+  const keys = Object.keys(english)
+  assert.ok(keys.length >= 20, `only ${keys.length} labels moved; the list is incomplete`)
+  for (const locale of shipped) {
+    if (locale === 'en-US') continue
+    const labels = networkCardLabels(locale)
+    assert.deepEqual(
+      Object.keys(labels).sort(),
+      keys.slice().sort(),
+      `${locale} is missing some of the card labels`
+    )
+    // Latin-script locales legitimately share a word with English here and
+    // there, so the test is that the SET is not the English set wholesale --
+    // which is what a missing locale falling through would give.
+    assert.notDeepEqual(labels, english, `${locale} falls back to the English card labels`)
+    for (const [key, value] of Object.entries(labels)) {
+      assert.ok(value.trim().length > 0, `${locale}.${key} is empty`)
+    }
+  }
+  for (const locale of shipped) {
+    if (locale === 'en-US') continue
+    assert.notEqual(
+      globeCanvasLabel(locale),
+      globeCanvasLabel('en-US'),
+      `${locale} falls back to the English globe description`
+    )
+    assert.notEqual(
+      meshCanvasLabel(locale),
+      meshCanvasLabel('en-US'),
+      `${locale} falls back to the English mesh description`
     )
   }
 })
