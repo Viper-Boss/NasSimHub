@@ -76,43 +76,51 @@ const globeNotes: Record<string, string> = {
 const meshNotes: Record<string, string> = {
   'zh-CN':
     '动画为局部拓扑示意，节点的明暗与漂移都是装饰，不代表全网规模或真实地理位置。' +
-    '黄色信号只在 DHT 就绪时出现；三个数字来自本机路由表。',
+    '黄色信号是多跳寻址示意，只在 DHT 就绪时出现，路径本身不是任何一次真实查找；三个数字来自本机路由表。',
   'zh-TW':
     '動畫為局部拓撲示意，節點的明暗與漂移都是裝飾，不代表全網規模或真實地理位置。' +
-    '黃色信號只在 DHT 就緒時出現；三個數字來自本機路由表。',
+    '黃色信號是多跳尋址示意，只在 DHT 就緒時出現，路徑本身不是任何一次真實查找；三個數字來自本機路由表。',
   'en-US':
     'The animation illustrates a local topology. Node brightness and drift are ' +
     'decorative and stand for neither network size nor real locations. The amber ' +
-    'signals appear only while the DHT is ready; the three figures are this ' +
-    "gateway's own routing table.",
+    'signals are an illustration of a multi-hop lookup: they appear only while ' +
+    'the DHT is ready, and the path itself is not any real lookup. The three ' +
+    "figures are this gateway's own routing table.",
   'ja-JP':
     'アニメーションは局所的なトポロジーの概念図です。ノードの明暗と揺れは装飾で、' +
-    'ネットワーク規模や実際の位置を表しません。黄色の信号は DHT が準備できている間だけ' +
-    '現れ、3 つの数値はこのゲートウェイ自身のルーティングテーブルです。',
+    'ネットワーク規模や実際の位置を表しません。黄色の信号は多段ルックアップの概念図で、DHT が準備できている間だけ' +
+    '現れ、経路そのものは実際の検索ではありません。3 つの数値はこのゲートウェイ自身の' +
+    'ルーティングテーブルです。',
   'vi-VN':
     'Hoạt ảnh minh hoạ một cấu trúc cục bộ. Độ sáng và dao động của các nút chỉ là ' +
-    'trang trí, không thể hiện quy mô mạng hay vị trí thật. Tín hiệu vàng chỉ xuất ' +
-    'hiện khi DHT đã sẵn sàng; ba con số là bảng định tuyến của chính thiết bị này.',
+    'trang trí, không thể hiện quy mô mạng hay vị trí thật. Tín hiệu vàng minh hoạ một truy vấn nhiều chặng, chỉ xuất ' +
+    'hiện khi DHT đã sẵn sàng, và bản thân tuyến đường không phải một truy vấn ' +
+    'thật. Ba con số là bảng định tuyến của chính thiết bị này.',
   'es-ES':
     'La animación ilustra una topología local. El brillo y la deriva de los nodos son ' +
     'decorativos y no representan el tamaño de la red ni ubicaciones reales. Las ' +
-    'señales ámbar solo aparecen cuando la DHT está lista; las tres cifras son la ' +
-    'tabla de rutas de esta pasarela.',
+    'señales ámbar ilustran una búsqueda de varios saltos: solo aparecen cuando ' +
+    'la DHT está lista, y la ruta en sí no es ninguna búsqueda real. Las tres ' +
+    'cifras son la tabla de rutas de esta pasarela.',
   'de-DE':
     'Die Animation zeigt eine lokale Topologie. Helligkeit und Drift der Knoten sind ' +
     'Dekoration und stehen weder für die Netzgröße noch für echte Orte. Die gelben ' +
-    'Signale erscheinen nur, wenn die DHT bereit ist; die drei Zahlen sind die ' +
-    'Routingtabelle dieses Gateways.',
+    'Signale zeigen eine Suche über mehrere Hops: sie erscheinen nur, wenn die ' +
+    'DHT bereit ist, und der Weg selbst ist keine echte Suche. Die drei Zahlen ' +
+    'sind die Routingtabelle dieses Gateways.',
   'fr-FR':
     "L'animation illustre une topologie locale. La luminosité et la dérive des nœuds " +
     "sont décoratives et ne représentent ni la taille du réseau ni des lieux réels. " +
-    "Les signaux ambrés n'apparaissent que lorsque la DHT est prête ; les trois " +
-    "chiffres sont la table de routage de cette passerelle.",
+    "Les signaux ambrés illustrent une recherche à plusieurs sauts : ils " +
+    "n'apparaissent que lorsque la DHT est prête, et le trajet lui-même n'est " +
+    "aucune recherche réelle. Les trois chiffres sont la table de routage de " +
+    "cette passerelle.",
   'pt-BR':
     'A animação ilustra uma topologia local. O brilho e a deriva dos nós são ' +
     'decorativos e não representam o tamanho da rede nem locais reais. Os sinais ' +
-    'âmbar só aparecem quando a DHT está pronta; os três números são a tabela de ' +
-    'rotas deste gateway.'
+    'âmbar ilustram uma busca de vários saltos: só aparecem quando a DHT está ' +
+    'pronta, e o caminho em si não é nenhuma busca real. Os três números são a ' +
+    'tabela de rotas deste gateway.'
 }
 
 const globeLabels: Record<string, string> = {
@@ -160,6 +168,14 @@ export function networkCardLabels(locale: string): Record<string, string> {
 
 const labels: Record<string, Record<string, string>> = {
   'zh-CN': {
+    nodesTitle: '节点与客户端',
+    nodesSeeds: 'NKN 种子节点',
+    nodesReachable: '可达 {n}',
+    nodesPeers: 'DHT 对端',
+    nodesSelfNkn: '本机 NKN',
+    nodesSelfDht: '本机 PeerID',
+    nodesEmpty: '两条通路都未启用',
+    nodesProbing: '探测中…',
     globeBadgeOn: '已连接',
     globeBadgeOff: '未连接',
     globeVisualNote: '全球连接 · 持续在线',
@@ -183,6 +199,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: '已启用',
   },
   'zh-TW': {
+    nodesTitle: '節點與用戶端',
+    nodesSeeds: 'NKN 種子節點',
+    nodesReachable: '可達 {n}',
+    nodesPeers: 'DHT 對端',
+    nodesSelfNkn: '本機 NKN',
+    nodesSelfDht: '本機 PeerID',
+    nodesEmpty: '兩條通路都未啟用',
+    nodesProbing: '探測中…',
     globeBadgeOn: '已連線',
     globeBadgeOff: '未連線',
     globeVisualNote: '全球連線 · 持續在線',
@@ -206,6 +230,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: '已啟用',
   },
   'en-US': {
+    nodesTitle: 'Nodes and clients',
+    nodesSeeds: 'NKN seed nodes',
+    nodesReachable: '{n} reachable',
+    nodesPeers: 'DHT peers',
+    nodesSelfNkn: 'This NKN address',
+    nodesSelfDht: 'This peer ID',
+    nodesEmpty: 'Neither path is enabled',
+    nodesProbing: 'Probing…',
     globeBadgeOn: 'Connected',
     globeBadgeOff: 'Not connected',
     globeVisualNote: 'Worldwide · always on',
@@ -229,6 +261,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: 'Enabled',
   },
   'ja-JP': {
+    nodesTitle: 'ノードとクライアント',
+    nodesSeeds: 'NKN シードノード',
+    nodesReachable: '到達 {n}',
+    nodesPeers: 'DHT ピア',
+    nodesSelfNkn: 'このノードの NKN',
+    nodesSelfDht: 'このピア ID',
+    nodesEmpty: 'どちらの経路も無効です',
+    nodesProbing: '探索中…',
     globeBadgeOn: '接続済み',
     globeBadgeOff: '未接続',
     globeVisualNote: '世界中と接続 · 常時オンライン',
@@ -252,6 +292,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: '有効',
   },
   'vi-VN': {
+    nodesTitle: 'Nút và máy khách',
+    nodesSeeds: 'Nút seed NKN',
+    nodesReachable: '{n} khả dụng',
+    nodesPeers: 'Đối tác DHT',
+    nodesSelfNkn: 'NKN của máy này',
+    nodesSelfDht: 'Peer ID của máy này',
+    nodesEmpty: 'Cả hai tuyến đều chưa bật',
+    nodesProbing: 'Đang dò…',
     globeBadgeOn: 'Đã kết nối',
     globeBadgeOff: 'Chưa kết nối',
     globeVisualNote: 'Toàn cầu · luôn trực tuyến',
@@ -275,6 +323,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: 'Đã bật',
   },
   'es-ES': {
+    nodesTitle: 'Nodos y clientes',
+    nodesSeeds: 'Nodos semilla NKN',
+    nodesReachable: '{n} alcanzables',
+    nodesPeers: 'Pares DHT',
+    nodesSelfNkn: 'NKN de este equipo',
+    nodesSelfDht: 'ID de este par',
+    nodesEmpty: 'Ninguna vía está activada',
+    nodesProbing: 'Sondeando…',
     globeBadgeOn: 'Conectado',
     globeBadgeOff: 'Sin conexión',
     globeVisualNote: 'Todo el mundo · siempre activo',
@@ -298,6 +354,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: 'Activada',
   },
   'de-DE': {
+    nodesTitle: 'Knoten und Clients',
+    nodesSeeds: 'NKN-Seed-Knoten',
+    nodesReachable: '{n} erreichbar',
+    nodesPeers: 'DHT-Peers',
+    nodesSelfNkn: 'NKN dieses Geräts',
+    nodesSelfDht: 'Peer-ID dieses Geräts',
+    nodesEmpty: 'Keiner der Wege ist aktiv',
+    nodesProbing: 'Prüfe…',
     globeBadgeOn: 'Verbunden',
     globeBadgeOff: 'Nicht verbunden',
     globeVisualNote: 'Weltweit · immer online',
@@ -321,6 +385,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: 'Aktiviert',
   },
   'fr-FR': {
+    nodesTitle: 'Nœuds et clients',
+    nodesSeeds: 'Nœuds seed NKN',
+    nodesReachable: '{n} joignables',
+    nodesPeers: 'Pairs DHT',
+    nodesSelfNkn: 'NKN de cet appareil',
+    nodesSelfDht: 'ID de ce pair',
+    nodesEmpty: 'Aucune voie activée',
+    nodesProbing: 'Sondage…',
     globeBadgeOn: 'Connecté',
     globeBadgeOff: 'Non connecté',
     globeVisualNote: 'Partout dans le monde · toujours en ligne',
@@ -344,6 +416,14 @@ const labels: Record<string, Record<string, string>> = {
     meshSecondOn: 'Activée',
   },
   'pt-BR': {
+    nodesTitle: 'Nós e clientes',
+    nodesSeeds: 'Nós seed NKN',
+    nodesReachable: '{n} alcançáveis',
+    nodesPeers: 'Pares DHT',
+    nodesSelfNkn: 'NKN deste aparelho',
+    nodesSelfDht: 'ID deste par',
+    nodesEmpty: 'Nenhuma via está ativada',
+    nodesProbing: 'Sondando…',
     globeBadgeOn: 'Conectado',
     globeBadgeOff: 'Sem conexão',
     globeVisualNote: 'No mundo todo · sempre on-line',

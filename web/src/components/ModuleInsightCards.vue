@@ -2,7 +2,15 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Activity, AlertCircle, CheckCircle2, Gauge, LoaderCircle, Radio, RotateCcw, Signal, Usb, Wrench } from '@lucide/vue'
+import { Activity, AlertCircle, CheckCircle2, Gauge, LoaderCircle, Network, Radio, RotateCcw, Signal, Usb, Wrench } from '@lucide/vue'
+import {
+  getDHTSettings,
+  getNKNNetworkNodes,
+  getNKNNetworkStatus,
+  type DHTStatus,
+  type NKNNetworkNodes
+} from '../api/client'
+import { networkCardLabels } from '../i18n/networkCardNotes'
 import {
   acquireSystemMetrics,
   modemInterface,
@@ -14,18 +22,123 @@ import { repairModule, restartModem } from '../state/deviceConfiguration'
 import { requestConfirmation } from '../state/confirmation'
 import type { LineSummary } from '../api/types'
 
-// Three insight cards rendered next to the module card on the dashboard:
-// data interface throughput, system runtime health with a modem restart
-// action, and the live serving-cell radio detail. All read from the shared
-// 10 s metrics poller — no extra API traffic.
+// Four insight cards rendered next to the module card on the dashboard: data
+// interface throughput, system runtime health with a modem restart action, the
+// live serving-cell radio detail, and the two decentralised paths' nodes.
+//
+// The first three read from the shared 10 s metrics poller and cost no extra
+// API traffic. The fourth is the exception and says so: it polls the NKN seed
+// probe and the DHT status on its own, once a minute, because neither figure is
+// in the metrics sample. A minute is deliberate -- the seed probe is a round of
+// network round-trips, not a local read.
+//
+// Everything on that card is measured. The seed list is the probe's own result
+// with its own round-trip times; the two identities are what this gateway
+// reports as its own. Nothing is drawn when a path is off: the card says which
+// one, rather than showing an empty list that reads as "nobody is there".
 
 const props = defineProps<{ line: LineSummary }>()
 
-const { t } = useI18n()
+const i18n = useI18n()
+const { t } = i18n
 const router = useRouter()
 
 onMounted(() => { acquireSystemMetrics() })
 onBeforeUnmount(() => { releaseSystemMetrics() })
+
+// The nodes card's own polling. Registered here rather than in the shared
+// metrics store because it is the only consumer and it wants a much slower
+// cadence than the 10 s sample.
+const nknNodes = ref<NKNNetworkNodes | null>(null)
+const nknAddress = ref('')
+const nknEnabled = ref<boolean | null>(null)
+const dhtStatus = ref<DHTStatus | null>(null)
+let nodesTimer: ReturnType<typeof setInterval> | undefined
+
+async function loadNodes(): Promise<void> {
+  try {
+    const status = await getNKNNetworkStatus()
+    nknEnabled.value = status.settings.enabled
+    nknAddress.value = status.runtime.my_address ?? ''
+  } catch {
+    nknEnabled.value = null
+    nknAddress.value = ''
+  }
+  try {
+    nknNodes.value = nknEnabled.value ? await getNKNNetworkNodes() : null
+  } catch {
+    nknNodes.value = null
+  }
+  try {
+    dhtStatus.value = (await getDHTSettings()).status
+  } catch {
+    dhtStatus.value = null
+  }
+}
+
+onMounted(() => {
+  i18nBridge()
+  void loadNodes()
+  nodesTimer = setInterval(() => { void loadNodes() }, 60_000)
+})
+onBeforeUnmount(() => { if (nodesTimer) clearInterval(nodesTimer) })
+
+// The card's labels live in the lazily merged module with the other dashboard
+// prose, not in the locale files: the startup budget had 0.1 KiB of headroom.
+function i18nBridge(): void {
+  const locale = i18n.locale.value
+  i18n.mergeLocaleMessage(locale, { dashboard: networkCardLabels(locale) })
+}
+
+/** The seed nodes the probe actually reached, quickest first. */
+const seedNodes = computed(() => {
+  const nodes = nknNodes.value?.nodes ?? []
+  return nodes
+    .filter(node => node.rtt_ms >= 0)
+    .sort((a, b) => a.rtt_ms - b.rtt_ms)
+    .slice(0, 4)
+})
+
+/** The slowest reached node, so the latency bars share one scale. */
+const seedScale = computed(() =>
+  Math.max(1, ...seedNodes.value.map(node => node.rtt_ms))
+)
+
+const dhtPeerLine = computed(() => {
+  const status = dhtStatus.value
+  if (!status || status.state !== 'ready') return ''
+  return `${t('dashboard.meshConnected')} ${status.connected_peers} · ${t('dashboard.meshLan')} ${status.lan_peers}`
+})
+
+/** Both paths off, or both unreachable: the card has nothing true to show. */
+const nodesEmpty = computed(() =>
+  !nknEnabled.value && dhtStatus.value?.state !== 'ready'
+)
+
+/**
+ * A cryptographic identity is long and its two ENDS are what identify it, so
+ * the middle is what gets dropped.
+ */
+function shortId(value: string): string {
+  if (value.length <= 22) return value
+  return `${value.slice(0, 10)}…${value.slice(-8)}`
+}
+
+/**
+ * A seed node's address is the opposite case, and middle-truncating it was
+ * wrong in a way the first render made obvious: `mainnet-node-0042.nkn.org:30003`
+ * came out as `mainnet-no…rg:30003`, which threw away the number and left four
+ * rows that read as four copies of the same node. The identifying part of a
+ * host name is its FIRST label; the domain and port are the same for every seed.
+ */
+function shortHost(value: string): string {
+  const host = value.split(':')[0] ?? value
+  const first = host.split('.')[0] ?? host
+  if (first.length >= 6) return first
+  // A bare address with no dots (an IP, or an NKN identifier) has no label to
+  // take, so it falls back to the identity rule.
+  return shortId(host)
+}
 
 const snapshot = computed(() => systemMetricsState.metrics)
 const cellular = computed(() => snapshot.value?.cellular ?? null)
@@ -428,6 +541,59 @@ const radioFacts = computed<RadioFact[]>(() => {
       </div>
       <p v-else class="insight-card__empty">{{ t('dashboard.noCellular') }}</p>
     </article>
+
+    <!-- Nodes and clients on the two decentralised paths.
+         Every figure here is measured: the seed list is the probe's own result
+         with its own round-trip times, and the two identities are what this
+         gateway reports as its own. A path that is off says so. -->
+    <article class="insight-card">
+      <header class="insight-card__head">
+        <Network :size="15" />
+        <h4>{{ t('dashboard.nodesTitle') }}</h4>
+      </header>
+      <div v-if="!nodesEmpty" class="insight-card__body insight-nodes">
+        <div class="insight-nodes__row">
+          <span class="insight-nodes__label">{{ t('dashboard.nodesSeeds') }}</span>
+          <span v-if="nknNodes" class="insight-nodes__value">
+            {{ t('dashboard.nodesReachable', { n: `${nknNodes.reachable}/${nknNodes.probed}` }) }}
+          </span>
+          <span v-else-if="nknEnabled" class="insight-nodes__value is-muted">
+            {{ t('dashboard.nodesProbing') }}
+          </span>
+          <span v-else class="insight-nodes__value is-muted">
+            {{ t('dashboard.globeDhtOff') }}
+          </span>
+        </div>
+
+        <ul v-if="seedNodes.length" class="insight-nodes__seeds">
+          <li v-for="node in seedNodes" :key="node.address">
+            <span class="insight-nodes__addr" :title="node.address">{{ shortHost(node.address) }}</span>
+            <span class="insight-nodes__bar" aria-hidden="true">
+              <i :style="{ width: `${Math.round((node.rtt_ms / seedScale) * 100)}%` }" />
+            </span>
+            <span class="insight-nodes__rtt">{{ node.rtt_ms }} ms</span>
+          </li>
+        </ul>
+
+        <div class="insight-nodes__row">
+          <span class="insight-nodes__label">{{ t('dashboard.nodesPeers') }}</span>
+          <span v-if="dhtPeerLine" class="insight-nodes__value">{{ dhtPeerLine }}</span>
+          <span v-else class="insight-nodes__value is-muted">{{ t('dashboard.globeDhtOff') }}</span>
+        </div>
+
+        <dl class="insight-nodes__ids">
+          <div v-if="nknAddress">
+            <dt>{{ t('dashboard.nodesSelfNkn') }}</dt>
+            <dd :title="nknAddress">{{ shortId(nknAddress) }}</dd>
+          </div>
+          <div v-if="dhtStatus?.peer_id">
+            <dt>{{ t('dashboard.nodesSelfDht') }}</dt>
+            <dd :title="dhtStatus.peer_id">{{ shortId(dhtStatus.peer_id) }}</dd>
+          </div>
+        </dl>
+      </div>
+      <p v-else class="insight-card__empty">{{ t('dashboard.nodesEmpty') }}</p>
+    </article>
   </div>
 </template>
 
@@ -777,4 +943,101 @@ const radioFacts = computed<RadioFact[]>(() => {
 .insight-signal__row.is-good { color: var(--accent); }
 .insight-signal__row.is-fair { color: var(--warning); }
 .insight-signal__row.is-poor { color: var(--danger); }
+/* Nodes and clients. Rows of label/value, a seed list with a shared latency
+   scale, and the two identities. The addresses are monospace and truncated in
+   the middle: their two ends are what identifies them, and the middle is
+   noise that would push the card wider than its neighbours. */
+.insight-nodes { gap: 10px; }
+
+.insight-nodes__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.insight-nodes__label { color: var(--muted); }
+
+.insight-nodes__value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.insight-nodes__value.is-muted { color: var(--faint); font-weight: 500; }
+
+.insight-nodes__seeds {
+  display: grid;
+  margin: 0;
+  padding: 8px 10px;
+  gap: 6px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  list-style: none;
+}
+
+.insight-nodes__seeds li {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 46px auto;
+}
+
+.insight-nodes__addr {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One scale across the list, set by the slowest node reached, so the bars
+   compare with each other rather than each filling its own track. */
+.insight-nodes__bar {
+  overflow: hidden;
+  height: 3px;
+  background: var(--control-muted, var(--border));
+  border-radius: 999px;
+}
+
+.insight-nodes__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+
+.insight-nodes__rtt {
+  color: var(--text);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-nodes__ids {
+  display: grid;
+  margin: 0;
+  gap: 6px;
+}
+
+.insight-nodes__ids > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.insight-nodes__ids dt { color: var(--muted); font-size: 11px; }
+
+.insight-nodes__ids dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

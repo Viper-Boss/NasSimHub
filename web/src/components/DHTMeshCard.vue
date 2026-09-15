@@ -87,13 +87,27 @@ function render(): void {
   const height = element.clientHeight
   if (width <= 0 || height <= 0) return
 
+  // The backing store is sized from BOTH dimensions, and each is compared on
+  // its own. The earlier version only compared the width and set the height
+  // inside that branch, so a stage that changed height without changing width
+  // kept a stale store and the browser stretched the drawing to fit -- which is
+  // exactly what the narrow-card breakpoint does to this stage (365px to
+  // 300px).
   const ratio = Math.min(window.devicePixelRatio || 1, 2)
-  if (element.width !== Math.round(width * ratio)) {
-    element.width = Math.round(width * ratio)
-    element.height = Math.round(height * ratio)
+  const storeWidth = Math.round(width * ratio)
+  const storeHeight = Math.round(height * ratio)
+  if (element.width !== storeWidth || element.height !== storeHeight) {
+    element.width = storeWidth
+    element.height = storeHeight
   }
+
+  // Cleared in DEVICE space, over the whole store, rather than over the CSS box
+  // under the scale transform. `clientWidth` is an integer while the element's
+  // box is fractional, so a CSS-space clear can leave a sliver of the store
+  // untouched -- and anything left there is composited again every frame.
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.clearRect(0, 0, element.width, element.height)
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
-  context.clearRect(0, 0, width, height)
 
   // Rebuilt only when the size actually changed. Rebuilding on every resize
   // callback reshuffles the net while the reader is dragging the window, and a
