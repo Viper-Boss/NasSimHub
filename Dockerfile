@@ -140,7 +140,9 @@ ARG VCS_REF=unknown
 ARG MODEMDECK_UID=10001
 ARG MODEMDECK_GID=10001
 
-RUN apk add --no-cache ca-certificates=20260611-r0 \
+# ca-certificates: 不钉版本——alpine 源会下架旧版本（20260611-r0 已 404，
+# r97 构建时源上只剩 20260909-r0），钉死=定时炸弹；证书包本身无行为差异风险。
+RUN apk add --no-cache ca-certificates \
     && addgroup -S -g "${MODEMDECK_GID}" modemdeck \
     && adduser -S -D -H -h /nonexistent -s /sbin/nologin \
         -u "${MODEMDECK_UID}" -G modemdeck modemdeck \
