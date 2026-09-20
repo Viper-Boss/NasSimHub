@@ -11,6 +11,7 @@ import {
   type NKNNetworkNodes
 } from '../api/client'
 import { networkCardLabels } from '../i18n/networkCardNotes'
+import './insightCard.css'
 import {
   acquireSystemMetrics,
   modemInterface,
@@ -598,54 +599,10 @@ const radioFacts = computed<RadioFact[]>(() => {
 </template>
 
 <style scoped>
-.insight-cards {
-  display: contents;
-}
-
-.insight-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 420px;
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-surface);
-}
-
-.insight-card__head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted-strong);
-}
-
-.insight-card__head h4 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-/* The body owns whatever height the row's tallest card forces on this one, and
-   space-between hands that height to the gaps rather than leaving it stranded
-   under the last row of figures. A card with a chart in it gives the slack to
-   the chart instead, since that grows (see .insight-net__chart); a card
-   without one simply breathes. Either way nothing reads as unfinished. */
-.insight-card__body {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.insight-card__empty {
-  margin: auto;
-  padding: 12px 0;
-  font-size: 12.5px;
-  color: var(--muted);
-}
+/* The base card chrome -- .insight-cards, .insight-card, its head, body and
+   empty state -- now lives in insightCard.css, imported above, so the cards in
+   ModuleExtraCards.vue are the same object as these. Only what is particular to
+   these four cards stays below. */
 
 /* Net card */
 .insight-net__iface {

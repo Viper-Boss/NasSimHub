@@ -33,6 +33,7 @@ import ContactEditor from '../components/ContactEditor.vue'
 import MessageThreadListItem from '../components/MessageThreadListItem.vue'
 import ModuleCard from '../components/ModuleCard.vue'
 import ModuleInsightCards from '../components/ModuleInsightCards.vue'
+import ModuleExtraCards from '../components/ModuleExtraCards.vue'
 import NetworkGlobeCard from '../components/NetworkGlobeCard.vue'
 import DHTMeshCard from '../components/DHTMeshCard.vue'
 import WireGuardTrafficCard from '../components/WireGuardTrafficCard.vue'
@@ -1252,6 +1253,11 @@ onBeforeUnmount(() => {
                     <ModuleInsightCards
                       v-if="line === moduleLines[0]"
                       :line="line"
+                    />
+                    <ModuleExtraCards
+                      v-if="line === moduleLines[0]"
+                      :line="line"
+                      :device="deviceFor(line)"
                     />
                   </template>
                 </div>

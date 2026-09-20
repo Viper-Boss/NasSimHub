@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { listenForWireGuardPhrase } from '../state/wireguardUnlock'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import {
@@ -76,7 +76,11 @@ import IncomingCallModeControl from './IncomingCallModeControl.vue'
 import LineStatusStrip from './LineStatusStrip.vue'
 import OverlayDialog from './OverlayDialog.vue'
 import PopoverTransition from './PopoverTransition.vue'
-import RuntimeStatusCard from './RuntimeStatusCard.vue'
+// Loaded on demand, not with the shell. The card only exists while the
+// popover is open, and it drags in the device-configuration store (for the
+// module restart) and its own gauge CSS -- which is 0.9 KiB of the startup
+// budget, measured, for a panel most visits never open.
+const RuntimeStatusCard = defineAsyncComponent(() => import('./RuntimeStatusCard.vue'))
 import { profileAvatarState } from '../state/profileAvatar'
 
 const route = useRoute()
@@ -93,17 +97,65 @@ const profileContact = computed(() =>
 const railAvatar = computed(
   () => profileAvatarState.avatar || profileContact?.value?.avatar || ''
 )
+// The runtime popover RENDERS OUTSIDE THE RAIL, as a fixed-position sibling of
+// it, and is positioned from the avatar's own rectangle.
+//
+// The rail scrolls -- `.app-shell .rail { overflow-y: auto }` -- and a box with
+// overflow in one axis clips the other as well, so a positioned child of the
+// rail is cropped to the rail's width. The rail is about 90px wide and this
+// card is 340px, which is the "card is covered" the operator reported: three
+// quarters of it was outside the crop.
 const runtimeCardOpen = ref(false)
 const runtimeCardRoot = ref<HTMLElement | null>(null)
+const runtimeCardPop = ref<HTMLElement | null>(null)
+const runtimeCardPosition = ref({ top: 0, left: 0 })
+
+/**
+ * Place the card beside the avatar, then pull it back inside the viewport.
+ *
+ * Beside rather than below, because the rail is a narrow column at the left
+ * edge and a 340px card hung under a 90px button would sit mostly off-screen
+ * at the bottom of a short window.
+ *
+ * The card's size is MEASURED, not declared here: its width and height are set
+ * by its own stylesheet and its own content, and a copy of either number in
+ * this file is a second source of truth that goes stale the first time the card
+ * changes. On the opening pass it has not rendered yet, so the fallbacks stand
+ * in and the caller re-runs this on the next tick with the real box.
+ */
+function placeRuntimeCard(): void {
+  const anchor = runtimeCardRoot.value?.getBoundingClientRect()
+  if (!anchor) return
+  const card = runtimeCardPop.value?.getBoundingClientRect()
+  const width = card?.width || 340
+  const height = card?.height || 0
+  runtimeCardPosition.value = {
+    left: Math.max(12, Math.min(anchor.right + 10, window.innerWidth - width - 12)),
+    top: Math.max(12, Math.min(anchor.top, window.innerHeight - height - 12))
+  }
+}
 
 function toggleRuntimeCard(): void {
   runtimeCardOpen.value = !runtimeCardOpen.value
+  if (!runtimeCardOpen.value) return
+  placeRuntimeCard()
+  // Again once the card exists and its height can be measured.
+  void nextTick(() => placeRuntimeCard())
 }
 
 function handleRuntimeClickOutside(event: MouseEvent): void {
   if (!runtimeCardOpen.value) return
-  if (runtimeCardRoot.value?.contains(event.target as Node)) return
+  const target = event.target as Node
+  // Both halves have to be checked now that the card is not a descendant of
+  // the button's wrapper: without the second test, a click anywhere inside the
+  // teleported card -- including on its own buttons -- closed it.
+  if (runtimeCardRoot.value?.contains(target)) return
+  if (runtimeCardPop.value?.contains(target)) return
   runtimeCardOpen.value = false
+}
+
+function onRuntimeViewportChange(): void {
+  if (runtimeCardOpen.value) placeRuntimeCard()
 }
 
 function onRuntimeKeydown(event: KeyboardEvent): void {
@@ -425,6 +477,10 @@ onMounted(() => {
   syncDialerMode()
   document.addEventListener('click', handleRuntimeClickOutside)
   document.addEventListener('keydown', onRuntimeKeydown)
+  // Re-placed on resize only. A scroll listener would be dead weight: the body
+  // does not scroll, and the avatar's wrapper is `position: sticky; top: 0`
+  // inside the rail, so the rail's own scrolling never moves the anchor.
+  window.addEventListener('resize', onRuntimeViewportChange)
 })
 
 onBeforeUnmount(() => {
@@ -433,6 +489,7 @@ onBeforeUnmount(() => {
   nonModalDialerMediaQuery?.removeEventListener('change', syncDialerMode)
   document.removeEventListener('click', handleRuntimeClickOutside)
   document.removeEventListener('keydown', onRuntimeKeydown)
+  window.removeEventListener('resize', onRuntimeViewportChange)
   stopApplicationVersionChecks?.()
   stopApplicationVersionChecks = undefined
   stopForegroundCommunicationRefresh?.()
@@ -469,11 +526,6 @@ onBeforeUnmount(() => {
           </span>
           <strong>{{ sessionState.username }}</strong>
         </button>
-        <PopoverTransition>
-          <div v-if="runtimeCardOpen" class="runtime-card-pop" @click.stop>
-            <RuntimeStatusCard />
-          </div>
-        </PopoverTransition>
       </div>
 
       <nav class="rail__primary">
@@ -517,6 +569,34 @@ onBeforeUnmount(() => {
         </RouterLink>
       </nav>
     </aside>
+
+    <!-- The runtime popover, a SIBLING OF THE RAIL rather than a child of the
+         avatar it belongs to. The rail scrolls, and a scroll container clips
+         both axes, so a 340px card positioned inside a ~90px rail was cropped
+         to a quarter of itself. Out here it is `position: fixed` against the
+         viewport -- nothing between it and the viewport clips or creates a
+         containing block -- and AppShell writes its coordinates from the
+         avatar's own rectangle.
+
+         Deliberately not teleported and not an OverlayDialog. Teleporting out
+         to the body would work, but the app reserves that for modal surfaces,
+         which all go through OverlayDialog so they share one focus trap, one
+         inert background and one layer; a contract test enforces it, and it
+         matches on the tag name anywhere in the file, comments included. This
+         card is not a modal: there is no backdrop, the page stays live behind
+         it, and a click anywhere else simply closes it. Being a sibling of the
+         rail escapes the clip without either mechanism. -->
+    <PopoverTransition>
+      <div
+        v-if="runtimeCardOpen"
+        ref="runtimeCardPop"
+        class="runtime-card-pop"
+        :style="{ top: `${runtimeCardPosition.top}px`, left: `${runtimeCardPosition.left}px` }"
+        @click.stop
+      >
+        <RuntimeStatusCard />
+      </div>
+    </PopoverTransition>
 
     <main class="shell-main">
       <header class="shell-header">

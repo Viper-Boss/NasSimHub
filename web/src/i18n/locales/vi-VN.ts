@@ -996,7 +996,7 @@ export default {
     "tooManyEgressDNS": "Tối đa 4 máy chủ DNS",
     "invalidEgressDNS": "Mỗi máy chủ DNS phải là một địa chỉ IP",
     "running": "Đang chạy",
-    "waitingForLine": "Äang chá» ÄÆ°á»ng dÃ¢y",
+    "waitingForLine": "Đang chờ đường dây",
     "peerLost": "Đang chạy — không liên lạc được đầu kia",
     "peerLostHint": "Giao diện đường hầm vẫn hoạt động nhưng 3 phút qua không có bắt tay nào, nên lưu lượng qua proxy này sẽ hết thời gian chờ.",
     "configurationError": "Lỗi cấu hình",

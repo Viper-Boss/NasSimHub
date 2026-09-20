@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../src/components/networkCard.css">
+<style>
+  body{margin:0;background:#090f1a;color:#e6edf7;font:12px Inter,"Microsoft YaHei",sans-serif}
+  .wrap{padding:24px}
+  .row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .cell{display:grid;gap:6px}
+  h2{margin:0 0 14px;font-size:11px;letter-spacing:3px;color:#7ed9fb;font-weight:600}
+  .lbl{color:#7891ad;letter-spacing:1px}
+  .frame{position:relative;height:300px;overflow:hidden;border:1px solid #2a3b53;border-radius:14px;
+         background:linear-gradient(145deg,#192940,#132036)}
+  canvas{display:block;width:100%;height:100%}
+</style></head><body>
+<div class="wrap">
+  <h2>ONE LOOKUP WALKING ITS ROUTE — 0.3s PER HOP</h2>
+  <div class="row" id="row"></div>
+</div>
+<script src="./route-preview.js"></script>
+</body></html>

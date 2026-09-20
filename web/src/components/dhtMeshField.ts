@@ -48,16 +48,47 @@ export interface MeshNode {
 /** A strand, by node index. */
 export type MeshEdge = [number, number]
 
-/** A bead in flight along one strand, from the first index to the second. */
+/**
+ * A lookup in flight: a route through several nodes, hop by hop.
+ *
+ * This replaced a single-edge bead, and the reason is worth keeping. One edge
+ * at 0.48s across a 59px strand reads, on screen, as a dot twitching once and
+ * vanishing -- the operator's words were "it looks like it only jumps one node
+ * and then stops", which is exactly what it did. A DHT lookup is not one hop:
+ * it is a walk, each step landing nearer the key, and a walk is also the thing
+ * an eye can follow across the card.
+ *
+ * `path` is node indices, first to last, and consecutive entries are always a
+ * real strand in `edges` -- the bead travels the net rather than cutting across
+ * it. A node never appears twice: a route that doubles back reads as lost.
+ */
 export interface MeshSignal {
-  edge: MeshEdge
-  /** Seconds at which it set off. */
+  path: number[]
+  /** Seconds at which the FIRST hop set off. */
   start: number
 }
 
 export interface MeshField {
   nodes: MeshNode[]
   edges: MeshEdge[]
+  /**
+   * The nodes that fall inside the visible canvas, by index.
+   *
+   * The net deliberately overhangs every edge, which is what makes it read as a
+   * piece cut out of something larger -- but it means a good share of the nodes
+   * are off screen, and a route STARTED out there spends its hops where nobody
+   * can see them. Measured on a 300px panel only 57% of nodes were inside.
+   * Routes are launched from this list instead.
+   */
+  interior: number[]
+  /**
+   * Who each node can reach, by index. Built once with the net.
+   *
+   * A route has to pick a neighbour at every hop, and scanning all the edges
+   * for each one is the difference between planning a route in a few
+   * microseconds and doing it in a millisecond, every 0.7 seconds, forever.
+   */
+  neighbours: number[][]
   signals: MeshSignal[]
   /** Seconds after which another signal may be created. */
   nextSignal: number
@@ -83,8 +114,13 @@ export interface MeshOptions {
   driftSpeed: number
   /** Seconds between attempts to launch a signal. */
   signalInterval: number
-  /** Seconds a signal takes to cross one strand. */
+  /** Seconds a signal takes to cross ONE strand of its route. */
   signalDuration: number
+  /** Fewest and most hops in a route. A one-hop route is not a route. */
+  minHops: number
+  maxHops: number
+  /** Seconds a traversed strand stays lit behind the bead. */
+  trailFade: number
   /** Seconds between one node changing brightness. */
   lifecycleInterval: number
   /** Seconds a node takes to fade in or out. */
@@ -97,7 +133,13 @@ export const defaultMeshOptions: MeshOptions = {
   drift: 9,
   driftSpeed: 0.22,
   signalInterval: 0.72,
-  signalDuration: 0.48,
+  // Faster per hop than the old single-edge bead, because a route now strings
+  // several of them together: at 0.48s a six-hop route took nearly three
+  // seconds to cross the card, which reads as slow rather than as busy.
+  signalDuration: 0.3,
+  minHops: 3,
+  maxHops: 6,
+  trailFade: 1.1,
   lifecycleInterval: 4.5,
   fadeDuration: 3.2,
   seed: 9014
@@ -191,9 +233,31 @@ export function buildField(
     }
   }
 
+  const neighbours: number[][] = nodes.map(() => [])
+  for (const [a, b] of edges) {
+    neighbours[a]!.push(b)
+    neighbours[b]!.push(a)
+  }
+
+  // Inset rather than the exact bounds: a route that starts one pixel inside
+  // the frame is barely better than one that starts outside it.
+  const insetX = width * 0.12
+  const insetY = height * 0.12
+  const interior: number[] = []
+  nodes.forEach((node, index) => {
+    if (
+      node.x >= insetX && node.x <= width - insetX &&
+      node.y >= insetY && node.y <= height - insetY
+    ) {
+      interior.push(index)
+    }
+  })
+
   return {
     nodes,
     edges,
+    interior,
+    neighbours,
     signals: [],
     nextSignal: 0,
     nextLife: options.lifecycleInterval,
@@ -247,10 +311,13 @@ export function advance(
     node.py = node.y + Math.cos(time * options.driftSpeed * 0.8 + node.phase) * options.drift
   }
 
+  // A route lives until its LAST hop lands, plus the time its trail takes to
+  // fade -- the painter needs it after the bead has arrived, or the lit path
+  // behind it would blink out the instant the lookup finished.
   for (let index = field.signals.length - 1; index >= 0; index -= 1) {
-    if (time - field.signals[index]!.start >= options.signalDuration) {
-      field.signals.splice(index, 1)
-    }
+    const signal = field.signals[index]!
+    const span = (signal.path.length - 1) * options.signalDuration + options.trailFade
+    if (time - signal.start >= span) field.signals.splice(index, 1)
   }
 
   if (!live) {
@@ -259,16 +326,79 @@ export function advance(
   }
 
   if (time >= field.nextSignal && field.edges.length > 0) {
-    const edge = field.edges[Math.floor(draw(field, options) * field.edges.length)]!
-    // Both ends bright, or the bead appears to leave from nothing.
-    if (field.nodes[edge[0]]!.alpha > 0.6 && field.nodes[edge[1]]!.alpha > 0.6) {
-      field.signals.push({
-        edge: draw(field, options) > 0.5 ? edge : [edge[1], edge[0]],
-        start: time
-      })
-    }
+    const path = planRoute(field, options)
+    // A route that could not reach its minimum is not launched at all. Drawing
+    // the stub would put back exactly the one-hop twitch this replaced.
+    if (path) field.signals.push({ path, start: time })
     field.nextSignal = time + options.signalInterval
   }
+}
+
+/**
+ * planRoute walks a lookup across the net.
+ *
+ * Every node on it is bright, because a bead leaving a dim node reads as
+ * traffic appearing out of nothing -- and the dim nodes are the part of the
+ * picture that explicitly says "we do not know who this is".
+ *
+ * The walk is given a HEADING at launch and prefers, at each hop, the
+ * neighbour that lies most along it. That is what makes a route read as going
+ * somewhere: an unbiased random walk on a net this dense spends its hops
+ * circling one cell, which looks aimless and, worse, looks like a bug. A DHT
+ * lookup does converge on a key, so a route that travels is also the truer
+ * picture. Three hops in ten are still taken at random, or every route would
+ * be a straight line.
+ */
+function planRoute(field: MeshField, options: MeshOptions): number[] | null {
+  const bright = (index: number): boolean => {
+    const node = field.nodes[index]
+    return node !== undefined && node.alpha > 0.6
+  }
+
+  if (field.interior.length === 0) return null
+  const first = field.interior[Math.floor(draw(field, options) * field.interior.length)]!
+  if (!bright(first)) return null
+
+  const heading = draw(field, options) * Math.PI * 2
+  const headingX = Math.cos(heading)
+  const headingY = Math.sin(heading)
+  const span = options.maxHops - options.minHops + 1
+  const wanted = options.minHops + Math.floor(draw(field, options) * span)
+
+  const path = [first]
+  const visited = new Set([first])
+  for (let hop = 0; hop < wanted; hop += 1) {
+    const current = path[path.length - 1]!
+    const open = field.neighbours[current]!.filter(
+      candidate => bright(candidate) && !visited.has(candidate)
+    )
+    if (open.length === 0) break
+
+    let next: number
+    if (open.length === 1 || draw(field, options) < 0.7) {
+      const from = field.nodes[current]!
+      let best = open[0]!
+      let bestScore = -Infinity
+      for (const candidate of open) {
+        const to = field.nodes[candidate]!
+        const dx = to.x - from.x
+        const dy = to.y - from.y
+        const length = Math.hypot(dx, dy) || 1
+        const score = (dx / length) * headingX + (dy / length) * headingY
+        if (score > bestScore) {
+          bestScore = score
+          best = candidate
+        }
+      }
+      next = best
+    } else {
+      next = open[Math.floor(draw(field, options) * open.length)]!
+    }
+    path.push(next)
+    visited.add(next)
+  }
+
+  return path.length > options.minHops ? path : null
 }
 
 /** draw takes the next choice from the field's own stream. */
@@ -281,11 +411,62 @@ function draw(field: MeshField, options: MeshOptions): number {
   return seeded((options.seed ^ (field.picks * 2654435761)) >>> 0)()
 }
 
-/** signalProgress is how far along its strand a bead has travelled, 0 to 1. */
-export function signalProgress(
+/** Where the bead of a route is: which hop, and how far along that hop. */
+export interface SignalHead {
+  /** Index into path: the bead is between path[hop] and path[hop + 1]. */
+  hop: number
+  /** 0 at path[hop], 1 at path[hop + 1]. */
+  fraction: number
+  /** True once the bead has landed and only the trail is still fading. */
+  arrived: boolean
+}
+
+/**
+ * signalHead locates a route's bead at a moment.
+ *
+ * Derived from the clock rather than stored on the signal, for the same reason
+ * the drift is: the same moment has to produce the same picture, or a stalled
+ * frame makes the bead jump and the preview harness cannot render a frame at
+ * all.
+ */
+export function signalHead(
   signal: MeshSignal,
   time: number,
   options: MeshOptions = defaultMeshOptions
+): SignalHead {
+  const hops = signal.path.length - 1
+  const elapsed = Math.max(0, time - signal.start)
+  const travel = hops * options.signalDuration
+  if (elapsed >= travel) {
+    return { hop: hops - 1, fraction: 1, arrived: true }
+  }
+  const hop = Math.min(hops - 1, Math.floor(elapsed / options.signalDuration))
+  return {
+    hop,
+    fraction: (elapsed - hop * options.signalDuration) / options.signalDuration,
+    arrived: false
+  }
+}
+
+/**
+ * hopGlow is how lit a strand of the route is, 0 to 1.
+ *
+ * A strand lights as the bead crosses it and fades behind, which is what turns
+ * a moving dot into a visible ROUTE -- the whole point of the change. Strands
+ * ahead of the bead are dark: lighting the path in advance would show where the
+ * lookup is going before it has been there.
+ */
+export function hopGlow(
+  signal: MeshSignal,
+  hop: number,
+  time: number,
+  options: MeshOptions = defaultMeshOptions
 ): number {
-  return clamp((time - signal.start) / options.signalDuration, 0, 1)
+  const head = signalHead(signal, time, options)
+  if (hop > head.hop) return 0
+  if (hop === head.hop) return head.arrived ? 1 : Math.max(0.35, head.fraction)
+  // Behind the bead: fades from the moment that hop landed.
+  const landed = signal.start + (hop + 1) * options.signalDuration
+  const age = time - landed
+  return clamp(1 - age / options.trailFade, 0, 1)
 }

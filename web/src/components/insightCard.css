@@ -1,0 +1,169 @@
+/* The chrome the dashboard's insight cards share.
+ *
+ * These cards sit in one grid row with the modem card, and they have to be
+ * indistinguishable from one another as objects -- same edges, same padding,
+ * same head, same way of handing their spare height to their content. That was
+ * true while all of them lived in one component; it stopped being enforceable
+ * the moment there were two components, because the rules were scoped to the
+ * first one. So they live here and both components import them, the same way
+ * the two network cards share networkCard.css.
+ *
+ * Global rules, hence the `insight-` prefix on every class. Anything particular
+ * to one card stays in that component's own scoped block.
+ */
+
+/* `display: contents` is load-bearing: each card has to be a direct grid item
+   of the dashboard's module grid, or a wrapper would take one grid cell and
+   stack the cards inside it. */
+.insight-cards {
+  display: contents;
+}
+
+.insight-card {
+  display: flex;
+  width: 100%;
+  max-width: 420px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+}
+
+.insight-card__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted-strong);
+}
+
+.insight-card__head h4 {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* A head action sits at the far end of the head row: a refresh control, a
+   count, a state pill. `margin-left: auto` rather than `justify-content`, so
+   the icon and the title stay together on the left. */
+.insight-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.insight-card__action:hover:not(:disabled) { color: var(--accent); }
+.insight-card__action:disabled { cursor: default; opacity: 0.55; }
+
+.insight-card__action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The body owns whatever height the row's tallest card forces on this one, and
+   space-between hands that height to the gaps rather than leaving it stranded
+   under the last row of figures. A card with a chart in it gives the slack to
+   the chart instead, since that grows; a card without one simply breathes.
+   Either way nothing reads as unfinished. */
+.insight-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.insight-card__empty {
+  margin: auto;
+  padding: 12px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* A label/value line. Used by several cards, so it is here rather than copied:
+   the label is muted and the value is emphasised and right-aligned, and the
+   value may be a figure, so it gets tabular digits. */
+.insight-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.insight-line__label {
+  min-width: 0;
+  color: var(--muted);
+}
+
+.insight-line__value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.insight-line__value.is-muted {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+/* A short pill for a protocol name or a mode. Kept neutral by default: a green
+   pill is a claim that something is verified, so the tone is opt-in. */
+.insight-tag {
+  padding: 2px 7px;
+  color: var(--muted-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.insight-tag.is-ok {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: var(--success-border);
+}
+
+.insight-tag.is-warn {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+}
+
+/* A footnote saying a card's endpoint is not in place yet, which is what
+   explains the dashes above it. Deliberately plain and at the bottom: it is not
+   a warning about the gateway, so it must not read as an alert.
+
+   In the frame's own namespace and therefore here, not in a component: the next
+   card that waits on an endpoint says so in the same words, in the same place,
+   at the same weight. */
+.insight-card__pending-note {
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+/* A monospace identifier, truncated with an ellipsis. The full value belongs in
+   a title attribute: the shortened form is lossy. */
+.insight-mono {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

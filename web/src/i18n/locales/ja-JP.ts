@@ -996,7 +996,7 @@ export default {
     "tooManyEgressDNS": "DNS サーバーは最大 4 件です",
     "invalidEgressDNS": "DNS サーバーは IP アドレスで指定してください",
     "running": "稼働中",
-    "waitingForLine": "åç·å¾ã¡",
+    "waitingForLine": "回線待ち",
     "peerLost": "稼働中 — ピアに到達できません",
     "peerLostHint": "トンネルインターフェースは有効ですが、直近 3 分間ピアとのハンドシェイクがありません。このプロキシ経由の通信はタイムアウトします。",
     "configurationError": "構成エラー",

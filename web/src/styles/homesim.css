@@ -284,14 +284,38 @@ body .brand-mark > span, .login-brand > span { color: #ffffff; }
 /* Image avatars fill the whole tile: no palette tile, no inset ring, always round. */
 .app-shell .avatar--image { background: none; box-shadow: none; }
 .app-shell .brand-mark__avatar .avatar { border-radius: 50%; }
+/* A SET AVATAR FILLS THE TILE.
+ *
+ * The 40px tile carries the brand gradient and the fallback glyph sits on it at
+ * 34px, which is right while there is no picture. Once the operator sets one,
+ * that 3px difference became a gradient ring around a circular photo -- the
+ * "ugly" the operator reported. So when the avatar is an image the tile stops
+ * being a tile: the gradient, the glow and the square radius all go, and the
+ * picture takes the full 40px.
+ *
+ * `:has()` rather than a class on the wrapper, because the wrapper does not
+ * know: whether there is a picture is BaseAvatar's business, and it already
+ * says so by putting `avatar--image` on itself. One source of truth, and no
+ * prop threaded through the shell to repeat it. */
+.brand-mark__avatar:has(.avatar--image) {
+  background: none;
+  box-shadow: none;
+  border-radius: 50%;
+}
+.brand-mark__avatar:has(.avatar--image) .avatar { width: 100%; height: 100%; }
 /* Rail avatar: clickable, opens the runtime status popover. */
 button.brand-mark {
   border: 0; background: none; padding: 0; font: inherit; color: inherit;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .brand-mark-wrap { position: relative; display: flex; justify-content: center; }
+/* Teleported to the body and placed from the avatar's rectangle, so `fixed`
+   rather than `absolute`: the rail scrolls, and a scroll container clips both
+   axes, which cropped this 340px card to the rail's ~90px width. AppShell
+   writes `top`/`left` inline. The layer is the app's popover token, not an
+   ad-hoc number: this is a popover, and it has to sit under dialogs. */
 .runtime-card-pop {
-  position: absolute; z-index: 60; top: calc(100% + 8px); left: 12px;
+  position: fixed; z-index: var(--layer-popover); top: 0; left: 0;
 }
 .shell-location > span:first-child { color: var(--text); font-size: 1.125rem; font-weight: 700; letter-spacing: -.03em; }
 .app-shell .rail-link { min-height: 62px; }

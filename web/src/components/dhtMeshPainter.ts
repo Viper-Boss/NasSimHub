@@ -15,7 +15,13 @@
 // A palette of finished `rgba(...)` strings cannot be dimmed without string
 // surgery, which is how a drawing ends up with a colour nobody can re-theme.
 
-import { defaultMeshOptions, signalProgress, type MeshField, type MeshOptions } from './dhtMeshField'
+import {
+  defaultMeshOptions,
+  hopGlow,
+  signalHead,
+  type MeshField,
+  type MeshOptions
+} from './dhtMeshField'
 
 /** The roles in the picture. One set is illustration, one is a claim. */
 export interface MeshPalette {
@@ -99,36 +105,70 @@ export function paintMesh(
 
   if (!live) return
 
-  // Signals last, over everything, because they are the thing to look at --
+  // Routes last, over everything, because they are the thing to look at --
   // and the only mark in this picture that claims a packet moved.
+  //
+  // Each one is a lookup walking several hops. Drawing it is three passes over
+  // the same path, and the order matters: the strands it has crossed, then the
+  // nodes it has touched, then the bead itself on the hop it is currently
+  // crossing. Strands ahead of the bead are never drawn -- lighting the path in
+  // advance would show where the lookup is going before it has been there.
   for (const signal of field.signals) {
-    const progress = signalProgress(signal, time, mesh)
-    const from = field.nodes[signal.edge[0]]
-    const to = field.nodes[signal.edge[1]]
+    const head = signalHead(signal, time, mesh)
+
+    for (let hop = 0; hop < signal.path.length - 1; hop += 1) {
+      const glow = hopGlow(signal, hop, time, mesh)
+      if (glow <= 0.01) continue
+      const from = field.nodes[signal.path[hop]!]
+      const to = field.nodes[signal.path[hop + 1]!]
+      if (!from || !to) continue
+
+      // The hop the bead is on is drawn only as far as the bead has got, so the
+      // strand is being painted in rather than switched on.
+      const reach = hop === head.hop && !head.arrived ? head.fraction : 1
+      const tipX = from.px + (to.px - from.px) * reach
+      const tipY = from.py + (to.py - from.py) * reach
+
+      // The end points are nudged apart: a gradient between two identical
+      // points is rejected by the canvas and the whole strand silently
+      // disappears, which is exactly the case on a hop's first frame.
+      const gradient = context.createLinearGradient(from.px, from.py, tipX + 0.001, tipY + 0.001)
+      gradient.addColorStop(0, channels(palette.signal, glow * 0.15))
+      gradient.addColorStop(1, channels(palette.signal, glow))
+      context.beginPath()
+      context.moveTo(from.px, from.py)
+      context.lineTo(tipX, tipY)
+      context.strokeStyle = gradient
+      context.lineWidth = 1.8
+      context.lineCap = 'round'
+      context.stroke()
+    }
+
+    // A touched node gets a small flare, so the route reads as a sequence of
+    // stops rather than as a line that happens to bend. The last node the bead
+    // has reached is the brightest; the ones behind it fade with their strand.
+    for (let step = 0; step <= head.hop + (head.fraction > 0.92 || head.arrived ? 1 : 0); step += 1) {
+      const node = field.nodes[signal.path[step]!]
+      if (!node) continue
+      const glow = step === 0
+        ? hopGlow(signal, 0, time, mesh)
+        : hopGlow(signal, step - 1, time, mesh)
+      if (glow <= 0.01) continue
+      fill(context, node.px, node.py, 4.6, channels(palette.signal, glow * 0.14))
+      fill(context, node.px, node.py, 1.9, channels(palette.signalCore, glow))
+    }
+
+    // The bead. Held at the last node once the route has landed would leave a
+    // bright dot sitting there while the trail fades, so it stops being drawn
+    // the moment it arrives -- the flare above is what marks the arrival.
+    if (head.arrived) continue
+    const from = field.nodes[signal.path[head.hop]!]
+    const to = field.nodes[signal.path[head.hop + 1]!]
     if (!from || !to) continue
-    const headX = from.px + (to.px - from.px) * progress
-    const headY = from.py + (to.py - from.py) * progress
-    // The trail starts a third of the strand back, so the bead reads as moving
-    // rather than as a dot that happens to be somewhere.
-    const tail = Math.max(0, progress - 0.3)
-    const tailX = from.px + (to.px - from.px) * tail
-    const tailY = from.py + (to.py - from.py) * tail
-
-    // The end points are nudged apart: a gradient between two identical points
-    // is rejected by the canvas and the whole trail silently disappears, which
-    // is exactly what happens on the first frame of every signal.
-    const gradient = context.createLinearGradient(tailX, tailY, headX + 0.001, headY + 0.001)
-    gradient.addColorStop(0, channels(palette.signal, 0))
-    gradient.addColorStop(1, channels(palette.signal, 1))
-    context.beginPath()
-    context.moveTo(tailX, tailY)
-    context.lineTo(headX, headY)
-    context.strokeStyle = gradient
-    context.lineWidth = 1.8
-    context.stroke()
-
+    const headX = from.px + (to.px - from.px) * head.fraction
+    const headY = from.py + (to.py - from.py) * head.fraction
     fill(context, headX, headY, 5, channels(palette.signal, 0.075))
-    fill(context, headX, headY, 2, channels(palette.signalCore, 1))
+    fill(context, headX, headY, 2.3, channels(palette.signalCore, 1))
   }
 }
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
@@ -21,6 +22,14 @@ const dashboard = await readFile(
 )
 const insightCards = await readFile(
   new URL('../src/components/ModuleInsightCards.vue', import.meta.url),
+  'utf8'
+)
+// The card chrome moved out of ModuleInsightCards.vue when a second component
+// started rendering cards into the same row: a scoped style block cannot be
+// shared, so the rules that make the cards one object live in this stylesheet
+// and both components import it. The height rules below are asserted here.
+const insightChrome = await readFile(
+  new URL('../src/components/insightCard.css', import.meta.url),
   'utf8'
 )
 
@@ -91,14 +100,59 @@ test('a stretched card hands the extra height to its content', () => {
   // dead space under them, which is the void that made stretching look worse
   // than ragged in the first place.
   assert.match(
-    insightCards,
+    insightChrome,
     /\.insight-card__body \{[^}]*flex:\s*1 1 auto/,
     'the insight card body no longer grows with the card'
   )
   assert.match(
-    insightCards,
+    insightChrome,
     /\.insight-card__body \{[^}]*justify-content:\s*space-between/,
     'the insight card body no longer distributes its extra height'
+  )
+})
+
+test('both card components render into the same row from one stylesheet', () => {
+  // Two components, one row. The moment either one styles its own frame the
+  // row stops being a row: a different padding or radius on three of seven
+  // cards reads as two screens spliced together, and nothing in a scoped style
+  // block can prevent it. So the chrome is one file, both import it, and
+  // neither redefines the classes it owns.
+  const extraCards = readFileSync(
+    new URL('../src/components/ModuleExtraCards.vue', import.meta.url),
+    'utf8'
+  )
+  for (const [name, source] of [
+    ['ModuleInsightCards.vue', insightCards],
+    ['ModuleExtraCards.vue', extraCards]
+  ]) {
+    assert.match(
+      source,
+      /import '\.\/insightCard\.css'/,
+      `${name} no longer imports the shared card chrome`
+    )
+    // Nothing in the frame's namespace may be defined in a component. Not a
+    // list of five class names -- the whole prefix, so a SIXTH frame class
+     // added to one component's scoped block fails here too instead of quietly
+    // existing on three cards out of seven. A component's own content keeps its
+    // own prefix (.insight-sec__, .insight-stats__, .insight-net__), and using
+    // a frame class as an ancestor is fine, hence the anchor on the selector.
+    const scoped = source.split('<style')[1] ?? ''
+    const frameRule = /(?:^|[\s,>+~])\.insight-cards?(?:__[a-z-]+)?\s*\{/m
+    const offender = scoped.match(frameRule)
+    assert.ok(
+      !offender,
+      `${name} defines ${String(offender?.[0]).trim()} in its own style block; ` +
+        'the shared stylesheet owns the card frame'
+    )
+  }
+
+  // `display: contents` is what makes each card a direct grid item. Without it
+  // the wrapper takes one cell and stacks its cards inside it, which is three
+  // cards in the width of one.
+  assert.match(
+    insightChrome,
+    /\.insight-cards \{[^}]*display:\s*contents/,
+    'the card wrapper is no longer transparent to the grid'
   )
 })
 

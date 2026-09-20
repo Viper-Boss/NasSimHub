@@ -563,7 +563,9 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	case "/api/v1/contacts/batch":
 		api.contactsBatch(response, request)
 	case "/api/v1/contacts/backup":
-		api.postOnly(response, request, api.backupContacts)
+		// GET lists what has been written, POST writes one. The listing is the
+		// first half of the restore path the operator asked for.
+		api.backupContactsCollection(response, request)
 	case "/api/v1/settings/homesim":
 		api.homeSIMDraft(response, request)
 	case "/api/v1/settings/homesim/nkn":
@@ -687,6 +689,13 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		}
 		if userID, action, ok := userResourcePath(request.URL.Path); ok {
 			api.userResource(response, request, userID, action)
+			return
+		}
+		// Before contactResourceID, which would otherwise never see this path
+		// (it rejects anything containing a separator) and would leave a
+		// backup read falling through to a 404.
+		if name, ok := contactBackupFileName(request.URL.Path); ok {
+			api.readContactBackup(response, request, name)
 			return
 		}
 		if id, ok := contactResourceID(request.URL.Path); ok {

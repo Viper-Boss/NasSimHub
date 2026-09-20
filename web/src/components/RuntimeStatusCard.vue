@@ -1,17 +1,44 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import { RefreshCw, RotateCcw } from '@lucide/vue'
 import {
   acquireSystemMetrics,
   releaseSystemMetrics,
   systemMetricsState
 } from '../state/systemMetrics'
+import { gateway } from '../api/client'
+import type { UpdateStatus } from '../api/types'
+import { bootstrapResource, lineKey, presentModuleLines } from '../state/workspace'
+import { devicesResource } from '../state/workspace'
+import { restartModem } from '../state/deviceConfiguration'
+import { requestConfirmation } from '../state/confirmation'
+import { isAdministrator } from '../state/session'
 
 // Runtime status popover shown when the rail avatar is clicked: kernel
 // uptime plus live CPU / memory / storage / module-temperature gauges,
-// mirroring the task-manager data stream.
+// mirroring the task-manager data stream, and the two actions the operator
+// asked for on this card.
+//
+// The two actions are deliberately narrow, because the wide versions of them
+// would be promises this card cannot keep:
+//
+//   UPDATE only CHECKS. Applying an update is a multi-container operation with
+//   a progress list and, for the hardware component, its own confirmation --
+//   that flow lives in the About settings panel and belongs there. So this
+//   button asks the gateway whether a release is newer and reports the answer;
+//   when there is one it hands the reader over to that panel rather than
+//   starting anything from a popover. It is shown to administrators only,
+//   since the panel it leads to is theirs.
+//
+//   RESTART restarts THE MODULE, and says so in its label. There is no
+//   endpoint for restarting the NAS or the gateway process, so a button
+//   labelled just "restart" here would be read as offering one. With no module
+//   present it is disabled rather than hidden, so the absence is visible.
 
 const { t } = useI18n()
+const router = useRouter()
 
 onMounted(() => { acquireSystemMetrics() })
 onBeforeUnmount(() => { releaseSystemMetrics() })
@@ -88,8 +115,11 @@ const sourceLabel = computed(() => {
   const parts: string[] = []
   if (snap.cores > 0) parts.push(`${snap.cores} cores`)
   if (snap.cpu_current_mhz > 0) parts.push(`${Math.round(snap.cpu_current_mhz)} MHz`)
+  // `dashboard.processes` already carries the count ("{count} procs"), so the
+  // number must not be prefixed again -- it was, and the card read "145 145
+  // procs" in every language.
   if (snap.process_count > 0) {
-    parts.push(`${snap.process_count} ${t('dashboard.processes', { count: snap.process_count })}`)
+    parts.push(t('dashboard.processes', { count: snap.process_count }))
   }
   return parts.join(' · ')
 })
@@ -152,20 +182,99 @@ function arcDash(percent: number): string {
   const clamped = Math.min(100, Math.max(0, percent))
   return `${(clamped / 100) * CIRCUMFERENCE} ${CIRCUMFERENCE}`
 }
+
+// ---------------------------------------------------------------------------
+// Check for updates
+// ---------------------------------------------------------------------------
+
+const canCheckUpdate = isAdministrator
+const updateChecking = ref(false)
+const updateStatus = ref<UpdateStatus | ''>('')
+
+/** The gateway's own verdict, in its own words -- the same four the About panel shows. */
+const updateMessage = computed(() =>
+  updateStatus.value ? t(`about.updateStatus.${updateStatus.value}.title`) : ''
+)
+
+const updateAvailable = computed(() => updateStatus.value === 'update_available')
+
+async function onCheckUpdate(): Promise<void> {
+  if (updateChecking.value) return
+  updateChecking.value = true
+  try {
+    // `true` forces a fresh read rather than returning a cached verdict: a
+    // button that can answer from a cache is a button that can say "up to
+    // date" without having asked anything.
+    updateStatus.value = (await gateway.checkForUpdates(true)).status
+  } catch {
+    // The gateway could not reach the release index. That is its own status,
+    // and it has its own sentence -- it is not "up to date".
+    updateStatus.value = 'unavailable'
+  } finally {
+    updateChecking.value = false
+  }
+}
+
+function openUpdatePanel(): void {
+  void router.push({ name: 'settings', params: { section: 'about' } })
+}
+
+// ---------------------------------------------------------------------------
+// Restart the module
+// ---------------------------------------------------------------------------
+
+/**
+ * Which module the restart button acts on: the default line when it is
+ * actually present, otherwise the only present module.
+ *
+ * "Otherwise the only" is the important half. With two modules and no default
+ * set there is no answer, and picking the first of the list would restart
+ * whichever one the gateway happened to enumerate first -- a coin toss on a
+ * forty-five-second outage. The button disables itself instead.
+ */
+const restartTarget = computed(() => {
+  const lines = bootstrapResource.data?.lines ?? []
+  const present = presentModuleLines(lines, devicesResource.data ?? [])
+  if (!present.length) return ''
+  const defaultID = bootstrapResource.data?.line_settings.default_line_id || ''
+  const chosen = present.find(line => lineKey(line) === defaultID || line.id === defaultID)
+  if (chosen) return chosen.id
+  return present.length === 1 ? present[0]!.id : ''
+})
+
+const restarting = ref(false)
+
+async function onRestartModule(): Promise<void> {
+  const target = restartTarget.value
+  if (!target || restarting.value) return
+  const confirmed = await requestConfirmation({
+    title: t('dashboard.restartModem'),
+    message: t('dashboard.restartModemConfirm'),
+    tone: 'danger'
+  })
+  if (!confirmed) return
+  restarting.value = true
+  try {
+    await restartModem(target)
+  } finally {
+    restarting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="runtime-card" role="dialog" :aria-label="t('runtimeStatus.title')">
     <div class="runtime-card__info">
       <strong class="runtime-card__title">{{ t('runtimeStatus.title') }}</strong>
-      <span class="runtime-card__device">{{ deviceLabel }}</span>
+      <span class="runtime-card__device" :title="deviceLabel">{{ deviceLabel }}</span>
       <span v-if="version" class="runtime-card__version">NasSimHub {{ version }}</span>
-      <div class="runtime-card__uptime">
-        <span class="runtime-card__uptime-label">{{ t('runtimeStatus.uptime') }}</span>
-        <strong class="runtime-card__uptime-value">{{ uptimeText }}</strong>
-      </div>
-      <span v-if="sourceLabel" class="runtime-card__source">{{ sourceLabel }}</span>
     </div>
+
+    <div class="runtime-card__uptime">
+      <span class="runtime-card__uptime-label">{{ t('runtimeStatus.uptime') }}</span>
+      <strong class="runtime-card__uptime-value">{{ uptimeText }}</strong>
+    </div>
+
     <div class="runtime-card__gauges">
       <div v-for="gauge in gauges" :key="gauge.key" class="runtime-gauge">
         <svg viewBox="0 0 48 48" class="runtime-gauge__ring">
@@ -181,14 +290,62 @@ function arcDash(percent: number): string {
         <span class="runtime-gauge__label">{{ gauge.label }}</span>
       </div>
     </div>
+
+    <span v-if="sourceLabel" class="runtime-card__source">{{ sourceLabel }}</span>
+
+    <div class="runtime-card__actions">
+      <button
+        v-if="canCheckUpdate"
+        class="secondary-button"
+        type="button"
+        :disabled="updateChecking"
+        @click="onCheckUpdate"
+      >
+        <RefreshCw :size="13" :class="{ 'is-spinning': updateChecking }" />
+        {{ updateChecking ? t('about.checkingTitle') : t('about.updateTitle') }}
+      </button>
+      <button
+        class="secondary-button"
+        type="button"
+        :disabled="!restartTarget || restarting"
+        :title="restartTarget ? t('dashboard.restartModem') : t('dashboard.noLines')"
+        @click="onRestartModule"
+      >
+        <RotateCcw :size="13" />
+        {{ restarting ? t('dashboard.restarting') : t('dashboard.restartModem') }}
+      </button>
+    </div>
+
+    <!-- The gateway's verdict, quoted rather than summarised, and a way through
+         to the panel that can actually apply it. -->
+    <p v-if="updateMessage" class="runtime-card__update" role="status">
+      <span>{{ updateMessage }}</span>
+      <button v-if="updateAvailable" class="text-button" type="button" @click="openUpdatePanel">
+        {{ t('about.updateAction') }}
+      </button>
+    </p>
   </div>
 </template>
 
 <style scoped>
+/* Stacked, not two columns.
+ *
+ * It used to be a text column beside a 2x2 block of gauges, which gave the text
+ * whatever was left: measured at the shipped 340px, the info column came out
+ * around 140px, and "NasSimHub v…", the CPU model and a three-part uptime all
+ * had to wrap or truncate inside it. That is the "contents display wrong" the
+ * operator reported, and no popover width fixes it while the gauges take a
+ * fixed 142px out of the middle.
+ *
+ * Stacking gives every line the full width and puts the four gauges in one
+ * row -- 4 x 64px plus gaps fits the 300px interior, measured -- which is also
+ * what leaves room for the two action buttons underneath. */
 .runtime-card {
   display: flex;
-  gap: 18px;
+  flex-direction: column;
+  gap: 12px;
   width: 340px;
+  max-width: calc(100vw - 24px);
   padding: 18px 20px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
@@ -198,10 +355,9 @@ function arcDash(percent: number): string {
 
 .runtime-card__info {
   display: flex;
-  flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .runtime-card__title {
@@ -226,10 +382,13 @@ function arcDash(percent: number): string {
 
 .runtime-card__uptime {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: auto;
-  padding-top: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .runtime-card__uptime-label {
@@ -250,16 +409,19 @@ function arcDash(percent: number): string {
   font-variant-numeric: tabular-nums;
 }
 
+/* One row of four. `1fr` columns rather than fixed widths, so a card with
+   three gauges (no temperature reading) spreads across the same width instead
+   of leaving a gap on the right. */
 .runtime-card__gauges {
   display: grid;
-  flex: 0 0 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 14px;
+  gap: 10px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
 }
 
 .runtime-gauge {
   display: grid;
-  width: 64px;
+  min-width: 0;
   place-items: center;
   grid-template-rows: auto auto;
   row-gap: 3px;
@@ -267,8 +429,8 @@ function arcDash(percent: number): string {
 
 .runtime-gauge__ring {
   grid-area: 1 / 1;
-  width: 58px;
-  height: 58px;
+  width: 54px;
+  height: 54px;
   transform: rotate(-90deg);
 }
 
@@ -306,7 +468,49 @@ function arcDash(percent: number): string {
 
 .runtime-gauge__label {
   grid-area: 2 / 1;
+  max-width: 100%;
+  overflow: hidden;
   font-size: 9.5px;
   color: var(--muted-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-card__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.runtime-card__actions .secondary-button {
+  display: inline-flex;
+  min-height: 32px;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.runtime-card__update {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11.5px;
+}
+
+.runtime-card__update .text-button {
+  padding: 0;
+  font-size: 11.5px;
+}
+
+.is-spinning { animation: runtime-card-spin 1s linear infinite; }
+
+@keyframes runtime-card-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

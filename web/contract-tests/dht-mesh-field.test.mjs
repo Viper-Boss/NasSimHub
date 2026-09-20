@@ -6,8 +6,9 @@ import {
   advance,
   buildField,
   defaultMeshOptions,
+  hopGlow,
   seeded,
-  signalProgress,
+  signalHead,
   smooth
 } from '../src/components/dhtMeshField.ts'
 
@@ -164,42 +165,199 @@ test('a node fades over seconds rather than blinking', () => {
   )
 })
 
-test('a signal crosses one strand and then it is gone', () => {
+test('a lookup walks several hops, and they are real strands', () => {
+  // This is what the change was for. A signal used to be ONE edge: 0.48s
+  // across a 59px strand, then gone -- which on screen reads as a dot
+  // twitching once and vanishing, and the operator's report was exactly that,
+  // "it only jumps one node and then stops". A lookup is a walk.
+  // Absolute, not read from the options. Asserting `hops >= minHops` was the
+  // first version and it was worthless: setting minHops back to 1 -- exactly
+  // the single-hop bead this replaced -- moved the assertion with it and the
+  // test passed. Found by sabotage. THREE is the number this drawing needs,
+  // whatever the config later says.
+  assert.ok(
+    defaultMeshOptions.minHops >= 3,
+    `routes may be as short as ${defaultMeshOptions.minHops} hop(s); that is the twitch this replaced`
+  )
+
   const field = buildField(SIZE.width, SIZE.height)
-  let seen = 0
-  let most = 0
-  for (let time = 0; time < 60; time += 1 / 60) {
-    advance(field, time, true)
-    seen += field.signals.length
-    most = Math.max(most, field.signals.length)
+  const strands = new Set(field.edges.map(([a, b]) => `${Math.min(a, b)}:${Math.max(a, b)}`))
+  const seen = new Set()
+  const lengths = []
+
+  for (let step = 0; step < 60 * 180; step += 1) {
+    advance(field, step / 60, true)
     for (const signal of field.signals) {
-      const progress = signalProgress(signal, time)
-      assert.ok(progress >= 0 && progress <= 1, `a signal is at ${progress} of its strand`)
-      assert.ok(field.nodes[signal.edge[0]], 'a signal starts nowhere')
-      assert.ok(field.nodes[signal.edge[1]], 'a signal ends nowhere')
+      const key = `${signal.start}:${signal.path[0]}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const hops = signal.path.length - 1
+      lengths.push(hops)
+      assert.ok(hops >= 3, `a route of ${hops} hop(s) was launched; a lookup is a walk`)
+      assert.ok(
+        hops <= defaultMeshOptions.maxHops,
+        `a route of ${hops} hops was launched, over the ${defaultMeshOptions.maxHops} cap`
+      )
+      // Every step must be a strand that exists, or the bead cuts across the
+      // net instead of travelling it.
+      for (let hop = 0; hop + 1 < signal.path.length; hop += 1) {
+        const a = signal.path[hop]
+        const b = signal.path[hop + 1]
+        assert.ok(
+          strands.has(`${Math.min(a, b)}:${Math.max(a, b)}`),
+          `hop ${hop} of a route jumps between ${a} and ${b}, which are not linked`
+        )
+      }
+      // And no node twice: a route that doubles back on itself reads as lost.
+      assert.equal(
+        new Set(signal.path).size,
+        signal.path.length,
+        'a route visits the same node twice'
+      )
     }
   }
-  assert.ok(seen > 0, 'no signals were produced at all; the animation would be static')
-  // Few enough at a time that each one can be followed. At one launch every
-  // 0.72s lasting 0.48s, two in flight is the arithmetic; more than a handful
-  // would mean they are not being retired.
-  assert.ok(most <= 3, `${most} signals were in flight at once`)
+
+  assert.ok(lengths.length > 100, `only ${lengths.length} routes in three minutes`)
+  // The hop count has to actually vary, or every lookup looks like the same
+  // animation replayed.
+  assert.ok(new Set(lengths).size >= 3, `routes only ever have ${[...new Set(lengths)]} hops`)
 })
 
-test('a signal only ever leaves from a node that is lit', () => {
-  // A bead setting off from a dim node reads as traffic appearing out of
-  // nothing, and the dim nodes are the part of the picture that is explicitly
-  // "we do not know who this is".
+test('a lookup starts where it can be seen', () => {
+  // The net overhangs every edge on purpose, so a route started out there
+  // spends its hops off screen. Measured on a 300px panel, only 57% of the
+  // nodes are inside the frame at all.
   const field = buildField(SIZE.width, SIZE.height)
-  for (let time = 0; time < 120; time += 1 / 60) {
+  assert.ok(field.interior.length > 0, 'no node counts as inside the canvas')
+  for (const index of field.interior) {
+    const node = field.nodes[index]
+    assert.ok(
+      node.x >= 0 && node.x <= SIZE.width && node.y >= 0 && node.y <= SIZE.height,
+      `node ${index} is listed as interior but sits at ${node.x.toFixed(0)},${node.y.toFixed(0)}`
+    )
+  }
+
+  for (let step = 0; step < 60 * 60; step += 1) {
     const before = field.signals.length
-    advance(field, time, true)
+    advance(field, step / 60, true)
     if (field.signals.length <= before) continue
     const launched = field.signals[field.signals.length - 1]
     assert.ok(
-      field.nodes[launched.edge[0]].alpha > 0.6 && field.nodes[launched.edge[1]].alpha > 0.6,
-      'a signal set off along a strand with a dim end'
+      field.interior.includes(launched.path[0]),
+      'a route set off from a node outside the visible canvas'
     )
+  }
+})
+
+test('a lookup travels, rather than circling one cell', () => {
+  // An unbiased random walk on a net this dense spends its hops going back and
+  // forth between the same few nodes, which looks aimless and, worse, looks
+  // like a bug. The walk is given a heading and mostly follows it. Measured
+  // across 260 routes: median end-to-end distance 193px against a 59px strand,
+  // and a straightness of 0.69 -- so it goes somewhere without being a ruler.
+  const field = buildField(SIZE.width, SIZE.height)
+  const seen = new Set()
+  const spans = []
+  for (let step = 0; step < 60 * 240; step += 1) {
+    advance(field, step / 60, true)
+    for (const signal of field.signals) {
+      const key = `${signal.start}:${signal.path[0]}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const first = field.nodes[signal.path[0]]
+      const last = field.nodes[signal.path[signal.path.length - 1]]
+      spans.push(Math.hypot(first.x - last.x, first.y - last.y))
+    }
+  }
+  spans.sort((a, b) => a - b)
+  const median = spans[spans.length >> 1]
+  assert.ok(
+    median > defaultMeshOptions.spacing * 2,
+    `the median route covers ${median.toFixed(0)}px, barely more than one ${defaultMeshOptions.spacing}px strand`
+  )
+})
+
+test('the route lights up behind the bead and never ahead of it', () => {
+  // The lit trail is what turns a moving dot into a visible ROUTE. Lighting a
+  // hop the bead has not reached would show where the lookup is going before it
+  // has been there, which is the one thing this drawing must not do -- it would
+  // be showing a path that has not happened.
+  const field = buildField(SIZE.width, SIZE.height)
+  let checked = 0
+  let mostLitAtOnce = 0
+  for (let step = 0; step < 60 * 90; step += 1) {
+    const time = step / 60
+    advance(field, time, true)
+    for (const signal of field.signals) {
+      const head = signalHead(signal, time, defaultMeshOptions)
+      let lit = 0
+      for (let hop = 0; hop + 1 < signal.path.length; hop += 1) {
+        const glow = hopGlow(signal, hop, time, defaultMeshOptions)
+        assert.ok(glow >= 0 && glow <= 1, `hop glow ${glow} is out of range`)
+        if (glow > 0.01) lit += 1
+        // AHEAD of the bead is the assertion that matters, and it is absolute.
+        if (hop > head.hop) {
+          assert.equal(glow, 0, `hop ${hop} is lit while the bead is only on hop ${head.hop}`)
+        }
+        // The hop the bead is ON is always lit -- otherwise the bead would be
+        // travelling a dark strand.
+        if (hop === head.hop && !head.arrived) {
+          assert.ok(glow > 0, `the bead is crossing hop ${hop} and the strand is dark`)
+        }
+        // BEHIND the bead is deliberately not asserted lit. A route stays in
+        // the field until its trail has faded, so a crossed hop reaching zero
+        // is correct -- an earlier version of this test demanded it stay lit
+        // and failed on exactly that, which is the code being right.
+        checked += 1
+      }
+      mostLitAtOnce = Math.max(mostLitAtOnce, lit)
+    }
+  }
+  assert.ok(checked > 1000, `only ${checked} hop glows were checked`)
+  // The whole point of the trail: more than one strand of a route is lit at
+  // once, so the reader sees a PATH rather than a dot on a line.
+  assert.ok(
+    mostLitAtOnce >= 3,
+    `never more than ${mostLitAtOnce} strands of a route lit at once; there is no visible trail`
+  )
+
+  // And the trail goes out, or a long-running card silts up with old routes.
+  //
+  // Checked at an ABSOLUTE four seconds rather than at
+  // `signalDuration + trailFade`, which was the first version and was
+  // worthless: setting trailFade to 9999 moved the check time with it and the
+  // test passed. Found by sabotage.
+  const route = { path: [0, 1, 2, 3], start: 0 }
+  assert.ok(
+    hopGlow(route, 0, defaultMeshOptions.signalDuration, defaultMeshOptions) > 0,
+    'the first hop is dark the moment the bead leaves it'
+  )
+  assert.equal(
+    hopGlow(route, 0, 4, defaultMeshOptions),
+    0,
+    'a strand is still lit four seconds after the bead crossed it'
+  )
+  assert.ok(
+    defaultMeshOptions.trailFade < 3,
+    `a trail lingers for ${defaultMeshOptions.trailFade}s; routes would pile up on the card`
+  )
+})
+
+test('a lookup only ever sets off along nodes that are lit', () => {
+  // A bead moving through a dim node reads as traffic passing through
+  // something this gateway has said it knows nothing about.
+  const field = buildField(SIZE.width, SIZE.height)
+  for (let step = 0; step < 60 * 120; step += 1) {
+    const before = field.signals.length
+    advance(field, step / 60, true)
+    if (field.signals.length <= before) continue
+    const launched = field.signals[field.signals.length - 1]
+    for (const index of launched.path) {
+      assert.ok(
+        field.nodes[index].alpha > 0.6,
+        'a route was planned through a node that is dim'
+      )
+    }
   }
 })
 
@@ -231,7 +389,7 @@ test('traffic in flight is dropped the moment the DHT goes down', () => {
     advance(field, time, true)
     if (field.signals.length > 0) break
   }
-  assert.ok(field.signals.length > 0, 'no signal was ever in flight to drop')
+  assert.ok(field.signals.length > 0, 'no lookup was ever in flight to drop')
   advance(field, time + 1 / 60, false)
   assert.equal(field.signals.length, 0, 'a signal survived the DHT going down')
 })
