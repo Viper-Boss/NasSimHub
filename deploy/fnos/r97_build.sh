@@ -1,0 +1,32 @@
+#!/bin/bash
+# r97 deployment build: web overlay + api full rebuild (both --no-cache)
+cd /volume1/docker/homesim/source/nas-comm-gateway-r6 || exit 1
+
+echo "=== web overlay build start $(date) ==="
+cat > /tmp/r97-web-overlay.df <<'EOF'
+FROM nas-comm-web:flat
+USER root
+RUN chmod -R u+w /usr/share/nginx/html && rm -rf /usr/share/nginx/html/*
+COPY dist/ /usr/share/nginx/html/
+RUN chown -R 101:101 /usr/share/nginx/html
+USER 101:101
+EOF
+docker build --no-cache -f /tmp/r97-web-overlay.df --tag nas-comm-web:fnos-local-0.1 web/ 2>&1
+echo "=== web rc=$? $(date) ==="
+
+echo "=== api build start $(date) ==="
+df -h /volume1 | tail -1
+docker build --no-cache \
+  --build-arg GO_IMAGE="golang:1.26.5-bookworm@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd" \
+  --build-arg MODEMDECK_UID=10001 \
+  --build-arg MODEMDECK_GID=10001 \
+  --build-arg VERSION=fnos-local-0.1 \
+  --build-arg BUILD_DATE=unknown \
+  --build-arg VCS_REF=r97 \
+  --target runtime \
+  --tag nas-comm-api:fnos-local-0.1 \
+  --file Dockerfile \
+  . 2>&1
+echo "=== api rc=$? $(date) ==="
+docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep -E '^nas-comm-(api|web):fnos-local-0.1'
+echo "=== ALL DONE $(date) ==="
