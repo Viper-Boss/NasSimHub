@@ -53,6 +53,10 @@
   --radius-surface: 24px; /* cards & panels */
   --radius-dialog: 28px; /* dialogs & sheets */
   --touch-target: 44px;
+  /* The dashboard's card field. One track, read by the metrics strip and by
+     the card grids below it, because they are one field and have to land on
+     the same vertical lines. See DashboardView.vue for the measurements. */
+  --dashboard-card-track: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
   --layer-popover: 80;
   --layer-drawer: 100;
   --layer-dialog: 120;

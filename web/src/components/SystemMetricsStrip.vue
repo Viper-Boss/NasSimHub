@@ -467,9 +467,12 @@ const flashUsedBytes = computed(() => {
 </template>
 
 <style scoped>
+/* The same track the cards below use, from the same token. Four fixed columns
+   is what this was, and it is why the strip and the card field never lined up:
+   the two bands split the same width into different numbers of pieces. */
 .tm {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: var(--dashboard-card-track);
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -751,16 +754,12 @@ const flashUsedBytes = computed(() => {
 .tm-dot--buffers { background: #22d3ee; }
 .tm-dot--free { background: var(--border); }
 
-/* Wide enough for a 4-up row only above the 1480px shared band; below that spread 2x2 */
-@media (max-width: 1479px) {
-  .tm {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .tm {
-    grid-template-columns: 1fr;
-  }
-}
+/* The viewport breakpoints that used to be here are gone, and their absence is
+   the fix rather than a simplification. They asked how wide the WINDOW was,
+   while what decides how many tiles fit is how wide this strip's own container
+   is -- and on this dashboard those are very different numbers: the activity
+   list on the left and the dialer on the right take roughly 800px out of the
+   middle, so a 3441px window gave this strip about 1714px to work with. The
+   auto-fill track above measures the container, so it needs no breakpoints and
+   cannot disagree with the cards below. */
 </style>

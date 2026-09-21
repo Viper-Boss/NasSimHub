@@ -17,20 +17,23 @@ function cssBlock(source, selector) {
 }
 
 test('dashboard keeps stable module-card tracks', () => {
-  const dashboardGrid = cssBlock(
-    dashboard,
-    '.dashboard-module-grid,\n.dashboard-detail-list'
-  )
+  // The card field and the contact list were one rule until the field started
+  // sharing its track with the metrics strip above it; they are two rules now,
+  // and both still have to be auto-fill counted from a minimum with the same
+  // gap. The token's own value, and the fact that the strip reads it too, are
+  // guarded in dashboard-card-alignment.test.mjs.
+  const cardGrid = cssBlock(dashboard, '.dashboard-module-grid')
+  const detailList = cssBlock(dashboard, '.dashboard-detail-list')
 
-  // Tracks are counted from the minimum, not a fixed 420px maximum; see the
-  // note in dashboard-card-alignment.test.mjs for the measurements. This now
-  // matches .module-grid in the device panel below.
+  assert.match(cardGrid, /grid-template-columns: var\(--dashboard-card-track\)/)
   assert.match(
-    dashboardGrid,
+    detailList,
     /grid-template-columns: repeat\(auto-fill, minmax\(min\(320px, 100%\), 1fr\)\)/
   )
-  assert.match(dashboardGrid, /justify-content: start/)
-  assert.match(dashboardGrid, /gap: 12px/)
+  for (const block of [cardGrid, detailList]) {
+    assert.match(block, /justify-content: start/)
+    assert.match(block, /gap: 12px/)
+  }
 })
 
 test('device settings retain card selection in their dedicated drilldown workbench', () => {

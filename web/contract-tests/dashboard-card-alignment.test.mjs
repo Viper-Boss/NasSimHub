@@ -32,6 +32,11 @@ const insightChrome = await readFile(
   new URL('../src/components/insightCard.css', import.meta.url),
   'utf8'
 )
+const strip = await readFile(
+  new URL('../src/components/SystemMetricsStrip.vue', import.meta.url),
+  'utf8'
+)
+const tokens = await readFile(new URL('../src/style.css', import.meta.url), 'utf8')
 
 test('tall network cards live in their own grid, away from the short ones', () => {
   // If these move back into the main grid they will share rows with modem
@@ -73,14 +78,51 @@ test('the column count is computed from the minimum, not the maximum', () => {
   // minmax(320px, 420px) answers "one column" for everything from 420px to
   // 851px of grid width -- one card and up to 431px of dead space beside it.
   assert.match(
-    dashboard,
-    /repeat\(auto-fill,\s*minmax\(min\(320px, 100%\),\s*1fr\)\)/,
-    'the grid is back to a fixed maximum track, which wastes a column of space'
+    tokens,
+    /--dashboard-card-track:\s*repeat\(auto-fill,\s*minmax\(min\(\d+px, 100%\),\s*1fr\)\)/,
+    'the card track is back to a fixed maximum, which wastes a column of space'
   )
   assert.doesNotMatch(
+    tokens,
+    /--dashboard-card-track:[^;]*minmax\(\d+px,\s*\d+px\)/,
+    'a definite maximum is back in the card track; it packs one column where two fit'
+  )
+})
+
+test('the metrics strip and the card field share one track', () => {
+  // They are one field of cards, one above the other, so their columns have to
+  // fall on the same vertical lines. The strip used to declare `repeat(4,
+  // 1fr)` of its own and the grid below counted its own columns from the
+  // available width, so the two agreed only by accident: measured on the
+  // operator's 3441px screen, the strip drew 4 columns of 622px across exactly
+  // the width the field below split into 7 of 350px. Only the left edge lined
+  // up. Measured again after this change, at nine widths from 1024 to 3441,
+  // every strip edge falls on a column edge.
+  //
+  // One token read by both is the only arrangement that cannot drift, so that
+  // is what is asserted rather than two values that happen to match today.
+  assert.match(
     dashboard,
-    /repeat\(auto-fill,\s*minmax\(320px,\s*420px\)\)/,
-    'minmax(320px, 420px) is back; it packs one column where two fit'
+    /\.dashboard-module-grid \{[^}]*grid-template-columns: var\(--dashboard-card-track\)/,
+    'the card grid no longer reads the shared track'
+  )
+  assert.match(
+    strip,
+    /\.tm \{[^}]*grid-template-columns: var\(--dashboard-card-track\)/,
+    'the metrics strip no longer reads the shared track'
+  )
+  // And the strip must not re-declare a column count behind a media query:
+  // those ask how wide the WINDOW is, while what decides how many tiles fit is
+  // how wide the strip's own container is. On this dashboard the panes either
+  // side take roughly 800px out of the middle, so the two numbers are far
+  // apart and the breakpoints fought the track.
+  const stripStyles = strip.split('<style')[1] ?? ''
+  const redeclared = [...stripStyles.matchAll(/\.tm \{[^}]*grid-template-columns:([^;]*);/g)]
+    .map(match => match[1].trim())
+  assert.deepEqual(
+    redeclared,
+    ['var(--dashboard-card-track)'],
+    'the strip declares its column count more than once; it will disagree with the cards'
   )
 })
 

@@ -1476,10 +1476,28 @@ onBeforeUnmount(() => {
 
    This is the same track the device settings panel has always used. The
    dashboard was the outlier. */
-.dashboard-module-grid,
 .dashboard-detail-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  justify-content: start;
+  gap: 12px;
+}
+
+/* The card field's own track, and the reason it is a token rather than a
+   value: the metrics strip above these cards is the same field of cards and
+   has to land on the same vertical lines. It used to declare `repeat(4, 1fr)`
+   of its own, so the two bands only agreed by accident -- measured on the
+   operator's 3441px screen, the strip drew 4 columns of 622px over exactly the
+   width the grid below split into 7 of 350px, and only the leftmost edge lined
+   up. One definition, read by both, is the only way that cannot drift.
+
+   360px rather than the 320px above: at 400px the field collapses to a single
+   784px-wide card at 1280 and 1700 of window, which is worse than the problem
+   being fixed. 360 holds 2 to 6 columns across 1024-3441 and never collapses.
+   Measured at nine widths. */
+.dashboard-module-grid {
+  display: grid;
+  grid-template-columns: var(--dashboard-card-track);
   justify-content: start;
   gap: 12px;
 }

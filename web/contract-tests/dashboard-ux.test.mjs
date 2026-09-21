@@ -208,10 +208,15 @@ test('dashboard reports physical modem inventory separately from service readine
 })
 
 test('dashboard entity grids retain stable desktop columns and card widths', () => {
+  // The two grids were one rule until the card field started sharing its track
+  // with the metrics strip above it. The contact list kept the 320px track it
+  // had; the card field reads the shared token, and
+  // dashboard-card-alignment.test.mjs is where that token's value and both
+  // readers of it are guarded.
   const entityGridBlock =
-    dashboard.match(
-      /\.dashboard-module-grid,\s*\.dashboard-detail-list\s*\{([^}]*)\}/
-    )?.[1] || ''
+    dashboard.match(/\.dashboard-detail-list\s*\{([^}]*)\}/)?.[1] || ''
+  const cardGridBlock =
+    dashboard.match(/\.dashboard-module-grid\s*\{([^}]*)\}/)?.[1] || ''
   const entityCardBlock =
     dashboard.match(
       /\.dashboard-module-grid > :deep\(\.module-card\),\s*\.dashboard-detail-list > \.dashboard-contact-row\s*\{([^}]*)\}/
@@ -222,11 +227,16 @@ test('dashboard entity grids retain stable desktop columns and card widths', () 
   // every grid width from 420 to 851px -- measured 108px of dead space beside
   // a lone card at 1024 and 46px at 1440. A 1fr maximum counts from the
   // minimum instead, which is what the device settings panel has always done.
+  // The track moved to a token so the metrics strip above can read the same
+  // one; dashboard-card-alignment.test.mjs guards its value and that both
+  // grids read it.
   assert.match(
     entityGridBlock,
     /grid-template-columns: repeat\(auto-fill, minmax\(min\(320px, 100%\), 1fr\)\)/
   )
+  assert.match(cardGridBlock, /grid-template-columns: var\(--dashboard-card-track\)/)
   assert.match(entityGridBlock, /justify-content: start/)
+  assert.match(cardGridBlock, /justify-content: start/)
   assert.match(entityCardBlock, /width: 100%/)
   assert.match(entityCardBlock, /max-width: 420px/)
 })
