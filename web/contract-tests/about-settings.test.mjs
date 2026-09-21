@@ -221,33 +221,53 @@ test('release notes summarize their first three content lines and retain full se
 })
 
 test('about panel checks automatically and applies only through the updater', async () => {
-  const [panel, settingsView, notices, zhCN] = await Promise.all([
+  // THE FLOW MOVED, THE RULES DID NOT. Applying an update used to live in this
+  // panel; it now lives in src/state/softwareUpdate.ts, because the dashboard's
+  // update card drives the same operation over the same single event stream and
+  // two owners of that stream cannot both be right. Every rule this test
+  // guarded is still guarded -- each one is simply asserted against the file
+  // that now owns it. Nothing here was relaxed to make the move pass.
+  const [panel, controller, settingsView, notices, zhCN] = await Promise.all([
     readFile(new URL('../src/components/AboutSettingsPanel.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../src/state/softwareUpdate.ts', import.meta.url), 'utf8'),
     readFile(new URL('../src/views/SettingsView.vue', import.meta.url), 'utf8'),
     readFile(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8'),
     readFile(new URL('../src/i18n/locales/zh-CN.ts', import.meta.url), 'utf8')
   ])
 
   assert.match(settingsView, /id: 'about'/)
-  assert.match(panel, /gateway\.checkForUpdates\(refresh\)/)
+
+  // The panel still drives it and still shows it.
   assert.match(panel, /@click="checkForUpdates\(true\)"/)
   assert.match(panel, /:class="\{ spin: checking \}"/)
-  assert.match(panel, /gateway\.applySoftwareUpdate\(/)
-  assert.match(panel, /setApplicationUpdateNoticeSuppressed\(true\)/)
-  assert.match(
+  assert.match(panel, /role="progressbar"/)
+  assert.match(panel, /useSoftwareUpdate\(\)/, 'the panel no longer reads the shared controller')
+  // And it must not grow a second copy of the flow.
+  assert.doesNotMatch(
     panel,
+    /gateway\.applySoftwareUpdate\(/,
+    'the panel applies updates itself again instead of going through the controller'
+  )
+
+  // The rules, in the controller.
+  assert.match(controller, /gateway\.checkForUpdates\(refresh\)/)
+  assert.match(controller, /gateway\.applySoftwareUpdate\(/)
+  assert.match(controller, /setApplicationUpdateNoticeSuppressed\(true\)/)
+  assert.match(
+    controller,
     /clearApplicationUpdateNotice\(\)[\s\S]*if \(operation\.state === 'succeeded'\) \{[\s\S]*refreshApplication\(\)/
   )
-  assert.match(panel, /subscribeRuntimeUpdateOperations\(/)
-  assert.match(panel, /monitorRuntimeUpdateOperation\(operation\.id\)/)
-  assert.doesNotMatch(panel, /subscribeSoftwareUpdateEvents|getSoftwareUpdateStatus/)
-  assert.doesNotMatch(panel, /operationTimer|setInterval/)
-  assert.match(panel, /role="progressbar"/)
+  assert.match(controller, /subscribeRuntimeUpdateOperations\(/)
+  assert.match(controller, /monitorRuntimeUpdateOperation\(operation\.id\)/)
+  for (const source of [panel, controller]) {
+    assert.doesNotMatch(source, /subscribeSoftwareUpdateEvents|getSoftwareUpdateStatus/)
+    assert.doesNotMatch(source, /operationTimer|setInterval/)
+  }
   assert.match(
-    panel,
-    /startingUpdate\.value[\s\S]*operation\.target_version !== currentUpdate\?\.latest_version/
+    controller,
+    /startingUpdate\.value[\s\S]*operation\.target_version !== [A-Za-z]+\?\.latest_version/
   )
-  assert.match(panel, /startingUpdate\.value = true[\s\S]*applying\.value = true/)
+  assert.match(controller, /startingUpdate\.value = true[\s\S]*applying\.value = true/)
   assert.match(
     panel,
     /class="about-update__component-tag">\s*\{\{ componentLabel\(component\.name\) \}\}\s*<\/span>\s*<small[\s\S]*class="about-update__component-state"/
@@ -257,17 +277,23 @@ test('about panel checks automatically and applies only through the updater', as
     /\.about-update__components--progress\s*\{[^}]*grid-auto-rows:\s*28px;[^}]*align-content:\s*start;/s
   )
   assert.doesNotMatch(panel, /grid-auto-rows:\s*minmax\(0,\s*1fr\)/)
-  assert.match(panel, /requestConfirmation\(/)
-  assert.match(panel, /hardware_confirmation_required/)
+  assert.match(controller, /requestConfirmation\(/)
+  assert.match(controller, /hardware_confirmation_required/)
   assert.match(panel, /releaseNoteSummary/)
   assert.match(panel, /<details/)
   assert.doesNotMatch(panel, /v-html/)
   assert.doesNotMatch(panel, /getActiveCallSnapshot|activeCalls|callState/)
   assert.match(panel, /useInitialLoadBarrier/)
+  // Still checked automatically on mount, and still inside the load barrier so
+  // the panel never paints an empty update section first. The check itself is
+  // now the controller's once-per-page-load one, shared with the dashboard card
+  // so that opening both screens does not spend two calls on an unauthenticated,
+  // rate-limited GitHub endpoint.
   assert.match(
     panel,
-    /waitForInitialLoad\(\[\(\) => load\(\), \(\) => checkForUpdates\(\)\]\)/
+    /waitForInitialLoad\(\[\(\) => load\(\), \(\) => ensureInitialUpdateCheck\(\)\]\)/
   )
+  assert.match(controller, /export async function ensureInitialUpdateCheck/)
   assert.match(panel, /<SettingsLoadBoundary[\s\S]*:loading="initialLoading"/)
   assert.doesNotMatch(panel, /<LoaderCircle/)
   assert.match(panel, /about-status--checking/)

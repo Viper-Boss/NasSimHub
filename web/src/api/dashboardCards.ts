@@ -230,3 +230,138 @@ export async function getCommunicationStats(): Promise<CommunicationStats | null
     hourly: hourly?.map(readBucket).filter(isBucket)
   }
 }
+
+// ---------------------------------------------------------------------------
+// Module security
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/security/module
+ *
+ * THE CARD THIS FEEDS EXISTS FOR A LEGAL REASON, which changes what it may
+ * say. A gateway that can place calls and send messages can be used to defraud
+ * people, and whoever ships it carries some responsibility for that. The card
+ * is where an operator sees what is actually restraining the box and how close
+ * it is to those limits.
+ *
+ * That purpose is exactly why nothing here may be softened into a reassurance.
+ * A "risk: low" badge with nothing computing it, or a green "integrity: ok"
+ * beside a check that does not exist, is worse on this card than on any other:
+ * it is a compliance claim, it will be screenshotted, and the person reading it
+ * has no way to tell it apart from the real rows beside it. So every field is
+ * optional and an absent field renders as "not wired yet" -- never as zero, and
+ * never as a pass.
+ *
+ * WHAT IS ALREADY REAL TODAY, and is therefore NOT in this contract because the
+ * card reads it from the endpoints that already serve it:
+ *
+ *   the public egress IP and ISP   GET /api/v1/vowifi-diagnostics -> egress
+ *   the inbound call filter policy GET /api/v1/settings/homesim/call-filter
+ *
+ * ```json
+ * {
+ *   "risk":  { "state": "ok", "value": "低", "detail": "无异常行为" },
+ *   "guard": {
+ *     "call_limit": 5, "call_used": 2,
+ *     "message_limit": 3, "message_used": 1,
+ *     "unlocked": false, "date": "2026-09-21"
+ *   },
+ *   "integrity": {
+ *     "module":    { "state": "ok",      "value": "正常" },
+ *     "system":    { "state": "ok",      "value": "正常" },
+ *     "secure_boot": { "state": "off",   "value": "未启用" },
+ *     "firmware":  { "state": "unknown", "value": "未验证" }
+ *   },
+ *   "trust": { "state": "warn", "value": "观察期中", "remaining_hours": 109 }
+ * }
+ * ```
+ */
+export interface FraudGuardState {
+  /**
+   * The daily allowance, in DISTINCT DESTINATION NUMBERS -- not attempts.
+   * Re-dialling a number already used today costs nothing, which is the whole
+   * shape of the guard: it restrains reaching many strangers, not making many
+   * calls. A card that called this "calls today" would misdescribe it.
+   */
+  call_limit?: number
+  call_used?: number
+  message_limit?: number
+  message_used?: number
+  /**
+   * True once an administrator has lifted the guard for this installation.
+   * Reported rather than hidden: an unlocked guard is the single most
+   * important thing on this card, because it is the state in which nothing is
+   * restraining the box.
+   */
+  unlocked?: boolean
+  /** The local date the counters belong to; they reset when it changes. */
+  date?: string
+}
+
+export interface ModuleTrust {
+  state?: SecurityState
+  value?: string
+  remaining_hours?: number
+}
+
+export interface ModuleSecurity {
+  risk?: SecurityRow
+  guard?: FraudGuardState
+  integrity?: {
+    module?: SecurityRow
+    system?: SecurityRow
+    secure_boot?: SecurityRow
+    firmware?: SecurityRow
+  }
+  trust?: ModuleTrust
+}
+
+export async function getModuleSecurity(): Promise<ModuleSecurity | null> {
+  let payload: unknown
+  try {
+    payload = await get(`${API_ROOT}/security/module`)
+  } catch {
+    // Not built yet, or unreachable. Same thing to the card.
+    return null
+  }
+  if (!payload || typeof payload !== 'object') return null
+  const source = payload as Record<string, unknown>
+  const guard = source.guard as Record<string, unknown> | undefined
+  const integrity = source.integrity as Record<string, unknown> | undefined
+  const trust = source.trust as Record<string, unknown> | undefined
+  const trustState = trust?.state
+  return {
+    risk: readRow(source.risk),
+    guard: guard
+      ? {
+          call_limit: readCount(guard.call_limit),
+          call_used: readCount(guard.call_used),
+          message_limit: readCount(guard.message_limit),
+          message_used: readCount(guard.message_used),
+          unlocked: typeof guard.unlocked === 'boolean' ? guard.unlocked : undefined,
+          date: typeof guard.date === 'string' && guard.date ? guard.date : undefined
+        }
+      : undefined,
+    integrity: integrity
+      ? {
+          module: readRow(integrity.module),
+          system: readRow(integrity.system),
+          secure_boot: readRow(integrity.secure_boot),
+          firmware: readRow(integrity.firmware)
+        }
+      : undefined,
+    trust: trust
+      ? {
+          state:
+            trustState === 'ok' ||
+            trustState === 'warn' ||
+            trustState === 'off' ||
+            trustState === 'unknown'
+              ? trustState
+              : undefined,
+          value: typeof trust.value === 'string' && trust.value ? trust.value : undefined,
+          remaining_hours: readCount(trust.remaining_hours)
+        }
+      : undefined
+  }
+}

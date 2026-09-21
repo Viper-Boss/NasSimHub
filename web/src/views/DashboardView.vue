@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -37,6 +37,18 @@ import ModuleExtraCards from '../components/ModuleExtraCards.vue'
 import NetworkGlobeCard from '../components/NetworkGlobeCard.vue'
 import DHTMeshCard from '../components/DHTMeshCard.vue'
 import WireGuardTrafficCard from '../components/WireGuardTrafficCard.vue'
+// Loaded on demand. The card sits below the fold at the foot of the page, it
+// renders for administrators only, and the startup budget has roughly a
+// kilobyte of headroom -- so its code and its strings arrive when it does
+// rather than in the shell every visitor downloads.
+const SoftwareUpdateCard = defineAsyncComponent(
+  () => import('../components/SoftwareUpdateCard.vue')
+)
+// Lazy for the same reasons: below the fold, administrators only, and the
+// startup budget has about a kilobyte of headroom.
+const ModuleSecurityCard = defineAsyncComponent(
+  () => import('../components/ModuleSecurityCard.vue')
+)
 import { wireGuardUnlockState } from '../state/wireguardUnlock'
 import ListSkeleton from '../components/ListSkeleton.vue'
 import ListSelectionToggle from '../components/ListSelectionToggle.vue'
@@ -1265,6 +1277,16 @@ onBeforeUnmount(() => {
                   <NetworkGlobeCard />
                   <DHTMeshCard />
                   <WireGuardTrafficCard v-if="wireGuardUnlockState.unlocked" />
+                  <!-- Security and updates sit in the TALL row beside the two
+                       network drawings rather than in full-width rows of their
+                       own. Four tracks fit across at the widths this dashboard
+                       is used at, and the network cards only ever fill two of
+                       them, so the row used to end in two card-shaped holes.
+                       Both of these cards are built to the same ~565px height
+                       as the drawings, which is what makes them belong to this
+                       height class rather than needing a row of their own. -->
+                  <ModuleSecurityCard />
+                  <SoftwareUpdateCard />
                 </div>
               </template>
             </LoadingSkeletonBoundary>
@@ -1516,6 +1538,7 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
+
 .dashboard-module-grid > :deep(.module-card),
 .dashboard-detail-list > .dashboard-contact-row {
   width: 100%;
@@ -1529,7 +1552,9 @@ onBeforeUnmount(() => {
 .dashboard-module-grid > :deep(.module-card),
 .dashboard-module-grid :deep(.insight-card),
 .dashboard-module-grid > :deep(.globe-card),
-.dashboard-module-grid > :deep(.mesh-card) {
+.dashboard-module-grid > :deep(.mesh-card),
+.dashboard-module-grid > :deep(.modsec-shell),
+.dashboard-module-grid > :deep(.update-shell) {
   max-width: none;
 }
 

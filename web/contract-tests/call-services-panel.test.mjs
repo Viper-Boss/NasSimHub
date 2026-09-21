@@ -176,3 +176,102 @@ test('every key the panel renders resolves in both languages', () => {
     }
   }
 })
+
+test('the call-services URL matches the route the backend actually parses', async () => {
+  // THIS IS THE BUG THIS TEST EXISTS FOR, and it shipped: the builder said
+  // `/api/v1/lines/{id}/call-services` while the backend's parser --
+  // lineServiceResource in internal/httpapi/line_services.go -- only accepts
+  // the prefix `/api/v1/devices/`. Every request 404'd before reaching a
+  // handler, so call forwarding had never once worked from a browser.
+  //
+  // It hid for so long because the UI renders a 404 here as the same
+  // "unavailable" notice it shows for an agent too old to offer the
+  // capability. That is a legitimate state, so nothing looked broken.
+  assert.match(
+    client,
+    /\$\{API_ROOT\}\/devices\/\$\{encodeURIComponent\(lineID\)\}\/call-services/,
+    'the call-services path is not under /devices/, so every request 404s'
+  )
+  assert.doesNotMatch(
+    client,
+    /\$\{API_ROOT\}\/lines\//,
+    'the call-services path is back under /lines/, which the backend does not route'
+  )
+
+  // And it is checked against the backend rather than against a string this
+  // test made up, so moving the route on either side fails here.
+  const parser = await readFile(
+    new URL('../../internal/httpapi/line_services.go', import.meta.url),
+    'utf8'
+  )
+  assert.match(
+    parser,
+    /const prefix = "\/api\/v1\/devices\/"/,
+    'the backend prefix moved; the frontend builder has to move with it'
+  )
+  assert.match(parser, /"call-services"/, 'call-services is no longer a routed resource')
+})
+
+test('call services resolve the agent line id instead of passing the API one', async () => {
+  // The second half of the same failure. The API addresses lines by an ID
+  // derived from the SIM so a line survives being moved between ports; the
+  // agent addresses them by one derived from the hardware it can see.
+  // store.LineSummary.EndpointID is the translation, and every other agent
+  // call applies it. Call services were wired straight to the agent client, so
+  // they did not -- the agent refused all five supplementary queries as "line
+  // was not found" and reported that as the line not being registered on a
+  // network, on a line that was registered and answering AT commands.
+  const [main, service] = await Promise.all([
+    readFile(new URL('../../cmd/modemdeck/main.go', import.meta.url), 'utf8'),
+    readFile(
+      new URL('../../internal/communication/call_services.go', import.meta.url),
+      'utf8'
+    )
+  ])
+
+  assert.match(
+    main,
+    /CallServices:\s*communications,/,
+    'CallServices is wired to the raw agent again, which skips the line-ID translation'
+  )
+  assert.doesNotMatch(main, /CallServices:\s*agent,/)
+
+  // The service has to actually do the translation, not just exist.
+  assert.match(service, /resolveAttachedLine/, 'the call-services service resolves no line')
+  assert.match(
+    service,
+    /return line\.EndpointID/,
+    'the call-services service does not hand the agent an endpoint ID'
+  )
+  for (const method of ['CallServicesStatus', 'ApplyCallForwarding', 'ApplyCallWaiting']) {
+    assert.match(
+      service,
+      new RegExp(`func \\(s \\*Service\\) ${method}\\(`),
+      `${method} is not served by the resolving service`
+    )
+  }
+})
+
+test('an unknown line is not reported as a carrier registration problem', async () => {
+  // When every supplementary query fails the agent says so once rather than
+  // four times, which is right. What it blamed was not: it named carrier
+  // registration, and the case that shipped was a line ID the agent does not
+  // use. That sent an operator to check a registration that was fine.
+  const supplementary = await readFile(
+    new URL('../../agent/internal/modemmanager/supplementary.go', import.meta.url),
+    'utf8'
+  )
+  assert.match(
+    supplementary,
+    /unknownLine == len\(services\.Errors\) && lastFailure != nil/,
+    'the aggregate no longer separates an unknown line from a silent network'
+  )
+  assert.match(
+    supplementary,
+    /operationError\.Code == domain\.ErrorNotFound/,
+    'the not-found failures are no longer counted by code'
+  )
+  // The network explanation must still say the line was reachable, so it
+  // cannot be read as covering the unknown-line case too.
+  assert.match(supplementary, /it is reachable, so check that it is registered/)
+})

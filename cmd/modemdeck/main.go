@@ -376,8 +376,19 @@ func run(
 		// capability" is a legitimate answer that looks identical.
 		DHT: agent,
 		// Call forwarding and call waiting go to the network over AT, which
-		// only the agent can reach.
-		CallServices:     agent,
+		// only the agent can reach -- but they go through `communications`,
+		// NOT the raw agent client, and that distinction is the whole bug this
+		// line used to carry.
+		//
+		// The agent addresses lines by an ID derived from the hardware it can
+		// see; this API addresses them by an ID derived from the SIM, so the
+		// line survives being moved to another port. store.LineSummary
+		// .EndpointID is the translation. Handing `agent` over directly
+		// skipped it, so every supplementary-service query arrived under an ID
+		// the agent had never heard of and was refused -- and the agent's
+		// "all five queries failed" path reported that as the line not being
+		// registered on a network. See internal/communication/call_services.go.
+		CallServices:     communications,
 		LineServices:     communications,
 		CallPolicies:     communications,
 		MessagePolicies:  communications,

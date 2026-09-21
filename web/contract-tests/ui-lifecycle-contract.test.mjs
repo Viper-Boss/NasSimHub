@@ -126,9 +126,13 @@ test('settings initial barriers cover every resource before revealing content', 
   )
   assert.match(audio, /<AudioDeviceControls :refresh-on-mount="false" \/>/)
   assert.match(audioDevices, /if \(props\.refreshOnMount\) void refreshAudioDevices\(\)/)
+  // Both resources still sit behind the barrier. The update check moved into
+  // the shared controller (src/state/softwareUpdate.ts) when the dashboard
+  // gained an update card, so the panel now awaits its once-per-page-load
+  // entry point -- the barrier's coverage is unchanged.
   assert.match(
     about,
-    /waitForInitialLoad\(\[\(\) => load\(\), \(\) => checkForUpdates\(\)\]\)/
+    /waitForInitialLoad\(\[\(\) => load\(\), \(\) => ensureInitialUpdateCheck\(\)\]\)/
   )
   for (const panel of [account, contacts, audio, about]) {
     assert.match(panel, /<SettingsLoadBoundary/)

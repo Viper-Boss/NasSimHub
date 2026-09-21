@@ -1,0 +1,20 @@
+#!/bin/bash
+# r104 NAS-side Go tests: internal (main module) + agent (separate module)
+set -u
+SRC=/volume1/docker/homesim/source/nas-comm-gateway-r6
+LOG=/tmp/r104-gotest.log
+IMAGE=golang:1.26.5-bookworm@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd
+
+echo "=== internal module $(date) ===" > "$LOG"
+docker run --rm -v "$SRC":/src -w /src \
+  -e CGO_ENABLED=0 -e GOPROXY=https://goproxy.cn,direct \
+  "$IMAGE" go test ./internal/... >> "$LOG" 2>&1
+echo "internal rc=$?" >> "$LOG"
+
+echo "=== agent module $(date) ===" >> "$LOG"
+docker run --rm -v "$SRC":/src -w /src/agent \
+  -e CGO_ENABLED=0 -e GOPROXY=https://goproxy.cn,direct \
+  "$IMAGE" go test ./... >> "$LOG" 2>&1
+echo "agent rc=$?" >> "$LOG"
+
+echo "=== ALL DONE $(date) ===" >> "$LOG"

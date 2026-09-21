@@ -140,3 +140,50 @@ test('both canvases resize their backing store on either dimension', async () =>
     )
   }
 })
+
+test('the seed latency bars all start at the same x', () => {
+  // The operator reported the first bar sitting slightly right of the other
+  // three. Measured in the browser: every track was 46px wide, but the "72 ms"
+  // row's track began 6.67px right of the rest -- exactly the width difference
+  // between a two-digit and a three-digit reading.
+  //
+  // The cause was that each <li> was its own grid, so the three columns were
+  // measured per row. A narrower reading made the last column narrower, and the
+  // `1fr` address column swallowed the slack, carrying the bar right with it.
+  // Bars drawn on one shared scale, for the express purpose of being compared
+  // with one another, cannot begin in different places.
+  //
+  // The fix is structural rather than a number: the columns live on the <ul>
+  // and the rows dissolve into it, so all four rows share one set of tracks and
+  // the reading column sizes to the widest reading in the list. That is also
+  // why this is asserted as "the <ul> owns the columns" rather than as a width
+  // -- a hard-coded width would look identical today and break on the first
+  // four-digit latency.
+  const list = insight.match(/\.insight-nodes__seeds \{[^}]*\}/)
+  assert.ok(list, 'the seed list rule is gone')
+  assert.match(
+    list[0],
+    /grid-template-columns:/,
+    'the seed list no longer owns the columns, so the rows measure them separately'
+  )
+
+  const row = insight.match(/\.insight-nodes__seeds li \{[^}]*\}/)
+  assert.ok(row, 'the seed row rule is gone')
+  assert.match(
+    row[0],
+    /display:\s*contents/,
+    'a seed row is a grid of its own again, which is what misaligned the bars'
+  )
+  assert.doesNotMatch(
+    row[0],
+    /grid-template-columns:/,
+    'a seed row defines its own columns, so they are measured per row'
+  )
+
+  // And the readings are right-aligned in that shared column, so the digits
+  // line up under one another rather than only the "ms".
+  const reading = insight.match(/\.insight-nodes__rtt \{[^}]*\}/)
+  assert.ok(reading, 'the reading rule is gone')
+  assert.match(reading[0], /text-align:\s*right/, 'the readings no longer line up on the right')
+  assert.match(reading[0], /tabular-nums/, 'the readings no longer use fixed-width digits')
+})

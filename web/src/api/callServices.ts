@@ -46,8 +46,23 @@ export interface CallServicesResponse {
   error?: string
 }
 
+/**
+ * `devices`, not `lines`, and the difference is the whole reason call
+ * forwarding never worked from this UI.
+ *
+ * The backend parses this family of routes in one place -- lineServiceResource
+ * in internal/httpapi/line_services.go -- and that parser requires the prefix
+ * `/api/v1/devices/`. Its five siblings (sim, sim/commands, sim/auto-unlock,
+ * profiles, ussd) are all built with `devices` in api/client.ts. This one
+ * builder said `lines`, so every request 404'd before reaching a handler and
+ * the feature had never once succeeded in a browser.
+ *
+ * It was invisible because a 404 here surfaces as the same "unavailable"
+ * notice the UI shows for an agent that is too old to offer the capability --
+ * which is a legitimate state, so nothing looked broken enough to chase.
+ */
 function callServicesPath(lineID: string): string {
-  return `${API_ROOT}/lines/${encodeURIComponent(lineID)}/call-services`
+  return `${API_ROOT}/devices/${encodeURIComponent(lineID)}/call-services`
 }
 
 const fixtureCallServices: CallServices = {

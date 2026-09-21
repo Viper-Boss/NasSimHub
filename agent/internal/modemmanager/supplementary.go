@@ -2,6 +2,7 @@ package modemmanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -88,6 +89,17 @@ func (p *Provider) CallServicesStatus(ctx context.Context, lineID string) (domai
 		LineID:     strings.TrimSpace(lineID),
 		ObservedAt: p.now().UTC().Format(time.RFC3339),
 	}
+	// Counted rather than re-derived from the stringified messages in
+	// services.Errors, which keep the text but lose the code.
+	unknownLine := 0
+	var lastFailure error
+	note := func(err error) {
+		lastFailure = err
+		var operationError *domain.OperationError
+		if errors.As(err, &operationError) && operationError.Code == domain.ErrorNotFound {
+			unknownLine++
+		}
+	}
 
 	for _, reason := range readableForwardReasons {
 		command := fmt.Sprintf("AT+CCFC=%d,2", int(reason))
@@ -97,6 +109,7 @@ func (p *Provider) CallServicesStatus(ctx context.Context, lineID string) (domai
 				services.Errors = map[string]string{}
 			}
 			services.Errors[reason.String()] = err.Error()
+			note(err)
 			// The row still appears, marked unreadable, so the list keeps its
 			// shape and the UI shows a known-unknown rather than a gap or an
 			// off switch it has no business drawing.
@@ -124,6 +137,7 @@ func (p *Provider) CallServicesStatus(ctx context.Context, lineID string) (domai
 			services.Errors = map[string]string{}
 		}
 		services.Errors["waiting"] = err.Error()
+		note(err)
 	} else {
 		services.WaitingActive, services.WaitingKnown = parseCCWA(waiting)
 	}
@@ -131,10 +145,27 @@ func (p *Provider) CallServicesStatus(ctx context.Context, lineID string) (domai
 	// An error on every single query means the line is not reachable at all,
 	// not that four services happen to be broken. Saying so once is more
 	// useful than four copies of the same message.
+	//
+	// WHAT IT BLAMES MATTERS. This used to say the line was probably not
+	// registered on a network, which is one explanation among several and was
+	// the wrong one in the case that actually shipped: the caller was passing
+	// a line ID this agent does not use, so every query was refused with "line
+	// was not found" before a single AT command was sent. An operator chasing
+	// a carrier registration problem on a line that was registered, answering
+	// AT, and showing full signal has been sent somewhere with nothing to
+	// find. So the aggregate now separates the two: a line this agent cannot
+	// identify is reported as exactly that, and only a line it CAN identify
+	// gets the network explanation.
 	if len(services.Errors) > len(readableForwardReasons) {
+		// Every failure was "this agent does not know that line". That is a
+		// caller problem, not a radio problem, and it is worth its own error
+		// rather than an extra probe: the information is already in hand.
+		if unknownLine == len(services.Errors) && lastFailure != nil {
+			return services, lastFailure
+		}
 		return services, domain.Unavailable(
 			operation,
-			"the line did not answer any supplementary service query; check that it is registered on a network",
+			"the line did not answer any supplementary service query; it is reachable, so check that it is registered on a network and that the subscription includes these services",
 			nil,
 		)
 	}

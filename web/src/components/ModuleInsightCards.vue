@@ -925,22 +925,31 @@ const radioFacts = computed<RadioFact[]>(() => {
 
 .insight-nodes__value.is-muted { color: var(--faint); font-weight: 500; }
 
+/* THE GRID IS THE LIST, NOT THE ROW, and that is the whole point of this
+   block. Each row used to be its own grid, which meant the three columns were
+   measured separately for every row: a two-digit reading made the last column
+   narrower than a three-digit one, the `1fr` address column absorbed the
+   difference, and the bar beside "72 ms" sat seven pixels to the right of the
+   bar beside "314 ms" -- track and all. Bars that are meant to be compared
+   with one another cannot start at different places.
+
+   Putting the columns on the <ul> and letting the rows dissolve into it with
+   `display: contents` gives every row the same three tracks, and the reading
+   column sizes itself to the widest reading in the list. That also survives a
+   four-digit latency, which a hard-coded column width would not. */
 .insight-nodes__seeds {
   display: grid;
+  align-items: center;
   margin: 0;
   padding: 8px 10px;
-  gap: 6px;
+  gap: 6px 8px;
+  grid-template-columns: minmax(0, 1fr) 46px auto;
   background: var(--surface-subtle);
   border-radius: var(--radius-md);
   list-style: none;
 }
 
-.insight-nodes__seeds li {
-  display: grid;
-  align-items: center;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 46px auto;
-}
+.insight-nodes__seeds li { display: contents; }
 
 .insight-nodes__addr {
   overflow: hidden;
@@ -967,10 +976,14 @@ const radioFacts = computed<RadioFact[]>(() => {
   border-radius: inherit;
 }
 
+/* Right-aligned so the digits line up under one another rather than the
+   units: with the column now shared, "72 ms" and "314 ms" end at the same
+   edge, which is what makes the four readings scan as one column of numbers. */
 .insight-nodes__rtt {
   color: var(--text);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .insight-nodes__ids {

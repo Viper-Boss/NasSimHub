@@ -16,25 +16,22 @@ import {
 import { gateway } from '../api/client'
 import type {
   AboutInfo,
-  UpdateCheck,
-  UpdateComponent,
   UpdateComponentName,
-  UpdateOperation,
   UpdateOperationComponentState,
   UpdateStatus
 } from '../api/types'
 import { useInitialLoadBarrier } from '../composables/useInitialLoadBarrier'
-import { requestConfirmation } from '../state/confirmation'
-import { showError } from '../state/feedback'
+// The update flow itself lives in one shared controller, because the
+// dashboard's update card drives the same operation over the same single
+// event stream. See src/state/softwareUpdate.ts.
 import {
-  monitorRuntimeUpdateOperation,
-  subscribeRuntimeUpdateOperations
-} from '../state/runtimeEvents'
-import {
-  clearApplicationUpdateNotice,
-  refreshApplication,
-  setApplicationUpdateNoticeSuppressed
-} from '../state/staleAssetRecovery'
+  applyUpdate,
+  attachSoftwareUpdate,
+  checkForUpdates,
+  ensureInitialUpdateCheck,
+  setSoftwareUpdateMessages,
+  useSoftwareUpdate
+} from '../state/softwareUpdate'
 import { releaseNoteRemainder, releaseNoteSummary } from '../utils/releaseNotes'
 import SettingsLoadBoundary from './settings/SettingsLoadBoundary.vue'
 import SettingsModuleCard from './settings/SettingsModuleCard.vue'
@@ -45,45 +42,24 @@ const licenseURL = `${repositoryURL}/blob/modemdeck/LICENSE`
 const noticesURL = `${repositoryURL}/blob/modemdeck/THIRD_PARTY_NOTICES.md`
 const licenseName = 'PolyForm Noncommercial 1.0.0'
 const about = ref<AboutInfo | null>(null)
-const update = ref<UpdateCheck | null>(null)
-const checking = ref(false)
-const applying = ref(false)
-const startingUpdate = ref(false)
 const loadError = ref('')
 const { loading: initialLoading, waitFor: waitForInitialLoad } = useInitialLoadBarrier()
-let closeRuntimeUpdateSubscription: (() => void) | undefined
+let detachSoftwareUpdate: (() => void) | undefined
+
+// One controller, shared with the dashboard's update card.
+const {
+  updateCheck: update,
+  checking,
+  applying,
+  startingUpdate,
+  displayedComponents,
+  componentState,
+  progress: updateProgress
+} = useSoftwareUpdate()
 
 const displayedVersion = computed(
   () => update.value?.current_version || about.value?.version || t('about.notAvailable')
 )
-
-const changedComponents = computed(
-  () => update.value?.components?.filter(component => component.changed) || []
-)
-const activeOperation = computed<UpdateOperation | undefined>(() => {
-  const currentUpdate = update.value
-  const operation = currentUpdate?.operation
-  if (
-    !applying.value ||
-    startingUpdate.value ||
-    !operation ||
-    operation.target_version !== currentUpdate?.latest_version
-  ) {
-    return undefined
-  }
-  return operation
-})
-const displayedComponents = computed<UpdateComponent[]>(() => {
-  const currentUpdate = update.value
-  const operationComponents = activeOperation.value?.components
-  if (!applying.value || !operationComponents?.length) return changedComponents.value
-  return operationComponents.map(component =>
-    currentUpdate?.components?.find(candidate => candidate.name === component.name) || {
-      name: component.name,
-      changed: true
-    }
-  )
-})
 const releaseSummary = computed(() =>
   update.value?.status === 'update_available'
     ? releaseNoteSummary(update.value.release_notes)
@@ -94,32 +70,7 @@ const releaseRemainder = computed(() =>
     ? releaseNoteRemainder(update.value.release_notes)
     : []
 )
-const componentStates = computed(() => {
-  const states = new Map<UpdateComponentName, UpdateOperationComponentState>()
-  for (const component of activeOperation.value?.components || []) {
-    states.set(component.name, component.state)
-  }
-  return states
-})
-const componentProgressWeights: Record<UpdateOperationComponentState, number> = {
-  pending: 0,
-  pulling: 0.2,
-  staged: 0.45,
-  restarting: 0.72,
-  rolling_back: 0.78,
-  rolled_back: 1,
-  ready: 1,
-  failed: 1
-}
-const updateProgress = computed(() => {
-  const components = displayedComponents.value
-  if (!applying.value || components.length === 0) return 0
-  const progress = components.reduce((total, component) => {
-    const state = componentStates.value.get(component.name) || 'pending'
-    return total + componentProgressWeights[state]
-  }, 0)
-  return Math.round((progress / components.length) * 100)
-})
+
 const componentLabels = {
   api: 'API',
   web: 'Web',
@@ -130,10 +81,6 @@ const componentLabels = {
 
 function componentLabel(name: keyof typeof componentLabels): string {
   return componentLabels[name]
-}
-
-function componentState(name: UpdateComponentName): UpdateOperationComponentState | undefined {
-  return componentStates.value.get(name)
 }
 
 function componentStateLabel(state?: UpdateOperationComponentState): string {
@@ -166,95 +113,6 @@ const statusDescription = computed(() => {
   })
 })
 
-async function checkForUpdates(refresh = false): Promise<void> {
-  if (checking.value) return
-  checking.value = true
-  try {
-    const result = await gateway.checkForUpdates(refresh)
-    update.value = result
-    if (result.operation?.state === 'running') {
-      applying.value = true
-      monitorRuntimeUpdateOperation(result.operation.id)
-    } else {
-      applying.value = false
-      monitorRuntimeUpdateOperation()
-    }
-  } catch {
-    update.value = {
-      status: 'unavailable',
-      current_version: about.value?.version || '—',
-      checked_at: new Date().toISOString(),
-      apply_available: false,
-      hardware_confirmation_required: false
-    }
-    applying.value = false
-    monitorRuntimeUpdateOperation()
-  } finally {
-    checking.value = false
-  }
-}
-
-function acceptRuntimeUpdateOperation(operation: UpdateOperation): void {
-  const trackedOperationID = update.value?.operation?.id
-  if (!applying.value && trackedOperationID !== operation.id) return
-  handleUpdateOperation(operation)
-}
-
-function handleUpdateOperation(operation: UpdateOperation): void {
-  const trackedOperationID = update.value?.operation?.id
-  if (trackedOperationID && trackedOperationID !== operation.id) return
-  if (update.value) update.value = { ...update.value, operation }
-  startingUpdate.value = false
-  if (operation.state === 'running') {
-    applying.value = true
-    return
-  }
-  monitorRuntimeUpdateOperation()
-  clearApplicationUpdateNotice()
-  if (operation.state === 'succeeded') {
-    refreshApplication()
-  } else {
-    applying.value = false
-    showError(t('about.updateFailed'))
-  }
-}
-
-async function applyUpdate(): Promise<void> {
-  const current = update.value
-  if (!current?.apply_available || !current.latest_version || applying.value) return
-  let confirmHardware = false
-  if (current.hardware_confirmation_required) {
-    confirmHardware = await requestConfirmation({
-      title: t('about.hardwareUpdateTitle'),
-      message: t('about.hardwareUpdateWarning'),
-      confirmLabel: t('about.confirmUpdate')
-    })
-    if (!confirmHardware) return
-  }
-  startingUpdate.value = true
-  applying.value = true
-  setApplicationUpdateNoticeSuppressed(true)
-  try {
-    const operation = await gateway.applySoftwareUpdate(
-      current.latest_version,
-      confirmHardware
-    )
-    const observedOperation = update.value?.operation
-    update.value = {
-      ...current,
-      operation:
-        observedOperation?.id === operation.id ? observedOperation : operation
-    }
-    startingUpdate.value = false
-    monitorRuntimeUpdateOperation(operation.id)
-  } catch {
-    startingUpdate.value = false
-    applying.value = false
-    setApplicationUpdateNoticeSuppressed(false)
-    showError(t('about.updateStartFailed'))
-  }
-}
-
 async function load(): Promise<void> {
   loadError.value = ''
   try {
@@ -271,15 +129,22 @@ function statusClass(status?: UpdateStatus): string {
 }
 
 onMounted(() => {
-  closeRuntimeUpdateSubscription = subscribeRuntimeUpdateOperations(
-    acceptRuntimeUpdateOperation
-  )
-  void waitForInitialLoad([() => load(), () => checkForUpdates()])
+  // The controller carries no locale of its own; whichever screen mounts
+  // first hands it the two sentences it has to be able to say.
+  setSoftwareUpdateMessages({
+    updateFailed: t('about.updateFailed'),
+    updateStartFailed: t('about.updateStartFailed'),
+    hardwareTitle: t('about.hardwareUpdateTitle'),
+    hardwareWarning: t('about.hardwareUpdateWarning'),
+    confirmUpdate: t('about.confirmUpdate')
+  })
+  detachSoftwareUpdate = attachSoftwareUpdate()
+  void waitForInitialLoad([() => load(), () => ensureInitialUpdateCheck()])
 })
 
 onBeforeUnmount(() => {
-  closeRuntimeUpdateSubscription?.()
-  closeRuntimeUpdateSubscription = undefined
+  detachSoftwareUpdate?.()
+  detachSoftwareUpdate = undefined
 })
 </script>
 
