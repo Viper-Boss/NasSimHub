@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { listenForWireGuardPhrase } from '../state/wireguardUnlock'
+import { listenForHiddenCommands } from '../state/hiddenCommands'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter } from 'vue-router'
@@ -461,10 +461,10 @@ onMounted(() => {
   void initializeBrowserAudio()
   initializeBrowserNotifications()
   initializeBrowserSounds()
-  // The WireGuard chart is revealed by typing its name. Listening here rather
-  // than in either page that shows the chart means the phrase works wherever
-  // the operator happens to be.
-  listenForWireGuardPhrase()
+  // The hidden commands are typed, not clicked. Listening here rather than in
+  // the pages they reveal means every phrase works wherever the operator
+  // happens to be -- which used to be true of "wireguard" alone.
+  listenForHiddenCommands()
   initializeCallRuntime(router)
   initializeMessageRuntime(router)
   stopForegroundCommunicationRefresh = initializeForegroundCommunicationRefresh()

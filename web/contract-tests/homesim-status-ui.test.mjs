@@ -37,14 +37,18 @@ test('the header keeps a greyed flat-lined strip when no module is attached', as
 // The chart is hidden until the phrase is typed, and the listener lives in the
 // shell so the gesture works from either page that can show it.
 test('the WireGuard traffic chart stays hidden behind a typed phrase', async () => {
- const unlock = await readFile(new URL('../src/state/wireguardUnlock.ts', import.meta.url), 'utf8')
- assert.match(unlock, /const PHRASE = 'wireguard'/)
- // Typing the word into a field means it as text, not as a gesture.
- assert.match(unlock, /tag === 'INPUT' \|\| tag === 'TEXTAREA'/)
- assert.match(unlock, /isContentEditable/)
+ // The phrase and the keyboard listener moved into the one hidden-command
+ // registry, which every reveal now shares; hidden-commands.test.mjs guards
+ // the matching rule, the confirmation, and that typing into a field is still
+ // treated as text rather than as a gesture. What stays here is the part
+ // specific to this chart: that it exists, and that both places showing it
+ // keep it behind the flag.
+ const registry = await readFile(new URL('../src/state/hiddenCommands.ts', import.meta.url), 'utf8')
+ assert.match(registry, /phrase: 'wireguard'/)
+ assert.match(registry, /unlockWireGuardChart\(\)/)
 
  const shell = await readFile(new URL('../src/components/AppShell.vue', import.meta.url), 'utf8')
- assert.match(shell, /listenForWireGuardPhrase\(\)/)
+ assert.match(shell, /listenForHiddenCommands\(\)/)
 
  for (const view of ['../src/views/DashboardView.vue', '../src/components/settings/WireGuardPanel.vue']) {
   const source = await readFile(new URL(view, import.meta.url), 'utf8')
@@ -68,8 +72,12 @@ test('the DHT stays hidden until unlocked, and reports isolated honestly', async
  const nav = await readFile(new URL('../src/components/settings/settingsNavigation.ts', import.meta.url), 'utf8')
  assert.match(nav, /if \(section === 'dht'\) return visibility\.isAdmin && visibility\.dhtUnlocked === true/)
 
- const dialer = await readFile(new URL('../src/components/DialerPanel.vue', import.meta.url), 'utf8')
- assert.match(dialer, /lower\.includes\('dht'\)/)
+ // The phrase is one entry in the shared hidden-command registry now, matched
+ // against the whole entry rather than as a substring -- "andhtolstoy" used to
+ // reveal the DHT. hidden-commands.test.mjs guards that rule.
+ const registry = await readFile(new URL('../src/state/hiddenCommands.ts', import.meta.url), 'utf8')
+ assert.match(registry, /phrase: 'dht'/)
+ assert.match(registry, /unlockDHT\(\)/)
 
  const strip = await readFile(new URL('../src/components/LineStatusStrip.vue', import.meta.url), 'utf8')
  assert.match(strip, /v-if="dhtUnlockState\.unlocked"/)

@@ -39,7 +39,6 @@ import {
   resolveLine
 } from '../state/workspace'
 import { playDTMFTone } from '../state/dtmfAudio'
-import { unlockNknMenu, nknUnlockState } from '../state/nknUnlock'
 import { unlockCallGuard } from '../api/client'
 import { normalizeDialTarget } from '../utils/dialTarget'
 import { phoneDestination } from '../utils/format'
@@ -49,9 +48,7 @@ import ContactSuggestInput from './ContactSuggestInput.vue'
 import CallSurface from './CallSurface.vue'
 import LineSelector from './LineSelector.vue'
 import { sessionState } from '../state/session'
-import { revealAdvancedNetwork } from '../state/advancedNetwork'
-import { unlockWireGuardChart, wireGuardUnlockState } from '../state/wireguardUnlock'
-import { dhtUnlockState, unlockDHT } from '../state/dhtUnlock'
+import { matchHiddenCommand, runHiddenCommand } from '../state/hiddenCommands'
 import { showFeedback } from '../state/feedback'
 
 const { t } = useI18n()
@@ -87,40 +84,28 @@ let dialerReturnFocus: HTMLElement | null = null
 
 const zeroLongPressDelay = 500
 
-// Typing "nkn" on the dial pad reveals the hidden NKN settings sections.
-const nknHintVisible = ref(false)
-let nknHintTimer: number | undefined
-// Typing "unlock" lifts the anti-fraud daily distinct-number dial limit.
-const guardHintVisible = ref(false)
-let guardHintTimer: number | undefined
+// The hidden commands. Phones have no keyboard, so the dial pad carries the
+// same phrases the page-wide listener does -- and it is the ONLY route for the
+// fraud-guard unlock below, which changes what the gateway does rather than
+// what this browser shows.
+//
+// The reveals themselves live in state/hiddenCommands.ts: one list, one way to
+// match, one confirmation through the app's feedback surface. What used to be
+// here was four branches that had drifted apart, one of which could never fire
+// because `editNumber` swallowed its word first.
 let guardUnlockAttempted = false
 watch(number, value => {
-  const lower = value.toLowerCase()
-  if (lower.includes('unlock') && !guardUnlockAttempted) {
+  const entry = value.trim().toLowerCase()
+  // Typing "unlock" lifts the anti-fraud daily distinct-number dial limit.
+  if (entry === 'unlock' && !guardUnlockAttempted) {
     guardUnlockAttempted = true
     unlockCallGuard()
-      .then(() => {
-        guardHintVisible.value = true
-        if (guardHintTimer) window.clearTimeout(guardHintTimer)
-        guardHintTimer = window.setTimeout(() => { guardHintVisible.value = false }, 5000)
-      })
+      .then(() => { showFeedback(t('homesim.fraudGuard.unlocked')) })
       .catch(() => { guardUnlockAttempted = false })
+    return
   }
-  // Phones have no keyboard, so the dial pad carries the same phrase the
-  // window listener does.
-  if (!wireGuardUnlockState.unlocked && lower.includes('wireguard')) {
-    unlockWireGuardChart()
-  }
-  if (!dhtUnlockState.unlocked && lower.includes('dht')) {
-    unlockDHT()
-  }
-  if (nknUnlockState.unlocked && lower.includes('nkn')) return
-  if (lower.includes('nkn')) {
-    unlockNknMenu()
-    nknHintVisible.value = true
-    if (nknHintTimer) window.clearTimeout(nknHintTimer)
-    nknHintTimer = window.setTimeout(() => { nknHintVisible.value = false }, 4000)
-  }
+  const command = matchHiddenCommand(entry)
+  if (command) runHiddenCommand(command)
 })
 
 function dismissFraudGuard(): void {
@@ -431,12 +416,12 @@ function removeDigit(): void {
 }
 
 function editNumber(value: string): void {
-  if (value.trim().toLowerCase() === 'wireguard' && sessionState.role === 'admin') {
-    revealAdvancedNetwork()
-    number.value = ''
-    showFeedback(t('homesim.advanced.text53'))
-    return
-  }
+  // "wireguard" used to be intercepted here, revealing the advanced-network
+  // settings and clearing the field before the watch above could see it -- so
+  // the home page's WireGuard traffic card, which is revealed by the same
+  // word, could never be unlocked from the dial pad by an administrator. Both
+  // halves now belong to one command in state/hiddenCommands.ts, and the entry
+  // reaches `number` like any other so that command can fire.
   number.value = value
   contactLabel.value = ''
   selectedContactPreferredLineID.value = ''
@@ -661,22 +646,14 @@ onBeforeUnmount(() => {
                     @blur="blurNumberInput"
                   />
                   <span v-if="number" class="dialer-number-trailing">
+                    <!-- The two hints that used to sit here -- one for the
+                         fraud-guard unlock, one for NKN, at 5 and 4 seconds --
+                         are gone. Every hidden command confirms through the
+                         app's feedback surface now, so they read alike and are
+                         visible even when the phrase was typed on a page with
+                         no dial pad open. -->
                     <span
-                      v-if="guardHintVisible"
-                      class="dialer-inline-validation"
-                      role="status"
-                    >
-                      <span aria-hidden="true">{{ t('homesim.fraudGuard.unlocked') }}</span>
-                    </span>
-                    <span
-                      v-else-if="nknHintVisible"
-                      class="dialer-inline-validation"
-                      role="status"
-                    >
-                      <span aria-hidden="true">{{ t('homesim.nknUnlocked') }}</span>
-                    </span>
-                    <span
-                      v-if="validationVisible && !nknHintVisible"
+                      v-if="validationVisible"
                       :id="validationMessageId"
                       class="dialer-inline-validation"
                       role="status"

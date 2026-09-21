@@ -2,11 +2,10 @@ import { reactive } from 'vue'
 
 // The WireGuard traffic chart stays hidden until someone types "wireguard".
 //
-// Unlike the NKN and DHT reveals, which live on the dial pad, this one listens
-// on the window: the chart appears on two different pages and the dial pad is
-// not open on either of them, so requiring a detour through the dialer would
-// make the gesture undiscoverable exactly where it is meant to be used. The
-// dial pad still works too, for phones with no keyboard.
+// This file holds the flag and nothing else. The phrase that sets it, and the
+// keyboard listener that used to live here for this reveal alone, moved to
+// state/hiddenCommands.ts when the other reveals were given the same
+// treatment: typing on the page works for all of them now, not just this one.
 const STORAGE_KEY = 'modemdeck.wireguardChartUnlocked'
 const PHRASE = 'wireguard'
 
@@ -40,37 +39,4 @@ export function lockWireGuardChart(): void {
   } catch {
     // Nothing to do: the in-memory flag is already cleared.
   }
-}
-
-let typed = ''
-let listening = false
-
-function onKeydown(event: KeyboardEvent): void {
-  // Never consume keystrokes aimed at a field. Someone typing "wireguard" into
-  // a search box or a peer name means it as text, not as a gesture.
-  const target = event.target as HTMLElement | null
-  if (target) {
-    const tag = target.tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return
-  }
-  // Modified keys are shortcuts, not typing.
-  if (event.ctrlKey || event.metaKey || event.altKey) return
-  if (event.key.length !== 1) return
-
-  typed = (typed + event.key.toLowerCase()).slice(-PHRASE.length)
-  if (typed === PHRASE) {
-    typed = ''
-    unlockWireGuardChart()
-  }
-}
-
-/**
- * Starts listening for the phrase. Safe to call more than once; the listener is
- * installed only on the first call and lives as long as the app does, so the
- * gesture works from any page.
- */
-export function listenForWireGuardPhrase(): void {
-  if (listening || typeof window === 'undefined') return
-  listening = true
-  window.addEventListener('keydown', onKeydown)
 }
