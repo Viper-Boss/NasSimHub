@@ -15,8 +15,19 @@ import (
 )
 
 const (
-	DefaultLatestReleaseURL  = "https://api.github.com/repos/human-agent65535/ModemDeck/releases/latest"
-	DefaultReleasePageURL    = "https://github.com/human-agent65535/ModemDeck/releases/tag/"
+	// This project's OWN releases, not the upstream project's.
+	//
+	// These pointed at human-agent65535/ModemDeck, which is the UPSTREAM work
+	// this repository is a non-commercial derivative of (see NOTICE.md), and
+	// not anything under this project's control. The consequence was not a
+	// broken link: an update check read a release list belonging to somebody
+	// else, so the moment upstream tagged a release every gateway reported an
+	// update available and then installed upstream's images over this
+	// product -- the device adapters, the home-SIM features and the licensing
+	// included. Signature verification now stops the install (upstream cannot
+	// sign for this key), but the check has to point here regardless.
+	DefaultLatestReleaseURL  = "https://api.github.com/repos/Viper-Boss/NasSimHub/releases/latest"
+	DefaultReleasePageURL    = "https://github.com/Viper-Boss/NasSimHub/releases/tag/"
 	defaultCacheTTL          = 24 * time.Hour
 	defaultUnavailableTTL    = 30 * time.Second
 	defaultRequestTimeout    = 5 * time.Second
@@ -211,7 +222,7 @@ func (checker *Checker) fetch(ctx context.Context, now time.Time) Result {
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("X-GitHub-Api-Version", "2026-03-10")
-	request.Header.Set("User-Agent", "ModemDeck/"+checker.currentVersion)
+	request.Header.Set("User-Agent", "NasSimHub/"+checker.currentVersion)
 	if checker.etag != "" {
 		request.Header.Set("If-None-Match", checker.etag)
 	}

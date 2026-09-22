@@ -18,6 +18,10 @@
 //
 //	licensegen features
 //	    List the catalogue and what each feature requires.
+//
+//	licensegen release-sign -key issuer.key -version v1.4.2 \
+//	    -api sha256:... -web sha256:... -hardware sha256:... -updater sha256:...
+//	    Sign the release manifest gateways verify before installing anything.
 package main
 
 import (
@@ -50,6 +54,8 @@ func main() {
 		err = verify(os.Args[2:])
 	case "features":
 		err = features()
+	case "release-sign":
+		err = releaseSign(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -71,6 +77,10 @@ func usage() {
            -features a,b -days N [-note ""] sign a certificate
   verify   -pub <base64> -cert <file>       check one as a gateway would
   features                                  list the catalogue
+  release-sign -key <file> -version vX.Y.Z
+           -api sha256:... -web sha256:... -hardware sha256:...
+           -updater sha256:... [-out release.signed.json]
+                                            sign a release manifest
 
 The key file holds the private key. Keep it off any machine a customer can
 reach; losing it means no new certificates, and leaking it means anyone can

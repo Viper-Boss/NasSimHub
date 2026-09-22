@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -41,7 +42,6 @@ type OperationStore interface {
 type Options struct {
 	Checker    ReleaseChecker
 	Manifests  ManifestLoader
-	Digests    DigestResolver
 	Runtime    Runtime
 	Operations OperationStore
 	Now        func() time.Time
@@ -50,7 +50,6 @@ type Options struct {
 type Controller struct {
 	checker    ReleaseChecker
 	manifests  ManifestLoader
-	digests    DigestResolver
 	runtime    Runtime
 	operations OperationStore
 	now        func() time.Time
@@ -85,7 +84,7 @@ type WorkerRequest struct {
 }
 
 func New(options Options) (*Controller, error) {
-	if options.Checker == nil || options.Manifests == nil || options.Digests == nil ||
+	if options.Checker == nil || options.Manifests == nil ||
 		options.Runtime == nil || options.Operations == nil {
 		return nil, errors.New("complete OTA controller dependencies are required")
 	}
@@ -96,7 +95,6 @@ func New(options Options) (*Controller, error) {
 	return &Controller{
 		checker:    options.Checker,
 		manifests:  options.Manifests,
-		digests:    options.Digests,
 		runtime:    options.Runtime,
 		operations: options.Operations,
 		now:        now,
@@ -273,13 +271,39 @@ func (controller *Controller) plan(ctx context.Context) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	targets := []Target{
-		{Name: "api", Service: "api", Image: manifest.Images.API, Version: result.LatestVersion, ImageEnv: "MODEMDECK_IMAGE", RefEnv: "MODEMDECK_API_IMAGE_REF", VersionEnv: "MODEMDECK_API_VERSION", DigestEnv: "MODEMDECK_API_DIGEST"},
-		{Name: "web", Service: "modemdeck", Image: manifest.Images.Web, Version: result.LatestVersion, ImageEnv: "MODEMDECK_WEB_IMAGE", RefEnv: "MODEMDECK_WEB_IMAGE_REF", VersionEnv: "MODEMDECK_WEB_VERSION", DigestEnv: "MODEMDECK_WEB_DIGEST"},
-		{Name: "hardware", Service: "hardware", Image: manifest.Images.Hardware, Version: result.LatestVersion, ImageEnv: "MODEMDECK_HARDWARE_IMAGE", RefEnv: "MODEMDECK_HARDWARE_IMAGE_REF", VersionEnv: "MODEMDECK_HARDWARE_VERSION", DigestEnv: "MODEMDECK_HARDWARE_DIGEST"},
-		{Name: "updater", Service: "updater", Image: manifest.Images.Updater, Version: result.LatestVersion, ImageEnv: "MODEMDECK_UPDATER_IMAGE", RefEnv: "MODEMDECK_UPDATER_IMAGE_REF", VersionEnv: "MODEMDECK_UPDATER_VERSION", DigestEnv: "MODEMDECK_UPDATER_DIGEST"},
+	// Only a signature-verified manifest may produce an install plan.
+	//
+	// This is the gate, and it is here rather than in the loader on purpose:
+	// whichever loader is wired, and however the bytes arrived -- GitHub, a
+	// peer over NKN, an offline file -- nothing can be installed unless the
+	// manifest it came from was verified. Wiring an unsigned loader by mistake
+	// then costs update availability, not integrity.
+	if !manifest.Signed() {
+		return Plan{}, fmt.Errorf(
+			"%w: release manifest was not signature-verified", ErrManifestUnavailable)
 	}
-	if controller.runtime.Managed("cloudflared") {
+
+	targets := []Target{
+		{Name: "api", Service: "api", Image: manifest.Images.API, Digest: manifest.Digests.API, Version: result.LatestVersion, ImageEnv: "MODEMDECK_IMAGE", RefEnv: "MODEMDECK_API_IMAGE_REF", VersionEnv: "MODEMDECK_API_VERSION", DigestEnv: "MODEMDECK_API_DIGEST"},
+		{Name: "web", Service: "modemdeck", Image: manifest.Images.Web, Digest: manifest.Digests.Web, Version: result.LatestVersion, ImageEnv: "MODEMDECK_WEB_IMAGE", RefEnv: "MODEMDECK_WEB_IMAGE_REF", VersionEnv: "MODEMDECK_WEB_VERSION", DigestEnv: "MODEMDECK_WEB_DIGEST"},
+		{Name: "hardware", Service: "hardware", Image: manifest.Images.Hardware, Digest: manifest.Digests.Hardware, Version: result.LatestVersion, ImageEnv: "MODEMDECK_HARDWARE_IMAGE", RefEnv: "MODEMDECK_HARDWARE_IMAGE_REF", VersionEnv: "MODEMDECK_HARDWARE_VERSION", DigestEnv: "MODEMDECK_HARDWARE_DIGEST"},
+		{Name: "updater", Service: "updater", Image: manifest.Images.Updater, Digest: manifest.Digests.Updater, Version: result.LatestVersion, ImageEnv: "MODEMDECK_UPDATER_IMAGE", RefEnv: "MODEMDECK_UPDATER_IMAGE_REF", VersionEnv: "MODEMDECK_UPDATER_VERSION", DigestEnv: "MODEMDECK_UPDATER_DIGEST"},
+	}
+	// Belt and braces: the adapter already refuses a manifest missing any
+	// first-party digest, so reaching this is a programming error rather than
+	// bad input. It is checked anyway because the consequence of an empty
+	// digest slipping through is the tag-resolution path coming back to life.
+	for _, target := range targets {
+		if !digestPattern.MatchString(target.Digest) {
+			return Plan{}, fmt.Errorf(
+				"%w: %s has no pinned digest", ErrManifestUnavailable, target.Name)
+		}
+	}
+	// cloudflared only when the signed manifest actually names it. A release
+	// that does not move cloudflared must leave it alone rather than fall
+	// through to resolving it by tag, which is the path this change exists to
+	// remove.
+	if controller.runtime.Managed("cloudflared") && manifest.Cloudflared.Digest != "" {
 		targets = append(targets, Target{
 			Name:       "cloudflared",
 			Service:    "cloudflared",
@@ -290,40 +314,13 @@ func (controller *Controller) plan(ctx context.Context) (Plan, error) {
 			DigestEnv:  "MODEMDECK_CLOUDFLARED_DIGEST",
 		})
 	}
-	type digestResult struct {
-		index  int
-		digest string
-		exists bool
-		err    error
-	}
-	digestResults := make(chan digestResult, len(targets))
-	digestRequests := 0
-	for index := range targets {
-		if targets[index].Digest != "" {
-			continue
-		}
-		digestRequests++
-		go func(index int) {
-			digest, exists, err := controller.digests.Resolve(
-				ctx,
-				targets[index].Image,
-				targets[index].Version,
-			)
-			digestResults <- digestResult{
-				index: index, digest: digest, exists: exists, err: err,
-			}
-		}(index)
-	}
-	for range digestRequests {
-		resolved := <-digestResults
-		if resolved.err != nil {
-			return Plan{}, resolved.err
-		}
-		if !resolved.exists {
-			return Plan{}, ErrRegistryUnavailable
-		}
-		targets[resolved.index].Digest = resolved.digest
-	}
+	// There is deliberately NO digest resolution step here any more.
+	//
+	// Every digest comes from the signed manifest, which is the only thing
+	// that gets to say which bytes are this release. Asking the registry to
+	// translate a mutable tag at install time was a second, unsigned answer to
+	// the same question, and the registry could change it at any moment
+	// without the manifest changing at all.
 
 	components := make([]updatecheck.Component, 0, len(targets))
 	for index := range targets {

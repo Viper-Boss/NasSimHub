@@ -26,10 +26,10 @@ func TestDockerRuntimeApplyRestoresEnvironmentWithOneRollback(t *testing.T) {
 		Targets: []Target{{
 			Name:       "api",
 			Service:    "api",
-			Image:      "ghcr.io/human-agent65535/modemdeck",
+			Image:      "ghcr.io/viper-boss/nassimhub",
 			Version:    "v1.9.3",
 			Digest:     testDigest("a"),
-			Reference:  "ghcr.io/human-agent65535/modemdeck:v1.9.3@" + testDigest("a"),
+			Reference:  "ghcr.io/viper-boss/nassimhub:v1.9.3@" + testDigest("a"),
 			ImageEnv:   "MODEMDECK_IMAGE",
 			RefEnv:     "MODEMDECK_API_IMAGE_REF",
 			VersionEnv: "MODEMDECK_API_VERSION",
@@ -89,7 +89,7 @@ func TestDockerRuntimeApplyRestoresEnvironmentWithOneRollback(t *testing.T) {
 func TestDockerRuntimeWorkerUsesRestrictedOneShotContainer(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
-	selfImage := "ghcr.io/human-agent65535/modemdeck-updater:v1.9.2@" + testDigest("f")
+	selfImage := "ghcr.io/viper-boss/nassimhub-updater:v1.9.2@" + testDigest("f")
 	runner := &recordingRunner{}
 	runtime := newDockerRuntimeForTest(t, runner, directory)
 	err := runtime.StartWorker(context.Background(), WorkerRequest{
@@ -206,7 +206,7 @@ func newDockerRuntimeForTest(
 		HostDeploymentDir: directory,
 		StateDir:          filepath.Join(directory, "state"),
 		StateVolume:       "modemdeck-updater-state",
-		SelfImage:         "ghcr.io/human-agent65535/modemdeck-updater:v1.9.2@" + testDigest("f"),
+		SelfImage:         "ghcr.io/viper-boss/nassimhub-updater:v1.9.2@" + testDigest("f"),
 	})
 	if err != nil {
 		t.Fatalf("NewDockerRuntime() error = %v", err)

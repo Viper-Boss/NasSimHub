@@ -77,8 +77,12 @@ func buildController() (*ota.Controller, string, error) {
 			filepath.Join(stateDir, ota.InstalledVersionFilename),
 			firstNonempty(os.Getenv("MODEMDECK_CURRENT_VERSION"), version),
 		),
-		Manifests:  ota.NewHTTPManifestLoader(os.Getenv("MODEMDECK_RELEASE_MANIFEST_URL_TEMPLATE"), nil),
-		Digests:    ota.NewGHCRResolver("", "", nil),
+		// The signature-verifying loader. The URL stays operator-settable and
+		// that is now harmless: whoever controls the URL controls which bytes
+		// arrive, not which bytes are accepted. That is what lets the same
+		// path serve a GitHub release, a peer over NKN, or a file off a stick.
+		Manifests: ota.NewSignedManifestLoader(
+			os.Getenv("MODEMDECK_RELEASE_MANIFEST_URL_TEMPLATE"), "", nil),
 		Runtime:    runtime,
 		Operations: ota.NewFileOperationStore(stateDir),
 	})
@@ -158,7 +162,7 @@ func serve(
 	}
 	errorsChannel := make(chan error, 1)
 	go func() {
-		logger.Info("ModemDeck updater started", "version", version, "address", server.Addr)
+		logger.Info("NasSimHub updater started", "version", version, "address", server.Addr)
 		errorsChannel <- server.ListenAndServe()
 	}()
 	select {

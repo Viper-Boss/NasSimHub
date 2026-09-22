@@ -150,18 +150,26 @@ func (api *API) licensedFeature(ctx context.Context, feature license.Feature) bo
 // licenseDenial renders a refusal the operator can act on.
 //
 // It is a method because the right message depends on something the decision
-// cannot know: whether this build can verify a certificate at all. With
-// MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY unset the store holds no issuer key, so
-// NO certificate can ever verify and every paid feature is locked -- and the
-// message below would tell the operator to send us their machine ID, which
-// would achieve exactly nothing. That misdirection is expensive: it sends
-// somebody who has already paid to the wrong place, and it hides a broken
-// deployment behind a plausible paywall. So the two cases are named
-// separately.
+// cannot know: whether this build can verify a certificate at all. If the
+// store holds no issuer key then NO certificate can ever verify and every paid
+// feature is locked -- and the message below would tell the operator to send
+// us their machine ID, which would achieve exactly nothing. That misdirection
+// is expensive: it sends somebody who has already paid to the wrong place, and
+// it hides a broken deployment behind a plausible paywall. So the two cases
+// are named separately.
+//
+// This branch used to mean "the deployment forgot to set
+// MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY", and said so. The key is now compiled
+// in (internal/license/issuer_key.go) and checked by a test that fails the
+// build if it is unusable, so there is no longer any way for an operator to
+// cause this -- or to fix it. Reaching it means the binary itself is wrong:
+// built from a tree with the constant emptied, or modified afterwards. So the
+// message no longer asks for configuration that does not exist; it says the
+// build is not a proper release and points at the one thing that helps.
 func (api *API) licenseDenial(decision license.Decision) string {
 	if runtime := api.licensing(); runtime == nil || !runtime.store.Configured() {
-		return "此功能需要授权，但本机安装缺少授权公钥（MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY），" +
-			"因此任何证书都无法校验。请先把公钥配置进部署环境，再申请授权。"
+		return "此功能需要授权，但当前程序内置的授权公钥无效，因此任何证书都无法校验。" +
+			"这不是配置问题，也不是授权问题——请重新安装官方发布的版本。"
 	}
 	return licenseDenialText(decision)
 }

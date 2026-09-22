@@ -2,21 +2,17 @@ package ota
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/human-agent65535/modemdeck/internal/release"
 )
 
-const (
-	DefaultManifestURLTemplate = "https://raw.githubusercontent.com/human-agent65535/ModemDeck/%s/deploy/release-manifest.json"
-	maximumManifestBytes       = 64 << 10
-	defaultHTTPTimeout         = 8 * time.Second
-)
+const defaultHTTPTimeout = 8 * time.Second
 
 var (
 	ErrManifestUnavailable = errors.New("release manifest is unavailable")
@@ -24,70 +20,86 @@ var (
 	digestPattern          = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
+// signedSchemaMarker marks a ReleaseManifest whose contents were
+// signature-verified.
+//
+// Not a wire value: nothing publishes it and nothing parses it. It exists so
+// the planner can refuse to build an install plan from anything that did not
+// come through verification, whichever loader produced it. See Controller.plan.
+//
+// Negative so it can never collide with a schema number somebody publishes.
+const signedSchemaMarker = -3
+
+// ReleaseManifest is what the planner consumes.
+//
+// There is exactly one way to obtain a populated one: SignedManifestLoader,
+// which verifies a signature first. The unsigned HTTP loader that used to sit
+// in this file is gone rather than merely unused -- it fetched an unsigned
+// document from the upstream project's repository, and leaving it in the tree
+// would leave a working, plausible-looking way to reintroduce both problems at
+// once.
 type ReleaseManifest struct {
-	SchemaVersion int `json:"schema_version"`
+	SchemaVersion int
 	Images        struct {
-		API      string `json:"api"`
-		Web      string `json:"web"`
-		Hardware string `json:"hardware"`
-		Updater  string `json:"updater"`
-	} `json:"images"`
+		API      string
+		Web      string
+		Hardware string
+		Updater  string
+	}
+	// Digests pins each first-party image by content.
+	//
+	// Always populated, always from the signed manifest. An empty digest used
+	// to mean "resolve the tag against the registry at install time", which is
+	// how a re-pointed tag could reach every gateway without the manifest
+	// changing a byte. That resolver is gone; empty now means refuse to plan.
+	Digests struct {
+		API      string
+		Web      string
+		Hardware string
+		Updater  string
+	}
 	Cloudflared struct {
-		Image   string `json:"image"`
-		Version string `json:"version"`
-		Digest  string `json:"digest"`
-	} `json:"cloudflared"`
+		Image   string
+		Version string
+		Digest  string
+	}
 }
 
-func (manifest ReleaseManifest) Validate() error {
-	if manifest.SchemaVersion != 2 {
-		return fmt.Errorf("unsupported release manifest schema")
-	}
-	expectedImages := map[string]string{
-		"api":      "ghcr.io/human-agent65535/modemdeck",
-		"web":      "ghcr.io/human-agent65535/modemdeck-web",
-		"hardware": "ghcr.io/human-agent65535/modemdeck-hardware",
-		"updater":  "ghcr.io/human-agent65535/modemdeck-updater",
-	}
-	actualImages := map[string]string{
+// Signed reports whether this manifest's contents were signature-verified.
+func (manifest ReleaseManifest) Signed() bool {
+	return manifest.SchemaVersion == signedSchemaMarker
+}
+
+// validateRepositories holds a manifest to the allow-list in internal/release.
+//
+// Worth having even behind a signature: it bounds what a mis-generated manifest
+// can aim a gateway at, and it means a leaked signing key still cannot redirect
+// installs to another registry without also changing the shipped binary.
+//
+// The allow-list is NOT duplicated here. It lives in internal/release beside
+// the signing tool's copy of the same question, because three independent
+// copies of four repository names is how a signer and a verifier drift apart --
+// and the obvious fix when they do is to loosen the verifier.
+func (manifest ReleaseManifest) validateRepositories() error {
+	actual := map[string]string{
 		"api":      manifest.Images.API,
 		"web":      manifest.Images.Web,
 		"hardware": manifest.Images.Hardware,
 		"updater":  manifest.Images.Updater,
 	}
-	for component, expected := range expectedImages {
-		if strings.TrimSpace(actualImages[component]) != expected {
-			return fmt.Errorf("invalid %s image repository", component)
+	for _, component := range release.Components() {
+		if strings.TrimSpace(actual[component]) != release.Repositories[component] {
+			return fmt.Errorf("invalid %s image repository: %q is not %s",
+				component, actual[component], release.Repositories[component])
 		}
 	}
-	if manifest.Cloudflared.Image != "cloudflare/cloudflared" {
+	// Only meaningful when cloudflared is named at all: a signed manifest for a
+	// release that does not move cloudflared simply omits it.
+	if manifest.Cloudflared.Image != "" &&
+		manifest.Cloudflared.Image != release.RepositoryCloudflared {
 		return fmt.Errorf("invalid cloudflared image repository")
 	}
-	if !validImageTag(manifest.Cloudflared.Version) ||
-		strings.EqualFold(manifest.Cloudflared.Version, "latest") ||
-		!digestPattern.MatchString(manifest.Cloudflared.Digest) {
-		return fmt.Errorf("invalid cloudflared image reference")
-	}
 	return nil
-}
-
-func validImageTag(value string) bool {
-	if value == "" || len(value) > 128 {
-		return false
-	}
-	for index, character := range value {
-		if (character >= 'a' && character <= 'z') ||
-			(character >= 'A' && character <= 'Z') ||
-			(character >= '0' && character <= '9') ||
-			character == '_' || character == '.' || character == '-' {
-			if index == 0 && (character == '.' || character == '-') {
-				return false
-			}
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 type ManifestLoader interface {
@@ -96,56 +108,4 @@ type ManifestLoader interface {
 
 type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
-}
-
-type HTTPManifestLoader struct {
-	urlTemplate string
-	client      HTTPClient
-}
-
-func NewHTTPManifestLoader(urlTemplate string, client HTTPClient) *HTTPManifestLoader {
-	if strings.TrimSpace(urlTemplate) == "" {
-		urlTemplate = DefaultManifestURLTemplate
-	}
-	if client == nil {
-		client = &http.Client{Timeout: defaultHTTPTimeout}
-	}
-	return &HTTPManifestLoader{urlTemplate: urlTemplate, client: client}
-}
-
-func (loader *HTTPManifestLoader) Load(
-	ctx context.Context,
-	version string,
-) (ReleaseManifest, error) {
-	if !stableTagPattern.MatchString(version) {
-		return ReleaseManifest{}, ErrManifestUnavailable
-	}
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		fmt.Sprintf(loader.urlTemplate, version),
-		nil,
-	)
-	if err != nil {
-		return ReleaseManifest{}, ErrManifestUnavailable
-	}
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("User-Agent", "ModemDeck-Updater")
-	response, err := loader.client.Do(request)
-	if err != nil {
-		return ReleaseManifest{}, ErrManifestUnavailable
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return ReleaseManifest{}, ErrManifestUnavailable
-	}
-	var manifest ReleaseManifest
-	decoder := json.NewDecoder(io.LimitReader(response.Body, maximumManifestBytes))
-	if err := decoder.Decode(&manifest); err != nil {
-		return ReleaseManifest{}, ErrManifestUnavailable
-	}
-	if err := manifest.Validate(); err != nil {
-		return ReleaseManifest{}, errors.Join(ErrManifestUnavailable, err)
-	}
-	return manifest, nil
 }

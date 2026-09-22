@@ -17,10 +17,10 @@ func TestCheckPlansOnlyChangedReleaseComponents(t *testing.T) {
 	runtime := &fakeRuntime{
 		cloudflared: true,
 		images: map[string]string{
-			"api":         "ghcr.io/human-agent65535/modemdeck:v1.9.2@" + testDigest("3"),
-			"modemdeck":   "ghcr.io/human-agent65535/modemdeck-web:v1.9.2@" + testDigest("b"),
-			"hardware":    "ghcr.io/human-agent65535/modemdeck-hardware:v1.9.2@" + hardwareDigest,
-			"updater":     "ghcr.io/human-agent65535/modemdeck-updater:v1.9.2@" + testDigest("c"),
+			"api":         "ghcr.io/viper-boss/nassimhub:v1.9.2@" + testDigest("3"),
+			"modemdeck":   "ghcr.io/viper-boss/nassimhub-web:v1.9.2@" + testDigest("b"),
+			"hardware":    "ghcr.io/viper-boss/nassimhub-hardware:v1.9.2@" + hardwareDigest,
+			"updater":     "ghcr.io/viper-boss/nassimhub-updater:v1.9.2@" + testDigest("c"),
 			"cloudflared": "cloudflare/cloudflared:2026.7.3@" + cloudflaredDigest,
 		},
 	}
@@ -49,10 +49,10 @@ func TestCheckPlansOnlyChangedReleaseComponents(t *testing.T) {
 func TestApplyRequiresOnlyExplicitHardwareConfirmation(t *testing.T) {
 	t.Parallel()
 	runtime := &fakeRuntime{images: map[string]string{
-		"api":       "ghcr.io/human-agent65535/modemdeck:v1.9.2@" + testDigest("1"),
-		"modemdeck": "ghcr.io/human-agent65535/modemdeck-web:v1.9.2@" + testDigest("2"),
-		"hardware":  "ghcr.io/human-agent65535/modemdeck-hardware:v1.8.0@" + testDigest("3"),
-		"updater":   "ghcr.io/human-agent65535/modemdeck-updater:v1.9.2@" + testDigest("4"),
+		"api":       "ghcr.io/viper-boss/nassimhub:v1.9.2@" + testDigest("1"),
+		"modemdeck": "ghcr.io/viper-boss/nassimhub-web:v1.9.2@" + testDigest("2"),
+		"hardware":  "ghcr.io/viper-boss/nassimhub-hardware:v1.8.0@" + testDigest("3"),
+		"updater":   "ghcr.io/viper-boss/nassimhub-updater:v1.9.2@" + testDigest("4"),
 	}}
 	manifest := testManifest(testDigest("8"))
 	controller := newTestController(t, runtime, manifest, testDigest("9"))
@@ -157,15 +157,6 @@ func (loader fakeManifestLoader) Load(context.Context, string) (ReleaseManifest,
 	return loader.manifest, nil
 }
 
-type fakeResolver struct {
-	digests map[string]string
-}
-
-func (resolver fakeResolver) Resolve(_ context.Context, image, tag string) (string, bool, error) {
-	digest, ok := resolver.digests[image+":"+tag]
-	return digest, ok, nil
-}
-
 type fakeRuntime struct {
 	cloudflared bool
 	images      map[string]string
@@ -214,12 +205,7 @@ func newTestController(
 	hardwareDigest string,
 ) *Controller {
 	t.Helper()
-	digests := map[string]string{
-		manifest.Images.API + ":v2.0.0":      testDigest("a"),
-		manifest.Images.Web + ":v2.0.0":      testDigest("b"),
-		manifest.Images.Hardware + ":v2.0.0": hardwareDigest,
-		manifest.Images.Updater + ":v2.0.0":  testDigest("c"),
-	}
+	manifest.Digests.Hardware = hardwareDigest
 	controller, err := New(Options{
 		Checker: fakeChecker{result: updatecheck.Result{
 			Status:         updatecheck.StatusUpdateAvailable,
@@ -228,7 +214,6 @@ func newTestController(
 			CheckedAt:      "2026-08-01T00:00:00Z",
 		}},
 		Manifests:  fakeManifestLoader{manifest: manifest},
-		Digests:    fakeResolver{digests: digests},
 		Runtime:    runtime,
 		Operations: &memoryOperationStore{},
 		Now: func() time.Time {
@@ -243,11 +228,18 @@ func newTestController(
 
 func testManifest(cloudflaredDigest string) ReleaseManifest {
 	var manifest ReleaseManifest
-	manifest.SchemaVersion = 2
-	manifest.Images.API = "ghcr.io/human-agent65535/modemdeck"
-	manifest.Images.Web = "ghcr.io/human-agent65535/modemdeck-web"
-	manifest.Images.Hardware = "ghcr.io/human-agent65535/modemdeck-hardware"
-	manifest.Images.Updater = "ghcr.io/human-agent65535/modemdeck-updater"
+	// signedSchemaMarker: the planner refuses anything that was not
+	// signature-verified, so a fixture has to look verified.
+	manifest.SchemaVersion = signedSchemaMarker
+	manifest.Images.API = "ghcr.io/viper-boss/nassimhub"
+	manifest.Images.Web = "ghcr.io/viper-boss/nassimhub-web"
+	manifest.Images.Hardware = "ghcr.io/viper-boss/nassimhub-hardware"
+	manifest.Images.Updater = "ghcr.io/viper-boss/nassimhub-updater"
+	// Digests now come from the signed manifest rather than from resolving a
+	// tag against the registry at install time.
+	manifest.Digests.API = testDigest("a")
+	manifest.Digests.Web = testDigest("b")
+	manifest.Digests.Updater = testDigest("c")
 	manifest.Cloudflared.Image = "cloudflare/cloudflared"
 	manifest.Cloudflared.Version = "2026.7.3"
 	manifest.Cloudflared.Digest = cloudflaredDigest

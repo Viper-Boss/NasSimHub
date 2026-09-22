@@ -26,6 +26,7 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/communication"
 	"github.com/human-agent65535/modemdeck/internal/diagnostics"
 	"github.com/human-agent65535/modemdeck/internal/httpapi"
+	"github.com/human-agent65535/modemdeck/internal/license"
 	"github.com/human-agent65535/modemdeck/internal/mediaapp"
 	"github.com/human-agent65535/modemdeck/internal/messageevents"
 	"github.com/human-agent65535/modemdeck/internal/mobilepairing"
@@ -418,10 +419,15 @@ func run(
 		SettingsSecrets:    settingsSecrets,
 		// The issuer's PUBLIC key. Certificates are verified against it and
 		// nothing is signed here -- the private key never touches a gateway,
-		// see internal/license/certificate.go. Empty locks the paid features,
-		// which is the right default for a build with no key: the alternative
-		// is shipping one where everything is unlocked.
-		IssuerPublicKey: os.Getenv("MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY"),
+		// see internal/license/certificate.go.
+		//
+		// Compiled in, NOT read from the environment. It is the trust root of
+		// the licensing scheme, so an operator who could set it could point
+		// the gateway at a key pair they generated themselves and sign their
+		// own certificates with cmd/licensegen, which ships in this
+		// repository. The reasoning is in full on license.IssuerPublicKey, and
+		// cmd/modemdeck/compose_env_test.go keeps it from drifting back.
+		IssuerPublicKey: license.IssuerPublicKey,
 	})
 	if err != nil {
 		_ = recordings.Close(context.Background())
