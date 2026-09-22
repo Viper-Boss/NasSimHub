@@ -105,6 +105,21 @@ services:
       MODEMDECK_TLS_HOSTS: ${MODEMDECK_TLS_HOSTS:-localhost,127.0.0.1,::1}
       MODEMDECK_SETTINGS_KEY_FILE: /run/secrets/modemdeck_settings_key
       MODEMDECK_SECURE_COOKIES: "true"
+      # The licence issuer's PUBLIC key, base64. This is the half that verifies
+      # certificates; the private half never leaves the issuing console.
+      #
+      # It has to be listed here to reach the container at all. Compose does
+      # not forward the host environment into a service -- the .env file beside
+      # this one only feeds ${...} substitution -- so setting this variable on
+      # the NAS without this line did nothing, and the symptom was silent:
+      # license.NewStore treats an absent key as "this build cannot verify
+      # anything", which locks every paid feature and is a legitimate state, so
+      # nothing looked broken. See internal/license/store.go and
+      # cmd/modemdeck/compose_env_test.go.
+      #
+      # Empty is the correct default: a build with no key locks paid features
+      # and leaves the free ones working.
+      MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY: ${MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY:-}
       MODEMDECK_HEALTHCHECK_URL: http://127.0.0.1:8080/api/v1/health/ready
       MODEMDECK_LIVENESS_URL: http://127.0.0.1:8080/api/v1/health/live
     secrets:
