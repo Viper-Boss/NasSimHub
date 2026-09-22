@@ -313,22 +313,42 @@ func TestASendPastTheGuardAnswersTheFraudGuard(t *testing.T) {
 	}
 }
 
-// No issuer key configured means the gates stay off: with no key no
-// certificate could ever verify, so enforcing there would only lock the
-// operator out of a machine they own. Configuring a key is what turns the
-// gates on -- licensedAPI above covers that side.
-func TestNoIssuerKeyRunsUnlocked(t *testing.T) {
-	api, err := New(&fakeRepository{}, Options{
+// The issuer public key is compiled into the binary since r106, so a build
+// with no key no longer exists and the old "no key runs unlocked" premise is
+// gone. What remains of that guarantee is twofold, and both halves are
+// asserted here:
+//
+//   - disableLicenseEnforcement (the test-only escape hatch) still turns every
+//     gate off, so paid code paths stay exercisable without a certificate;
+//   - with enforcement on and no certificate installed, a purely paid feature
+//     (wireguard) IS gated -- that is now the intended behaviour, not a bug:
+//     the key is present, the machine simply has not been licensed.
+func TestLicenseEnforcementEscapeHatchAndDefaultGate(t *testing.T) {
+	openAPI, err := New(&fakeRepository{}, Options{
+		disableAuthentication:      true,
+		disableLicenseEnforcement: true,
+		ContactBackupDirectory:     filepath.Join(t.TempDir(), "backups", "contacts"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, feature := range []license.Feature{license.FeatureCallDial, license.FeatureSMSSend, license.FeatureWireGuard} {
+		decision := openAPI.featureDecision(context.Background(), feature)
+		if !decision.Allowed {
+			t.Fatalf("%v was gated although license enforcement is disabled", feature)
+		}
+	}
+
+	enforcedAPI, err := New(&fakeRepository{}, Options{
 		disableAuthentication:  true,
 		ContactBackupDirectory: filepath.Join(t.TempDir(), "backups", "contacts"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, feature := range []license.Feature{license.FeatureCallDial, license.FeatureSMSSend, license.FeatureWireGuard} {
-		decision := api.featureDecision(context.Background(), feature)
-		if !decision.Allowed {
-			t.Fatalf("%v was gated although no issuer key is configured", feature)
-		}
+	if decision := enforcedAPI.featureDecision(context.Background(), license.FeatureWireGuard); decision.Allowed {
+		t.Fatalf("wireguard was allowed with enforcement on and no certificate installed; " +
+			"the compiled-in issuer key means enforcement must default on and an " +
+			"unlicensed machine must not get paid features")
 	}
 }
