@@ -32,6 +32,7 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/mobilepairing"
 	"github.com/human-agent65535/modemdeck/internal/networkruntime"
 	"github.com/human-agent65535/modemdeck/internal/platform/database"
+	"github.com/human-agent65535/modemdeck/internal/provision"
 	"github.com/human-agent65535/modemdeck/internal/recording"
 	"github.com/human-agent65535/modemdeck/internal/runtimeevents"
 	"github.com/human-agent65535/modemdeck/internal/secretbox"
@@ -142,6 +143,31 @@ func run(
 	if err != nil {
 		return fmt.Errorf("configure call relay: %w", err)
 	}
+	// A pending factory reset runs HERE, before anything opens a file in the
+	// data directory.
+	//
+	// This is the second half of clone detection: the gateway refuses to serve
+	// with a data directory that came from another machine, an operator
+	// confirms the reset through the setup page, and the marker written then
+	// is acted on now. It has to be before database.Open because the database
+	// is the largest thing being removed -- deleting it out from under an open
+	// handle is how a half-reset gateway happens.
+	//
+	// A failure here is fatal on purpose. Continuing would start the gateway
+	// with exactly the identity the reset was meant to destroy, while the
+	// operator believes it is gone.
+	dataDirectory := filepath.Dir(databasePath)
+	if request, pending := provision.ResetPending(dataDirectory); pending {
+		if err := provision.Reset(dataDirectory); err != nil {
+			return fmt.Errorf("factory reset: %w", err)
+		}
+		logger.Warn("the data directory was reset on request",
+			"reason", request.Reason,
+			"previous_machine_id", request.StoredMachineID,
+			"machine_id", request.CurrentMachineID,
+		)
+	}
+
 	db, err := database.Open(ctx, database.Config{
 		TargetPath: databasePath,
 	})

@@ -259,6 +259,18 @@ export default {
     unknown: '状态未知'
   },
   auth: {
+    provision: {
+      title: '需要重新初始化',
+      body: '这份数据来自另一台设备。',
+      consequences: '其中的账号、NKN 身份、短信和联系人都属于那台设备，继续使用会与它冲突。重置会清空数据目录，之后重新设置管理员并生成新的 NKN 身份。',
+      thisMachine: '本机标识',
+      previousMachine: '原设备标识',
+      changed: '已变化的硬件来源',
+      confirmLabel: '输入上方的本机标识以确认重置',
+      action: '清空并重新初始化',
+      pending: '已记录重置请求。重启容器后将清空数据目录并重新进入初始化流程。',
+      failed: '重置请求失败。',
+    },
     title: '登录',
     quickStart: '快速开始',
     quickStartDescription: '创建此 NAS猫窝 的管理员账户',

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { LoaderCircle, LogIn, UserRoundPlus } from '@lucide/vue'
+import { gateway } from '../api/client'
 import AppearanceToggle from '../components/AppearanceToggle.vue'
 import { login, sessionState, setup as setupAdministrator } from '../state/session'
 import {
@@ -19,6 +20,50 @@ const confirmation = ref('')
 const submitting = ref(false)
 const submitError = ref('')
 const isSetup = computed(() => sessionState.setupRequired)
+
+// A data directory that was created on another machine.
+//
+// Shown INSTEAD of the login and setup forms, not beside them: on a cloned
+// gateway the inherited password is refused and setup is refused, so offering
+// either would be offering a control that cannot work.
+const needsProvisioning = computed(() => sessionState.provisionRequired)
+const machineID = ref('')
+const previousMachineID = ref('')
+const divergingSources = ref<string[]>([])
+const confirmMachineID = ref('')
+const resetting = ref(false)
+const resetDone = ref(false)
+
+onMounted(async () => {
+  if (!needsProvisioning.value) return
+  try {
+    const status = await gateway.provisionStatus()
+    machineID.value = status.machine_id
+    previousMachineID.value = status.previous_machine_id || ''
+    divergingSources.value = status.diverging_sources || []
+  } catch {
+    // Leaving the identifier blank is honest: the operator cannot confirm a
+    // value the gateway would not tell us, and the reset refuses a wrong one.
+  }
+})
+
+const canReset = computed(
+  () => machineID.value !== '' && confirmMachineID.value.trim() === machineID.value
+)
+
+async function requestReset(): Promise<void> {
+  if (!canReset.value || resetting.value) return
+  resetting.value = true
+  submitError.value = ''
+  try {
+    await gateway.requestProvisionReset(confirmMachineID.value.trim())
+    resetDone.value = true
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('auth.provision.failed')
+  } finally {
+    resetting.value = false
+  }
+}
 const visibleError = computed(() => submitError.value || sessionState.error)
 const visibleNotice = computed(() =>
   !isSetup.value && route.query.passwordChanged === '1' && !visibleError.value
@@ -92,6 +137,57 @@ async function submit(): Promise<void> {
     <div class="login-appearance"><AppearanceToggle /></div>
 
     <section class="login-panel" aria-labelledby="login-title">
+      <template v-if="needsProvisioning">
+        <header>
+          <h1 id="login-title">{{ t('auth.provision.title') }}</h1>
+          <p>{{ sessionState.provisionReason || t('auth.provision.body') }}</p>
+        </header>
+
+        <aside class="provision-notice" role="alert">
+          <p>{{ t('auth.provision.consequences') }}</p>
+          <dl v-if="machineID" class="provision-facts">
+            <div>
+              <dt>{{ t('auth.provision.thisMachine') }}</dt>
+              <dd>{{ machineID }}</dd>
+            </div>
+            <div v-if="previousMachineID">
+              <dt>{{ t('auth.provision.previousMachine') }}</dt>
+              <dd>{{ previousMachineID }}</dd>
+            </div>
+            <div v-if="divergingSources.length">
+              <dt>{{ t('auth.provision.changed') }}</dt>
+              <dd>{{ divergingSources.join(', ') }}</dd>
+            </div>
+          </dl>
+        </aside>
+
+        <p v-if="resetDone" class="provision-done" role="status">
+          {{ t('auth.provision.pending') }}
+        </p>
+
+        <form v-else class="login-form" @submit.prevent="requestReset">
+          <label class="field">
+            <span>{{ t('auth.provision.confirmLabel') }}</span>
+            <input
+              v-model="confirmMachineID"
+              name="confirm-machine-id"
+              type="text"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              :placeholder="machineID"
+              :disabled="resetting"
+            />
+          </label>
+          <p v-if="visibleError" class="login-error" role="alert">{{ visibleError }}</p>
+          <button type="submit" class="danger" :disabled="!canReset || resetting">
+            <LoaderCircle v-if="resetting" class="spin" :size="18" />
+            <span>{{ t('auth.provision.action') }}</span>
+          </button>
+        </form>
+      </template>
+
+      <template v-else>
       <header>
         <h1 id="login-title">{{ isSetup ? t('auth.quickStart') : t('auth.title') }}</h1>
         <p v-if="isSetup">{{ t('auth.quickStartDescription') }}</p>
@@ -160,6 +256,7 @@ async function submit(): Promise<void> {
           }}
         </button>
       </form>
+      </template>
     </section>
   </main>
 </template>

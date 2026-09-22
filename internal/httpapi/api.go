@@ -19,6 +19,7 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/messageevents"
 	"github.com/human-agent65535/modemdeck/internal/mobilepairing"
 	"github.com/human-agent65535/modemdeck/internal/networkruntime"
+	"github.com/human-agent65535/modemdeck/internal/provision"
 	"github.com/human-agent65535/modemdeck/internal/recording"
 	"github.com/human-agent65535/modemdeck/internal/rtcconfig"
 	"github.com/human-agent65535/modemdeck/internal/runtimeevents"
@@ -309,9 +310,8 @@ type Options struct {
 	DHT                    DHTService
 	CallServices           CallServicesService
 	// IssuerPublicKey is the base64 Ed25519 key that licence certificates are
-	// verified against. Empty means the licence gates stay OFF: with no key
-	// nothing could verify anyway, and the operator's own device must not lock
-	// itself. Setting a key is what turns the gates on -- see internal/license.
+	// verified against. Empty locks every paid feature, which is the correct
+	// behaviour for a build with no key -- see internal/license.
 	IssuerPublicKey       string
 	LineServices          LineService
 	CallPolicies          CallPolicyService
@@ -368,6 +368,8 @@ type API struct {
 	homeSIMCallFilterMu        sync.Mutex
 	homeSIMF50Mu               sync.Mutex
 	homeSIMNetworkSwitchesMu   sync.Mutex
+	provisionOnce              sync.Once
+	provisionDecision          provision.Decision
 	callGuardOnce              sync.Once
 	callGuardInstance          *callGuard
 	messageGuardOnce           sync.Once
@@ -434,24 +436,20 @@ func New(repository Repository, options Options) (*API, error) {
 		healthProbe, _ = options.Communications.(HealthProbe)
 	}
 	return &API{
-		contactBackupDirectory: options.ContactBackupDirectory,
-		settingsSecrets:        options.SettingsSecrets,
-		repository:             repository,
-		nknNode:                newNKNNodeManager(logger),
-		nknNetwork:             newNKNNetworkManager(logger),
-		healthProbe:            healthProbe,
-		capabilities:           options.Capabilities,
-		communications:         options.Communications,
-		deviceConfigurations:   options.DeviceConfigurations,
-		wireGuardService:       options.WireGuard,
-		dhtService:             options.DHT,
-		callServices:           options.CallServices,
-		issuerPublicKey:        strings.TrimSpace(options.IssuerPublicKey),
-		// Enforcement needs an issuer key to verify against. No key means no
-		// certificate can ever check out, so enforcing there does not protect
-		// anything -- it only locks the operator out of a machine they own.
-		// Gates switch on the moment IssuerPublicKey is configured.
-		licenseEnforced:            strings.TrimSpace(options.IssuerPublicKey) != "" && !options.disableLicenseEnforcement,
+		contactBackupDirectory:     options.ContactBackupDirectory,
+		settingsSecrets:            options.SettingsSecrets,
+		repository:                 repository,
+		nknNode:                    newNKNNodeManager(logger),
+		nknNetwork:                 newNKNNetworkManager(logger),
+		healthProbe:                healthProbe,
+		capabilities:               options.Capabilities,
+		communications:             options.Communications,
+		deviceConfigurations:       options.DeviceConfigurations,
+		wireGuardService:           options.WireGuard,
+		dhtService:                 options.DHT,
+		callServices:               options.CallServices,
+		issuerPublicKey:            strings.TrimSpace(options.IssuerPublicKey),
+		licenseEnforced:            !options.disableLicenseEnforcement,
 		lineServices:               options.LineServices,
 		callPolicies:               options.CallPolicies,
 		messagePolicies:            options.MessagePolicies,
@@ -507,6 +505,13 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	}
 	if request.URL.Path == "/api/v1/setup" {
 		api.setup(response, request)
+		return
+	}
+	// Before the authorisation gate: a cloned gateway refuses every session,
+	// so an endpoint behind the gate could never be reached to fix it.
+	if request.URL.Path == "/api/v1/provision" ||
+		request.URL.Path == "/api/v1/provision/reset" {
+		api.provisionResource(response, request)
 		return
 	}
 	if request.URL.Path == "/api/v1/mobile/enrollment/exchange" {

@@ -260,6 +260,18 @@ export default {
     "unknown": "不明なステータス"
   },
   "auth": {
+    "provision": {
+      "title": "Re-initialisation required",
+      "body": "This data directory was created on another device.",
+      "consequences": "The account, NKN identity, messages and contacts in it belong to that device. Resetting empties the data directory, then you set up a new administrator and a new NKN identity.",
+      "thisMachine": "This machine",
+      "previousMachine": "Previous machine",
+      "changed": "Hardware sources that changed",
+      "confirmLabel": "Type the machine identifier above to confirm",
+      "action": "Erase and re-initialise",
+      "pending": "The reset is recorded. Restart the container to empty the data directory and begin setup.",
+      "failed": "The reset request failed.",
+    },
     "title": "ログイン",
     "quickStart": "クイックスタート",
     "quickStartDescription": "この NasSimHub の管理者アカウントを作成します",
@@ -996,7 +1008,7 @@ export default {
     "tooManyEgressDNS": "DNS サーバーは最大 4 件です",
     "invalidEgressDNS": "DNS サーバーは IP アドレスで指定してください",
     "running": "稼働中",
-    "waitingForLine": "回線待ち",
+    "waitingForLine": "åç·å¾ã¡",
     "peerLost": "稼働中 — ピアに到達できません",
     "peerLostHint": "トンネルインターフェースは有効ですが、直近 3 分間ピアとのハンドシェイクがありません。このプロキシ経由の通信はタイムアウトします。",
     "configurationError": "構成エラー",

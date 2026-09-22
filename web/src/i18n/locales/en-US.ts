@@ -259,6 +259,18 @@ export default {
     unknown: 'Unknown status'
   },
   auth: {
+    provision: {
+      title: 'Re-initialisation required',
+      body: 'This data directory was created on another device.',
+      consequences: 'The account, NKN identity, messages and contacts in it belong to that device. Resetting empties the data directory, then you set up a new administrator and a new NKN identity.',
+      thisMachine: 'This machine',
+      previousMachine: 'Previous machine',
+      changed: 'Hardware sources that changed',
+      confirmLabel: 'Type the machine identifier above to confirm',
+      action: 'Erase and re-initialise',
+      pending: 'The reset is recorded. Restart the container to empty the data directory and begin setup.',
+      failed: 'The reset request failed.',
+    },
     title: 'Sign in',
     quickStart: 'Quick Start',
     quickStartDescription: 'Create the administrator account for this NasSimHub',

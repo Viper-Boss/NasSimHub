@@ -56,6 +56,8 @@ func main() {
 		err = features()
 	case "release-sign":
 		err = releaseSign(os.Args[2:])
+	case "report-request":
+		err = reportRequest(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -81,6 +83,7 @@ func usage() {
            -api sha256:... -web sha256:... -hardware sha256:...
            -updater sha256:... [-out release.signed.json]
                                             sign a release manifest
+  report-request -key <file> -machine <id>  sign a client-report request
 
 The key file holds the private key. Keep it off any machine a customer can
 reach; losing it means no new certificates, and leaking it means anyone can

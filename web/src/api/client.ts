@@ -153,6 +153,7 @@ import type {
   SaveConnectionProfileInput,
   SendMessageInput,
   SessionResponse,
+  ProvisionStatus,
   SetupInput,
   SystemLanguage,
   SIMCommandInput,
@@ -394,6 +395,8 @@ function parseSession(value: unknown): SessionResponse {
   const session: SessionResponse = {
     authenticated: source.authenticated,
     setup_required: source.setup_required,
+    provision_required: source.provision_required === true,
+    provision_reason: stringProperty(source, 'provision_reason'),
     user_id: stringProperty(source, 'user_id'),
     username: stringProperty(source, 'username'),
     csrf_token: stringProperty(source, 'csrf_token'),
@@ -1330,6 +1333,33 @@ const realGateway: ConfiguredModemDeckGateway = {
 
   async getSession(): Promise<SessionResponse> {
     return parseSession(await getPublic(`${API_ROOT}/session`))
+  },
+
+  /**
+   * Whether this data directory belongs to this machine.
+   *
+   * Readable without a session, because the login page has to explain itself
+   * before anyone can log in -- and on a cloned gateway nobody can.
+   */
+  async provisionStatus(): Promise<ProvisionStatus> {
+    return (await get(`${API_ROOT}/provision`)) as ProvisionStatus
+  },
+
+  /**
+   * Requests the factory reset. Records a marker; the wipe happens on the next
+   * container start, before the database is opened.
+   *
+   * The machine ID is typed by the operator rather than sent automatically:
+   * this endpoint cannot require a login, so echoing a value only visible on
+   * the screen is what separates a deliberate act from a stray request.
+   */
+  async requestProvisionReset(confirmMachineID: string): Promise<void> {
+    await writeJSON(
+      `${API_ROOT}/provision/reset`,
+      'POST',
+      { confirm_machine_id: confirmMachineID },
+      202
+    )
   },
 
   async setup(input: SetupInput): Promise<SessionResponse> {
@@ -2495,6 +2525,19 @@ function configureFixture(gateway: ModemDeckGateway): ConfiguredModemDeckGateway
     async getSession() {
       return session
     },
+    // The demo is never a clone: it has no data directory and no hardware to
+    // compare one against.
+    async provisionStatus() {
+      return {
+        status: 'ready' as const,
+        cloned: false,
+        reason: '',
+        machine_id: 'fixture-machine'
+      }
+    },
+    async requestProvisionReset() {
+      throw new Error('演示模式不会重置数据目录。')
+    },
     async setup() {
       return session
     },
@@ -3045,9 +3088,6 @@ export async function getNKNNetworkPeers(): Promise<NKNNetworkPeers> {
   }
 }
 
-// The DHT is the second control path beside NKN. It is off by default: a DHT
-// with no participants provides no redundancy, so joining is a deliberate
-// choice rather than something every install does.
 // The DHT is the second control path beside NKN, and like NKN it runs by
 // default: a spare path that ships switched off is not a spare. It is confined
 // to this project's own protocol prefix and relays nothing for anyone, which is

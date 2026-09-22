@@ -59,6 +59,19 @@ func (api *API) session(response http.ResponseWriter, request *http.Request) {
 
 func (api *API) getSession(response http.ResponseWriter, request *http.Request) {
 	language := string(store.SystemLanguageAuto)
+	// A cloned data directory is reported before anything else and without
+	// consulting the inherited account: whatever it says about who is logged
+	// in describes somebody else's installation.
+	if decision := api.provisionState(); decision.Cloned() {
+		writeJSON(response, http.StatusOK, sessionResponse{
+			Authenticated:     false,
+			SetupRequired:     false,
+			ProvisionRequired: true,
+			ProvisionReason:   decision.Reason,
+			Language:          language,
+		})
+		return
+	}
 	if api.authenticator == nil {
 		writeJSON(response, http.StatusOK, sessionResponse{
 			Authenticated: false,
@@ -141,6 +154,14 @@ func (api *API) getSession(response http.ResponseWriter, request *http.Request) 
 }
 
 func (api *API) setup(response http.ResponseWriter, request *http.Request) {
+	// Setting up over a cloned directory would leave the previous owner's
+	// database, NKN identity and forwarding tokens in place under a new
+	// password, which is the arrangement this is meant to prevent.
+	if api.cloned() {
+		writeError(response, http.StatusConflict, "provision_required",
+			"这份数据来自另一台设备，请先执行重置再初始化", "")
+		return
+	}
 	if request.Method != http.MethodPost {
 		response.Header().Set("Allow", http.MethodPost)
 		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Only POST is supported", "")
@@ -212,6 +233,20 @@ func (api *API) setup(response http.ResponseWriter, request *http.Request) {
 }
 
 func (api *API) login(response http.ResponseWriter, request *http.Request) {
+	// THE INHERITED PASSWORD MUST NOT WORK.
+	//
+	// This is the check that actually protects the new owner. Everything else
+	// in this file is about telling them what happened; this is what stops the
+	// person who prepared the image from logging into every gateway they sold,
+	// with credentials the buyer was never given and cannot change.
+	//
+	// Refused before the credentials are even read, so no timing difference
+	// distinguishes a correct inherited password from a wrong one.
+	if api.cloned() {
+		writeError(response, http.StatusConflict, "provision_required",
+			"这份数据来自另一台设备，登录已停用。请在界面上执行重置后重新初始化。", "")
+		return
+	}
 	var credentials loginRequest
 	if !decodeJSONBody(response, request, &credentials) {
 		return

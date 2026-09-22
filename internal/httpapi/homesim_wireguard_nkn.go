@@ -34,6 +34,12 @@ func (api *API) receiveNKNControl(ctx context.Context, client *homeSIMNKNClient)
 			if api.receiveLicenseIdentity(client, message) {
 				continue
 			}
+			// Before the delivery receiver: a report request is the step
+			// between identity and certificate, and it claims only its own
+			// message type.
+			if api.receiveClientReport(client, message) {
+				continue
+			}
 			if api.receiveLicenseDelivery(message) {
 				continue
 			}

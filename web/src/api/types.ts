@@ -1369,9 +1369,24 @@ export type ApiErrorBody = {
   field?: string
 }
 
+export type ProvisionStatus = {
+  status: 'ready' | 'cloned'
+  cloned: boolean
+  reason: string
+  machine_id: string
+  previous_machine_id?: string
+  matching_sources?: string[]
+  diverging_sources?: string[]
+}
+
 export type SessionResponse = {
   authenticated: boolean
   setup_required: boolean
+  /** The data directory was created on another machine; nothing here is this
+   *  owner's. Separate from setup_required because the remedy differs: setup
+   *  chooses a password, this erases somebody else's installation first. */
+  provision_required?: boolean
+  provision_reason?: string
   user_id?: string
   username?: string
   role?: 'admin' | 'member'

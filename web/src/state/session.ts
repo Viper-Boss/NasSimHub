@@ -27,6 +27,11 @@ const state = reactive({
   iosPairingEnabled: fixtureMode,
   allowedLineIDs: [] as string[],
   setupRequired: false,
+  // The gateway found this data directory was created on another machine.
+  // Held separately from setupRequired because the screen is different: one
+  // asks for a password, the other says this installation is not yours.
+  provisionRequired: false,
+  provisionReason: '',
   error: ''
 })
 
@@ -56,9 +61,13 @@ function authorizationScopeSignature(scope: AuthorizationScope): string {
 
 async function applySession(session: SessionResponse): Promise<boolean> {
   if (!session.authenticated) {
+    state.provisionRequired = session.provision_required === true
+    state.provisionReason = session.provision_reason || ''
     clearSession('', session.setup_required)
     return false
   }
+  state.provisionRequired = false
+  state.provisionReason = ''
 
   await setSystemLanguage(session.language)
 

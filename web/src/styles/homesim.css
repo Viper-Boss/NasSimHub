@@ -198,6 +198,22 @@ body .dialer-panel .dialer-number { font-variant-numeric: tabular-nums; letter-s
 .login-panel > header p { font-size: .875rem; line-height: 1.7; }
 .login-form { gap: 22px; }
 .login-submit { min-height: 50px; font-size: 1rem; background: linear-gradient(120deg, var(--hs-gradient-start), var(--accent)); }
+/* The re-initialisation screen on the login page.
+   Sober rather than alarming: copying a deployment is a reasonable thing to
+   try, so the operator has usually done nothing wrong and the text needs to be
+   read rather than dismissed. Built from the same tokens as the notice below
+   it so the two read as one product. */
+.provision-notice { display: grid; gap: 10px; margin-top: 14px; padding: 14px 16px; border: 1px solid var(--danger-border, #e0a0a0); border-radius: var(--radius-surface); background: var(--danger-soft, #fdeaea); }
+html:not([data-theme='light']) .provision-notice { background: color-mix(in srgb, #ef4444 8%, var(--surface)); border-color: color-mix(in srgb, #ef4444 35%, var(--surface)); }
+.provision-notice p { margin: 0; font-size: .88rem; line-height: 1.6; color: var(--text); }
+.provision-facts { display: grid; gap: 6px; margin: 0; }
+.provision-facts > div { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.provision-facts dt { margin: 0; font-size: .78rem; color: var(--text-muted, #6b7280); }
+.provision-facts dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem; word-break: break-all; color: var(--text); }
+.provision-done { margin: 14px 0 0; font-size: .88rem; line-height: 1.6; color: var(--text); }
+.login-form button.danger { background: var(--danger, #dc2626); color: var(--on-accent, #fff); }
+.login-form button.danger:disabled { opacity: .5; cursor: not-allowed; }
+
 .setup-guard-notice { display: grid; gap: 6px; margin-top: 14px; padding: 14px 16px; border: 1px solid var(--warning-border, #cfaf65); border-radius: var(--radius-surface); background: var(--warning-soft, #fff3d6); }
 html:not([data-theme='light']) .setup-guard-notice { background: color-mix(in srgb, #fbbf24 8%, var(--surface)); }
 .setup-guard-notice strong { font-size: .9rem; color: var(--text); }

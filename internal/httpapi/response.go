@@ -8,8 +8,17 @@ import (
 )
 
 type sessionResponse struct {
-	Authenticated     bool     `json:"authenticated"`
-	SetupRequired     bool     `json:"setup_required"`
+	Authenticated bool `json:"authenticated"`
+	SetupRequired bool `json:"setup_required"`
+	// ProvisionRequired means this data directory came from another machine.
+	//
+	// Separate from SetupRequired because they need different screens: setup
+	// is "choose a password", this is "this installation is not yours, and
+	// continuing means erasing it". Reusing SetupRequired would put a cloned
+	// gateway on a page that cannot fix it -- the inherited administrator
+	// account is still there, so auth.Setup answers ErrAlreadyConfigured.
+	ProvisionRequired bool     `json:"provision_required,omitempty"`
+	ProvisionReason   string   `json:"provision_reason,omitempty"`
 	UserID            string   `json:"user_id,omitempty"`
 	Username          string   `json:"username,omitempty"`
 	Role              string   `json:"role,omitempty"`

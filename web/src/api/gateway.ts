@@ -56,6 +56,7 @@ import type {
   SaveConnectionProfileInput,
   SendMessageInput,
   SessionResponse,
+  ProvisionStatus,
   SetupInput,
   SystemSettings,
   SIMCommandInput,
@@ -107,6 +108,8 @@ export type GatewayInteractions = Readonly<{
 
 export interface SessionGateway {
   getSession(): Promise<SessionResponse>
+  provisionStatus(): Promise<ProvisionStatus>
+  requestProvisionReset(confirmMachineID: string): Promise<void>
   setup(input: SetupInput): Promise<SessionResponse>
   login(input: LoginInput): Promise<SessionResponse>
   changePassword(input: ChangePasswordInput): Promise<void>

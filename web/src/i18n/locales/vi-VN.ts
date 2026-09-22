@@ -260,6 +260,18 @@ export default {
     "unknown": "Trạng thái không xác định"
   },
   "auth": {
+    "provision": {
+      "title": "Re-initialisation required",
+      "body": "This data directory was created on another device.",
+      "consequences": "The account, NKN identity, messages and contacts in it belong to that device. Resetting empties the data directory, then you set up a new administrator and a new NKN identity.",
+      "thisMachine": "This machine",
+      "previousMachine": "Previous machine",
+      "changed": "Hardware sources that changed",
+      "confirmLabel": "Type the machine identifier above to confirm",
+      "action": "Erase and re-initialise",
+      "pending": "The reset is recorded. Restart the container to empty the data directory and begin setup.",
+      "failed": "The reset request failed.",
+    },
     "title": "Đăng nhập",
     "quickStart": "Bắt đầu nhanh",
     "quickStartDescription": "Tạo tài khoản quản trị viên cho NasSimHub này",
@@ -996,7 +1008,7 @@ export default {
     "tooManyEgressDNS": "Tối đa 4 máy chủ DNS",
     "invalidEgressDNS": "Mỗi máy chủ DNS phải là một địa chỉ IP",
     "running": "Đang chạy",
-    "waitingForLine": "Đang chờ đường dây",
+    "waitingForLine": "Äang chá» ÄÆ°á»ng dÃ¢y",
     "peerLost": "Đang chạy — không liên lạc được đầu kia",
     "peerLostHint": "Giao diện đường hầm vẫn hoạt động nhưng 3 phút qua không có bắt tay nào, nên lưu lượng qua proxy này sẽ hết thời gian chờ.",
     "configurationError": "Lỗi cấu hình",
