@@ -69,13 +69,15 @@ RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
         /etc/apt/sources.list.d/debian.sources \
     && sed -i 's/^Types: deb$/Types: deb deb-src/' \
         /etc/apt/sources.list.d/debian.sources \
+    && printf 'APT::Sandbox::User "root";\nAcquire::ForceIPv4 "true";\n' \
+        > /etc/apt/apt.conf.d/99-modemdeck-build \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         dpkg-dev \
     && apt-get build-dep -y "modemmanager=${MODEMMANAGER_DEBIAN_VERSION}" \
     && apt-get source "modemmanager=${MODEMMANAGER_DEBIAN_VERSION}" \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/99-modemdeck-build
 
 RUN source_dir="$(find /source -mindepth 1 -maxdepth 1 \
         -type d -name 'modemmanager-*' -print -quit)" \
@@ -129,7 +131,13 @@ ARG APT_MIRROR=deb.debian.org
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
+# Build-time apt knobs: on fnOS (trim kernel) the default _apt sandbox user
+# cannot resolve DNS inside buildkit RUN sandboxes (EAI_AGAIN even when
+# /etc/hosts has the entry); running acquire methods as root + forcing IPv4
+# works. The conf file is deleted in the same RUN so it never ships.
+RUN printf 'APT::Sandbox::User "root";\nAcquire::ForceIPv4 "true";\n' \
+        > /etc/apt/apt.conf.d/99-modemdeck-build \
+    && sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
         /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -154,7 +162,7 @@ RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
         util-linux \
         iproute2 \
         wireguard-tools \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/99-modemdeck-build
 
 COPY --from=modemmanager-builder /out/usr/sbin/ModemManager /usr/sbin/ModemManager
 COPY --from=modemmanager-builder /out/usr/bin/mmcli /usr/bin/mmcli
