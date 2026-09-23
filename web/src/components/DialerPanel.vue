@@ -47,7 +47,6 @@ import BaseAvatar from './BaseAvatar.vue'
 import ContactSuggestInput from './ContactSuggestInput.vue'
 import CallSurface from './CallSurface.vue'
 import LineSelector from './LineSelector.vue'
-import { sessionState } from '../state/session'
 import { matchHiddenCommand, runHiddenCommand } from '../state/hiddenCommands'
 import { showFeedback } from '../state/feedback'
 

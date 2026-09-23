@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -107,4 +108,58 @@ func normalizedApplicationVersion(value string) string {
 		return normalized
 	}
 	return "dev"
+}
+
+// updateDownloader and updatePreferencesSetter are what an updater offers
+// beyond apply and status. Optional, and discovered by assertion, so a
+// deployment whose updater predates them reports "unsupported" rather than
+// failing to build.
+type updateDownloader interface {
+	Download(context.Context) (updatecheck.Download, error)
+}
+
+type updatePreferencesSetter interface {
+	SetPreferences(context.Context, updatecheck.Preferences) (updatecheck.Preferences, error)
+}
+
+func (api *API) updateDownload(response http.ResponseWriter, request *http.Request) {
+	downloader, ok := api.updateManager.(updateDownloader)
+	if !ok {
+		writeError(response, http.StatusServiceUnavailable, "download_unsupported", "This deployment cannot download updates ahead of installing them", "")
+		return
+	}
+	download, err := downloader.Download(request.Context())
+	switch {
+	case errors.Is(err, updaterclient.ErrNothingToDownload):
+		writeError(response, http.StatusConflict, "update_not_available", "There is no installable update to download", "")
+	case errors.Is(err, updaterclient.ErrDownloadUnsupported):
+		writeError(response, http.StatusServiceUnavailable, "download_unsupported", "This deployment cannot download updates ahead of installing them", "")
+	case err != nil:
+		writeError(response, http.StatusServiceUnavailable, "updater_unavailable", "The download could not be started", "")
+	default:
+		writeJSON(response, http.StatusAccepted, download)
+	}
+}
+
+func (api *API) updatePreferences(response http.ResponseWriter, request *http.Request) {
+	setter, ok := api.updateManager.(updatePreferencesSetter)
+	if !ok {
+		writeError(response, http.StatusServiceUnavailable, "download_unsupported", "This deployment has no update preferences", "")
+		return
+	}
+	if request.Method != http.MethodPut {
+		response.Header().Set("Allow", http.MethodPut)
+		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed", "")
+		return
+	}
+	var input updatecheck.Preferences
+	if !decodeJSONBody(response, request, &input) {
+		return
+	}
+	saved, err := setter.SetPreferences(request.Context(), input)
+	if err != nil {
+		writeError(response, http.StatusServiceUnavailable, "updater_unavailable", "The update preferences could not be saved", "")
+		return
+	}
+	writeJSON(response, http.StatusOK, saved)
 }

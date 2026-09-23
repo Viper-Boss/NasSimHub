@@ -5,6 +5,7 @@ import {
   CircleCheck,
   CircleOff,
   CloudUpload,
+  Download,
   ExternalLink,
   Globe2,
   Info,
@@ -24,7 +25,10 @@ import {
   attachSoftwareUpdate,
   checkForUpdates,
   ensureInitialUpdateCheck,
+  setAutoDownload,
+  setSoftwareUpdateDownloadMessages,
   setSoftwareUpdateMessages,
+  startUpdateDownload,
   useSoftwareUpdate
 } from '../state/softwareUpdate'
 
@@ -37,15 +41,21 @@ import {
 //
 // IT SAYS WHAT IS AND IS NOT CHECKED, and that is the part to leave alone.
 // The layout follows a mock-up that showed three green ticks -- integrity,
-// source agreement, signature -- and a "3/3 sources agree" badge. One of those
-// is real: images are pulled by sha256 digest, which Docker itself enforces.
-// There is one source, not three, and nothing anywhere verifies a signature,
-// because releases do not carry one. The rows are still here, because they are
-// the right rows and the day the backend gains those checks this card should
-// show them -- but each one reports what the code actually does today. A green
-// tick beside "signature verified" would be a security claim with nothing
-// behind it, shown to the people deciding whether an update is safe to install.
+// source agreement, signature -- and a "3/3 sources agree" badge. When this
+// card was first built only one of those was true, and it said so. Since then
+// the release path has been rebuilt: releases are signed, verified against the
+// key compiled into this build, and fetched from several mirrors. So the rows
+// now light up -- but each one is still DRIVEN BY WHAT THE UPDATER REPORTED on
+// this check, never by what the code is supposed to do. The signature row is
+// green only when a mirror returned a manifest that verified; the agreement
+// row counts the mirrors that did. On a check that reached nothing, they go
+// dark again, which is correct: nothing was verified.
 //
+// THE BUTTON FOLLOWS THE DOWNLOAD. The gateway fetches a new release's images
+// in the background as soon as it sees one. While that runs the button is a
+// ring counting images fetched; when it is done the button is the green
+// "update now", and pressing it is a restart rather than a download.
+
 // THE RING IS HONEST TOO, in a smaller way. It is driven by which stage each
 // component has reached, not by bytes: `docker pull` runs through
 // CombinedOutput in the gateway, so its progress stream is read and discarded
@@ -61,7 +71,16 @@ const {
   startingUpdate,
   displayedComponents,
   componentState,
-  progress
+  progress,
+  downloading,
+  downloadReady,
+  downloadFailed,
+  downloadProgress,
+  autoDownload,
+  savingPreference,
+  releaseSources,
+  sourceAgreement,
+  signatureVerified
 } = useSoftwareUpdate()
 
 let detach: (() => void) | undefined
@@ -141,64 +160,109 @@ const blockedReason = computed(() => {
   if (updateCheck.value?.error_code === 'updater_unavailable') {
     return { title: label('updaterUnavailable'), body: label('updaterUnavailableNote') }
   }
+  if (updateCheck.value?.error_code === 'release_requires_newer_installation') {
+    return { title: label('applyUnavailable'), body: label('needsIntermediateNote') }
+  }
   return { title: label('applyUnavailable'), body: label('applyUnavailableNote') }
 })
 
+/**
+ * Installing waits for a running download rather than racing it: the ring
+ * is already showing the fetch, and a second button would start the same
+ * pull twice over the one uplink the gateway has.
+ */
 const canApply = computed(
-  () => hasUpdate.value && Boolean(updateCheck.value?.apply_available) && !applying.value
+  () =>
+    hasUpdate.value &&
+    Boolean(updateCheck.value?.apply_available) &&
+    !applying.value &&
+    !downloading.value
 )
 
-const checkedAt = computed(() => {
-  const at = updateCheck.value?.checked_at
-  if (!at) return ''
-  const moment = new Date(at)
-  if (Number.isNaN(moment.getTime())) return ''
-  return moment.toLocaleString()
-})
+/** Whether the ring in the button is showing the download or the install. */
+const showingDownload = computed(() => !applying.value && hasUpdate.value && downloading.value)
+
+/** The switch in the header, or nothing when there is no updater to ask. */
+const autoDownloadKnown = computed(() => autoDownload.value !== undefined)
+
+function toggleAutoDownload(): void {
+  if (autoDownload.value === undefined) return
+  void setAutoDownload(!autoDownload.value)
+}
+
+/** A second, quieter button: fetch now, for when automatic fetching is off. */
+const canDownloadNow = computed(
+  () =>
+    hasUpdate.value &&
+    Boolean(updateCheck.value?.apply_available) &&
+    autoDownload.value !== undefined &&
+    !applying.value &&
+    !downloading.value &&
+    !downloadReady.value
+)
 
 /**
- * The three update sources the layout has room for, and their real state.
+ * The update sources and their real state.
  *
- * DHT and NKN are listed because the gateway already speaks both and looking a
- * version up over them is the obvious next step for a product whose users
- * often cannot reach GitHub. Listing them as "not wired up" is the honest
- * shape of that: the row exists, the check does not.
+ * The release mirrors come from the check itself, one row each, by host: what
+ * each one returned this time. DHT and NKN are listed because the gateway
+ * already speaks both and fetching a release over them is the planned next
+ * channel for networks that reach none of the mirrors; they are marked as not
+ * wired up, because they are not.
  */
 const sources = computed(() => [
-  {
-    key: 'github',
+  ...releaseSources.value.map(entry => ({
+    key: `mirror-${entry.name}`,
     icon: Globe2,
-    name: label('sourceGitHub'),
-    wired: true,
-    detail: checkedAt.value ? label('sourceCheckedAt', { time: checkedAt.value }) : ''
-  },
-  { key: 'dht', icon: Waypoints, name: label('sourceDHT'), wired: false, detail: '' },
-  { key: 'nkn', icon: Network, name: label('sourceNKN'), wired: false, detail: '' }
+    name: entry.name,
+    wired: entry.state === 'verified',
+    detail:
+      entry.state === 'verified'
+        ? label('sourceVerified', { version: entry.version || '' })
+        : label(`sourceState_${entry.state}`)
+  })),
+  { key: 'dht', icon: Waypoints, name: label('sourceDHT'), wired: false, detail: label('sourceNotWired') },
+  { key: 'nkn', icon: Network, name: label('sourceNKN'), wired: false, detail: label('sourceNotWired') }
 ])
 
-/** The three verification rows, each reporting what the code actually does. */
+const sourcesSummary = computed(() =>
+  sourceAgreement.value.total === 0
+    ? label('sourcesNone')
+    : label('sourcesAgree', {
+        agreeing: sourceAgreement.value.agreeing,
+        total: sourceAgreement.value.total
+      })
+)
+
+/**
+ * The three verification rows, each lit only by what this check reported.
+ *
+ * Integrity is always enforced -- every pull is by digest and Docker checks
+ * it. Signature is lit when a mirror returned a manifest that verified against
+ * the compiled-in key. Agreement is lit when at least two mirrors returned the
+ * same verified release; with one there is nothing to agree with.
+ */
 const verifications = computed(() => [
   {
     key: 'integrity',
     name: label('verifyIntegrity'),
     value: label('verifyIntegrityValue'),
     note: label('verifyIntegrityNote'),
-    // The only one that is genuinely enforced today.
     active: true
   },
   {
     key: 'consensus',
     name: label('verifyConsensus'),
-    value: label('verifyConsensusValue'),
+    value: sourcesSummary.value,
     note: label('verifyConsensusNote'),
-    active: false
+    active: sourceAgreement.value.agreeing >= 2
   },
   {
     key: 'signature',
     name: label('verifySignature'),
-    value: label('verifySignatureValue'),
+    value: signatureVerified.value ? label('verifySignatureValue') : label('verifySignatureNone'),
     note: label('verifySignatureNote'),
-    active: false
+    active: signatureVerified.value
   }
 ])
 
@@ -229,7 +293,7 @@ function stageLabel(state?: UpdateOperationComponentState): string {
 const RING_RADIUS = 13
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 const ringOffset = computed(
-  () => RING_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, progress.value)) / 100)
+  () => RING_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, ringValue.value)) / 100)
 )
 
 /**
@@ -237,9 +301,14 @@ const ringOffset = computed(
  * the ring spins instead of sitting at zero. A stalled ring and a slow pull
  * look the same otherwise.
  */
-const ringIndeterminate = computed(
-  () => applying.value && (startingUpdate.value || displayedComponents.value.length === 0)
+const ringIndeterminate = computed(() =>
+  showingDownload.value
+    ? downloadProgress.value === 0
+    : applying.value && (startingUpdate.value || displayedComponents.value.length === 0)
 )
+
+/** The ring's number: images fetched while downloading, the ladder while installing. */
+const ringValue = computed(() => (showingDownload.value ? downloadProgress.value : progress.value))
 
 async function onUpdate(): Promise<void> {
   if (!canApply.value) return
@@ -247,6 +316,10 @@ async function onUpdate(): Promise<void> {
 }
 
 onMounted(() => {
+  setSoftwareUpdateDownloadMessages({
+    downloadStartFailed: label('downloadStartFailed'),
+    preferenceFailed: label('preferenceFailed')
+  })
   setSoftwareUpdateMessages({
     updateFailed: t('about.updateFailed'),
     updateStartFailed: t('about.updateStartFailed'),
@@ -274,10 +347,21 @@ onBeforeUnmount(() => {
         <h4>{{ label('title') }}</h4>
         <p class="update-card__eyebrow">{{ label('subtitle') }}</p>
       </div>
-      <span class="update-card__auto" :title="label('autoDownloadHint')">
-        <CircleOff :size="13" />
-        {{ label('autoDownloadOff') }}
-      </span>
+      <button
+        v-if="autoDownloadKnown"
+        type="button"
+        class="update-card__auto"
+        :class="{ 'is-on': autoDownload }"
+        role="switch"
+        :aria-checked="autoDownload ? 'true' : 'false'"
+        :disabled="savingPreference"
+        :title="label('autoDownloadHint')"
+        @click="toggleAutoDownload"
+      >
+        <Download v-if="autoDownload" :size="13" />
+        <CircleOff v-else :size="13" />
+        {{ autoDownload ? label('autoDownloadOn') : label('autoDownloadOff') }}
+      </button>
     </header>
 
     <div class="update-card__body">
@@ -311,13 +395,11 @@ onBeforeUnmount(() => {
             >
               <component :is="source.icon" :size="14" />
               <span class="update-card__source-name">{{ source.name }}</span>
-              <span class="update-card__source-detail">
-                {{ source.wired ? source.detail : label('sourceNotWired') }}
-              </span>
+              <span class="update-card__source-detail">{{ source.detail }}</span>
             </li>
           </ul>
           <p class="update-card__note" :title="label('sourcesNote')">
-            {{ label('sourcesNoteShort') }}
+            {{ sourcesSummary }}
           </p>
         </section>
 
@@ -403,10 +485,20 @@ onBeforeUnmount(() => {
         </button>
 
         <button
+          v-if="canDownloadNow"
+          type="button"
+          class="update-card__recheck"
+          @click="startUpdateDownload"
+        >
+          <Download :size="14" />
+          {{ downloadFailed ? label('downloadRetry') : label('downloadNow') }}
+        </button>
+
+        <button
           v-if="hasUpdate"
           type="button"
           class="update-card__apply"
-          :class="{ 'is-working': applying }"
+          :class="{ 'is-working': applying || showingDownload, 'is-ready': downloadReady }"
           :disabled="!canApply"
           @click="onUpdate"
         >
@@ -415,11 +507,11 @@ onBeforeUnmount(() => {
                and the value is left off while it is indeterminate rather than
                reported as zero. -->
           <span
-            v-if="applying"
+            v-if="applying || showingDownload"
             class="update-card__ring"
             role="progressbar"
-            :aria-label="label('progressLabel')"
-            :aria-valuenow="ringIndeterminate ? undefined : progress"
+            :aria-label="showingDownload ? label('downloadProgressLabel') : label('progressLabel')"
+            :aria-valuenow="ringIndeterminate ? undefined : ringValue"
             aria-valuemin="0"
             aria-valuemax="100"
           >
@@ -434,11 +526,11 @@ onBeforeUnmount(() => {
                 :stroke-dashoffset="ringIndeterminate ? RING_CIRCUMFERENCE * 0.72 : ringOffset"
               />
             </svg>
-            <span v-if="!ringIndeterminate" class="update-card__ring-value">{{ progress }}</span>
+            <span v-if="!ringIndeterminate" class="update-card__ring-value">{{ ringValue }}</span>
             <LoaderCircle v-else :size="13" class="spin" />
           </span>
           <ShieldCheck v-else :size="15" />
-          {{ applying ? label('updating') : label('update') }}
+          {{ applying ? label('updating') : showingDownload ? label('downloading') : label('update') }}
         </button>
       </footer>
 
@@ -449,8 +541,17 @@ onBeforeUnmount(() => {
       >
         {{ label('updatingHint') }}
       </p>
+      <p v-else-if="hasUpdate && showingDownload" class="update-card__note">
+        {{ label('downloadingHint') }}
+      </p>
+      <p v-else-if="hasUpdate && downloadReady" class="update-card__note update-card__note--good">
+        {{ label('downloadReadyHint') }}
+      </p>
+      <p v-else-if="hasUpdate && downloadFailed" class="update-card__note update-card__note--warn">
+        {{ label('downloadFailedHint') }}
+      </p>
       <p v-else-if="hasUpdate" class="update-card__note" :title="label('autoDownloadHint')">
-        {{ label('autoDownloadHintShort') }}
+        {{ autoDownload ? label('downloadQueuedHint') : label('autoDownloadHintShort') }}
       </p>
     </div>
     </article>
@@ -573,11 +674,22 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   gap: 6px;
   color: var(--muted);
+  font: inherit;
   font-size: 11.5px;
+  background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
-  cursor: help;
+  cursor: pointer;
 }
+
+/* On is the state worth noticing: it means updates will already be here
+   when the operator looks. */
+.update-card__auto.is-on {
+  color: var(--success);
+  border-color: var(--success-border);
+}
+
+.update-card__auto:disabled { cursor: progress; opacity: 0.7; }
 
 .update-card__body {
   display: flex;
@@ -871,6 +983,7 @@ onBeforeUnmount(() => {
 }
 
 .update-card__note--warn { color: var(--warning, #9a6200); }
+.update-card__note--good { color: var(--success); }
 
 .spin { animation: update-ring-spin 1.1s linear infinite; }
 

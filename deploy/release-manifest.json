@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "images": {
-    "api": "ghcr.io/human-agent65535/modemdeck",
-    "web": "ghcr.io/human-agent65535/modemdeck-web",
-    "hardware": "ghcr.io/human-agent65535/modemdeck-hardware",
-    "updater": "ghcr.io/human-agent65535/modemdeck-updater"
+    "api": "ghcr.io/viper-boss/nassimhub",
+    "web": "ghcr.io/viper-boss/nassimhub-web",
+    "hardware": "ghcr.io/viper-boss/nassimhub-hardware",
+    "updater": "ghcr.io/viper-boss/nassimhub-updater"
   },
   "cloudflared": {
     "image": "cloudflare/cloudflared",

@@ -1703,7 +1703,18 @@ export function createFixtureGateway(options: FixtureGatewayOptions = {}): Modem
           apply_available: true,
           components: clone(softwareUpdateComponents),
           hardware_confirmation_required: hardwareUpdateFixture,
-          operation: fixtureUpdateOperation ? clone(fixtureUpdateOperation) : undefined
+          operation: fixtureUpdateOperation ? clone(fixtureUpdateOperation) : undefined,
+          auto_download: true,
+          download: {
+            version: 'v1.9.3',
+            state: 'ready',
+            updated_at: new Date().toISOString()
+          },
+          sources: [
+            { name: 'raw.githubusercontent.com', state: 'unreachable' },
+            { name: 'cdn.jsdelivr.net', state: 'verified', version: 'v1.9.3' },
+            { name: 'fastly.jsdelivr.net', state: 'verified', version: 'v1.9.3' }
+          ]
         }
       }
       return {

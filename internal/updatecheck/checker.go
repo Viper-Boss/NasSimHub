@@ -58,6 +58,16 @@ type Result struct {
 	Components                   []Component `json:"components,omitempty"`
 	HardwareConfirmationRequired bool        `json:"hardware_confirmation_required"`
 	Operation                    *Operation  `json:"operation,omitempty"`
+	// Download is the background pre-fetch of LatestVersion's images, when
+	// one has run. Absent when nothing has been downloaded for this version.
+	Download *Download `json:"download,omitempty"`
+	// AutoDownload is the operator's preference, reported with every check.
+	// A pointer so that "this deployment has no updater, so there is nothing
+	// to prefer" (absent) is distinguishable from "switched off" (false).
+	AutoDownload *bool `json:"auto_download,omitempty"`
+	// Sources says which release mirrors answered and what each one said, so
+	// "3 of 3 mirrors agree" is a measurement rather than a slogan.
+	Sources []Source `json:"sources,omitempty"`
 }
 
 type Component struct {
@@ -356,4 +366,21 @@ func compareVersions(left, right [3]uint64) int {
 		}
 	}
 	return 0
+}
+
+// CompareVersions compares two stable vX.Y.Z versions: -1, 0 or 1, and false
+// when either is not a stable version. Exported so the release channel orders
+// mirrors' answers with the same rule this checker uses for the current one.
+func CompareVersions(left, right string) (int, bool) {
+	a, okA := parseStableVersion(left)
+	b, okB := parseStableVersion(right)
+	if !okA || !okB {
+		return 0, false
+	}
+	return compareVersions(a, b), true
+}
+
+// DisplayVersion normalises a version the way results report it.
+func DisplayVersion(value string) string {
+	return displayVersion(value)
 }

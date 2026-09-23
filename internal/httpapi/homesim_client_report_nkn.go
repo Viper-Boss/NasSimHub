@@ -13,6 +13,7 @@ import (
 
 	"github.com/human-agent65535/modemdeck/internal/clientreport"
 	"github.com/human-agent65535/modemdeck/internal/license"
+	"github.com/human-agent65535/modemdeck/internal/updatecheck"
 )
 
 // Answering a signed client-report request over NKN.
@@ -80,7 +81,45 @@ type clientReportReply struct {
 	Modules      []clientReportModule     `json:"modules"`
 	Entitlements clientReportEntitlements `json:"entitlements"`
 	FraudGuard   clientReportFraudGuard   `json:"fraud_guard"`
+
+	// Images are what each component is actually running, as the updater
+	// sees it. The version string above is what the api binary says about
+	// itself; this is what the container runtime says, by digest where one is
+	// known. The two disagreeing is itself worth knowing -- a half-applied
+	// update, or an image swapped by hand.
+	//
+	// ImagesAvailable is false when there is no updater to ask. That is the
+	// normal state of a deployment without one, and it is reported as its own
+	// fact rather than as an empty list, which would read as "nothing running".
+	Images          []updatecheck.RunningImage `json:"images"`
+	ImagesAvailable bool                       `json:"images_available"`
+	// Update is where this gateway stands on updates, so "why is this
+	// customer still on the old version" has an answer before anyone asks
+	// them: never offered, offered but the download failed, or downloaded and
+	// waiting for them to press install.
+	Update clientReportUpdate `json:"update"`
 }
+
+type clientReportUpdate struct {
+	Status        string `json:"status"`
+	LatestVersion string `json:"latest_version,omitempty"`
+	ErrorCode     string `json:"error_code,omitempty"`
+	AutoDownload  *bool  `json:"auto_download,omitempty"`
+	DownloadState string `json:"download_state,omitempty"`
+	CheckedAt     string `json:"checked_at,omitempty"`
+}
+
+// runningImagesReporter is the updater's view of what is running. Optional:
+// asserted on the update manager, so a deployment without an updater -- or
+// with one that predates this -- simply reports images_available: false.
+type runningImagesReporter interface {
+	RunningImages(context.Context) ([]updatecheck.RunningImage, error)
+}
+
+// clientReportLookupTimeout bounds each question the report asks another
+// process. The report is answered from the NKN receive loop, and a slow
+// updater must not hold that loop -- or the issuer's console -- hostage.
+const clientReportLookupTimeout = 3 * time.Second
 
 type clientReportSystem struct {
 	AppVersion string `json:"app_version"`
@@ -254,6 +293,31 @@ func (api *API) buildClientReport(
 		Modules:      api.clientReportModules(ctx),
 		Entitlements: clientReportEntitlements{Features: []clientReportFeature{}},
 		FraudGuard:   api.clientReportFraudGuard(),
+		Images:       []updatecheck.RunningImage{},
+	}
+	if reporter, ok := api.updateManager.(runningImagesReporter); ok {
+		lookup, cancel := context.WithTimeout(ctx, clientReportLookupTimeout)
+		images, err := reporter.RunningImages(lookup)
+		cancel()
+		if err == nil {
+			reply.Images = images
+			reply.ImagesAvailable = true
+		}
+	}
+	if api.updateChecker != nil {
+		lookup, cancel := context.WithTimeout(ctx, clientReportLookupTimeout)
+		check := api.updateChecker.Check(lookup)
+		cancel()
+		reply.Update = clientReportUpdate{
+			Status:        string(check.Status),
+			LatestVersion: check.LatestVersion,
+			ErrorCode:     check.ErrorCode,
+			AutoDownload:  check.AutoDownload,
+			CheckedAt:     check.CheckedAt,
+		}
+		if check.Download != nil {
+			reply.Update.DownloadState = string(check.Download.State)
+		}
 	}
 
 	runtime := api.licensing()

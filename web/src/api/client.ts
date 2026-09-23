@@ -608,7 +608,10 @@ function parseAbout(value: unknown): AboutInfo {
   }
 }
 
-function parseUpdateCheck(value: unknown): UpdateCheck {
+// Exported for state/softwareUpdate.ts, which reads the download fields this
+// parser leaves out. They are parsed there rather than here because this file
+// is in the startup shell and only the update screens use them.
+export function parseUpdateCheck(value: unknown): UpdateCheck {
   const source = requiredRecord(value, 'update_check')
   const status = requiredStringValue(source, 'update_check', 'status') as UpdateStatus
   if (!UPDATE_STATUSES.has(status)) {

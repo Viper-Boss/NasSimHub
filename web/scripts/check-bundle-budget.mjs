@@ -13,7 +13,15 @@ const limits = {
   // 2026-09-12: 246 -> 248, the DHT mesh card joined the dashboard shell
   // beside the network globe (Claude's 00:52 patch); measured worst case is
   // 246.0 KiB, twenty bytes under the old line.
-  initialGzip: 248 * kibibyte,
+  // 2026-09-23: 248 -> 240. Every icon used to ship in the startup shell: all
+  // of them landed in one shared `icons` chunk, because @lucide/vue's entry
+  // re-exports every icon and the shell imports icons through it, which puts
+  // the whole barrel in the startup graph. scripts/lucide-direct-imports.mjs
+  // now imports each icon from its own file, and the `icons` group takes only
+  // the ones the shell draws (1.4 KiB); the rest wait in `icons-lazy` for the
+  // first lazily loaded view. Measured 235.8 KiB, down from 247.0. Lowered
+  // rather than left at 248 so the reclaimed space is not spent silently.
+  initialGzip: 240 * kibibyte,
   javascriptGzip: 100 * kibibyte,
   stylesheetGzip: 20 * kibibyte
 }

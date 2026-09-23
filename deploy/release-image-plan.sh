@@ -7,6 +7,11 @@ vcs_ref=${2:?release commit is required}
 previous_tag=${3:-}
 namespace=${4:?GHCR namespace is required}
 force_hardware=${5:-false}
+# force_all: build every component instead of retaining unchanged ones. Needed
+# for the first release this project publishes: the previous stable tag in the
+# history is the UPSTREAM project's, and nothing under this project's registry
+# namespace carries it, so "retain the previous image" has nothing to retain.
+force_all=${6:-false}
 manifest=deploy/release-manifest.json
 stable_tag='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
@@ -46,8 +51,17 @@ component_changed() {
                 LICENSE NOTICE.md THIRD_PARTY_NOTICES.md
                 ':(glob)cmd/modemdeck-updater/*.go'
                 ':(glob)cmd/modemdeck-updater/**/*.go'
+                # Every internal package the updater links, not just the
+                # two it was written with. Missing one means a release that
+                # changes it -- the signing key, the manifest format, the
+                # release channel -- ships an updater that never got it.
+                # TestThePlannerRebuildsTheUpdaterForEveryPackageItLinks in
+                # cmd/modemdeck-updater keeps this list complete.
                 ':(glob)internal/ota/**'
                 ':(glob)internal/updatecheck/**'
+                ':(glob)internal/release/**'
+                ':(glob)internal/releasechannel/**'
+                ':(glob)internal/license/**'
                 ':(exclude,glob)**/*_test.go'
             )
             ;;
@@ -79,22 +93,22 @@ append_component() {
     case "$component" in
         api)
             dockerfile=./Dockerfile
-            image=modemdeck
+            image=nassimhub
             target=runtime
             ;;
         web)
             dockerfile=./Dockerfile
-            image=modemdeck-web
+            image=nassimhub-web
             target=web-runtime
             ;;
         updater)
             dockerfile=./Dockerfile
-            image=modemdeck-updater
+            image=nassimhub-updater
             target=updater-runtime
             ;;
         hardware)
             dockerfile=./hardware/Dockerfile
-            image=modemdeck-hardware
+            image=nassimhub-hardware
             target=runtime
             ;;
     esac
@@ -118,6 +132,10 @@ append_component() {
     printf 'force_hardware must be true or false\n' >&2
     exit 1
 }
+[[ "$force_all" == true || "$force_all" == false ]] || {
+    printf 'force_all must be true or false\n' >&2
+    exit 1
+}
 
 matrix='{"include":[]}'
 for component in api web updater hardware; do
@@ -126,6 +144,9 @@ for component in api web updater hardware; do
         changed=true
     fi
     if [[ "$component" == hardware && "$force_hardware" == true ]]; then
+        changed=true
+    fi
+    if [[ "$force_all" == true ]]; then
         changed=true
     fi
 
@@ -140,8 +161,11 @@ for component in api web updater hardware; do
     append_component "$component" retain
 done
 
+# These names must match internal/release/images.go, which is what every
+# gateway holds a signed manifest to. A workflow publishing under any other
+# name produces images no gateway will accept.
 for component in api web hardware updater; do
-    expected="ghcr.io/${namespace}/modemdeck"
+    expected="ghcr.io/${namespace}/nassimhub"
     [[ "$component" == web ]] && expected+="-web"
     [[ "$component" == hardware ]] && expected+="-hardware"
     [[ "$component" == updater ]] && expected+="-updater"

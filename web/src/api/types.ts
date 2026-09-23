@@ -324,6 +324,30 @@ export type UpdateCheck = {
   components?: UpdateComponent[]
   hardware_confirmation_required: boolean
   operation?: UpdateOperation
+  /** The background download of latest_version's images, when one ran. */
+  download?: UpdateDownload
+  /** Absent when this deployment has no updater to hold a preference. */
+  auto_download?: boolean
+  /** What each release mirror said on the last check. */
+  sources?: UpdateSource[]
+}
+
+export type UpdateDownloadState = 'pending' | 'downloading' | 'ready' | 'failed'
+
+export type UpdateDownload = {
+  version: string
+  state: UpdateDownloadState
+  error_code?: string
+  components?: Array<{ name: UpdateComponentName; state: UpdateDownloadState }>
+  started_at?: string
+  updated_at: string
+}
+
+export type UpdateSource = {
+  /** The mirror's host only. */
+  name: string
+  state: 'verified' | 'unreachable' | 'invalid_signature' | 'malformed'
+  version?: string
 }
 
 export type UpdateComponentName = 'api' | 'web' | 'hardware' | 'updater' | 'cloudflared'

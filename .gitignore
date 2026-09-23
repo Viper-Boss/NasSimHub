@@ -1,6 +1,7 @@
 # Build outputs
 /modemdeck
 /modemdeck-agent
+/modemdeck-updater
 /mbimprobe
 *.exe
 *.dll

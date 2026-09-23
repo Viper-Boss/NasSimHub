@@ -17,6 +17,16 @@ fail() {
     exit 1
 }
 
+# Advanced mode insists that the host D-Bus path is a real socket. This test
+# used to borrow /var/run/docker.sock for that, which exists only where a
+# Docker daemon runs -- so the test failed on any machine without one, having
+# tested nothing. It makes its own instead.
+host_dbus_socket="${test_root}/host-dbus.sock"
+python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' \
+    "$host_dbus_socket" ||
+    fail "could not create a test socket (python3 is needed for this)"
+[ -S "$host_dbus_socket" ] || fail "the test socket is not a socket: $host_dbus_socket"
+
 file_mode() {
     if "$real_stat" -c %a "$1" >/dev/null 2>&1; then
         "$real_stat" -c %a "$1"
@@ -520,7 +530,7 @@ cat >"${test_root}/assignments.json" <<'EOF'
 EOF
 common_env \
     MODEMDECK_TEST_DOCKER_HEALTH=healthy \
-    MODEMDECK_HOST_DBUS_SOCKET=/var/run/docker.sock \
+    MODEMDECK_HOST_DBUS_SOCKET="${host_dbus_socket}" \
     "${fixture}/install.sh" \
         --git \
         --mode advanced \
@@ -561,7 +571,7 @@ done
 # A repeated install must keep the same database, TLS, and secret contents.
 common_env \
     MODEMDECK_TEST_DOCKER_HEALTH=healthy \
-    MODEMDECK_HOST_DBUS_SOCKET=/var/run/docker.sock \
+    MODEMDECK_HOST_DBUS_SOCKET="${host_dbus_socket}" \
     "${fixture}/install.sh" \
         --git \
         --mode advanced \
@@ -589,7 +599,7 @@ printf '%s\n' \
 : >"${test_root}/commands.log"
 common_env \
     MODEMDECK_TEST_DOCKER_HEALTH=healthy \
-    MODEMDECK_HOST_DBUS_SOCKET=/var/run/docker.sock \
+    MODEMDECK_HOST_DBUS_SOCKET="${host_dbus_socket}" \
     "${fixture}/install.sh" \
         --git \
         --mode advanced \
@@ -612,7 +622,7 @@ grep -Fq 'TURN:          disabled' \
 : >"${test_root}/commands.log"
 common_env \
     MODEMDECK_TEST_DOCKER_HEALTH=healthy \
-    MODEMDECK_HOST_DBUS_SOCKET=/var/run/docker.sock \
+    MODEMDECK_HOST_DBUS_SOCKET="${host_dbus_socket}" \
     "${fixture}/install.sh" \
         --git \
         --mode advanced \
@@ -682,7 +692,7 @@ grep -Fq 'docker-compose.cloudflare-turn.yml' "${test_root}/commands.log" ||
 : >"${test_root}/commands.log"
 common_env \
     MODEMDECK_TEST_DOCKER_HEALTH=healthy \
-    MODEMDECK_HOST_DBUS_SOCKET=/var/run/docker.sock \
+    MODEMDECK_HOST_DBUS_SOCKET="${host_dbus_socket}" \
     "${fixture}/install.sh" \
         --git \
         --mode advanced \

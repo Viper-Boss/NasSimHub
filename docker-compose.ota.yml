@@ -23,27 +23,38 @@ services:
       MODEMDECK_UPDATER_STATE_VOLUME: ${MODEMDECK_UPDATER_STATE_VOLUME:-modemdeck-updater-state}
       MODEMDECK_UPDATER_TOKEN_FILE: /run/secrets/modemdeck_updater_token
       MODEMDECK_CLOUDFLARE_ENABLED: ${MODEMDECK_CLOUDFLARE_ENABLED:-false}
-      # Overrides the running version the update check compares against;
-      # empty uses the version compiled into the updater. Written down with an
-      # empty default rather than left out, so that "unset" is visibly a choice
-      # rather than an oversight -- which is the whole point of the sweep in
-      # cmd/modemdeck/compose_env_test.go. Useful after a manual image swap has
-      # left the recorded version disagreeing with what is actually running.
-      MODEMDECK_CURRENT_VERSION: ${MODEMDECK_CURRENT_VERSION:-}
-      # Where to fetch the SIGNED release manifest, "%s" standing in for the
-      # version tag. Empty uses the built-in default.
+      # No running-version override here, on purpose: anything a release
+      # changes must not appear in this service, or every release would
+      # recreate the updater mid-install (deploy/tests/static-test.sh). The
+      # updater records what it installed in its state volume instead.
+      # Where to look for the SIGNED stable release, as a comma-separated list
+      # of URLs. Empty uses the built-in list: the public release repository
+      # Viper-Boss/nassimhub-releases, served by GitHub and by jsDelivr.
       #
-      # This has to be listed here to reach the container at all: Compose does
-      # not forward the host environment into a service, so setting it on the
-      # NAS without this line did nothing and said nothing -- the updater just
-      # kept using its default. Same silent shape as the licence issuer key.
-      #
-      # Pointing it somewhere else is SAFE, and that is the whole design: the
-      # manifest is signed, so whoever controls this URL controls which bytes
-      # arrive, not which bytes are accepted. Set it to your own server when
-      # the release repository is private, or to a mirror. A manifest that does
-      # not verify against the compiled-in key is refused wherever it came from.
-      MODEMDECK_RELEASE_MANIFEST_URL_TEMPLATE: ${MODEMDECK_RELEASE_MANIFEST_URL_TEMPLATE:-}
+      # Every URL is asked and the highest version that VERIFIES wins, so
+      # adding a mirror -- a Gitee copy, an object bucket, a file on the LAN
+      # -- is safe: a mirror controls which bytes arrive, never which bytes
+      # are accepted, and one honest mirror outvotes any number of stale
+      # ones. (This replaced MODEMDECK_RELEASE_MANIFEST_URL_TEMPLATE, which
+      # pointed into the private source repository and so could never be
+      # fetched by a gateway.)
+      MODEMDECK_RELEASE_CHANNEL_URLS: ${MODEMDECK_RELEASE_CHANNEL_URLS:-}
+      # How an install replaces images. Empty means "env": write digest-pinned
+      # references into this deployment's .env, which is what this Compose
+      # stack is built for. "retag" is for stacks whose Compose file names
+      # fixed local image tags (the fnOS package); it needs the four settings
+      # below it. See internal/ota/docker_runtime.go.
+      MODEMDECK_UPDATE_STRATEGY: ${MODEMDECK_UPDATE_STRATEGY:-}
+      MODEMDECK_COMPOSE_PROJECT: ${MODEMDECK_COMPOSE_PROJECT:-}
+      MODEMDECK_COMPOSE_FILES: ${MODEMDECK_COMPOSE_FILES:-}
+      MODEMDECK_COMPOSE_PROFILES: ${MODEMDECK_COMPOSE_PROFILES:-}
+      MODEMDECK_UPDATE_SLOTS: ${MODEMDECK_UPDATE_SLOTS:-}
+      MODEMDECK_UPDATE_SERVICES: ${MODEMDECK_UPDATE_SERVICES:-}
+      # Registry namespaces carrying the same images as ghcr.io/viper-boss,
+      # tried after it (retag strategy). Images are pulled BY DIGEST, which
+      # Docker verifies, so a mirror can fail a pull but cannot change what
+      # arrives. E.g. registry.cn-hangzhou.aliyuncs.com/<your-namespace>
+      MODEMDECK_REGISTRY_MIRRORS: ${MODEMDECK_REGISTRY_MIRRORS:-}
     secrets:
       - modemdeck_updater_token
     volumes:

@@ -42,10 +42,10 @@ do
 done
 
 for matrix_contract in \
-    'image=modemdeck' \
-    'image=modemdeck-web' \
-    'image=modemdeck-updater' \
-    'image=modemdeck-hardware' \
+    'image=nassimhub' \
+    'image=nassimhub-web' \
+    'image=nassimhub-updater' \
+    'image=nassimhub-hardware' \
     'target=web-runtime' \
     'target=updater-runtime'
 do
@@ -82,6 +82,10 @@ grep -Fq 'docker buildx imagetools create' "$workflow" ||
     fail "release workflow does not copy unchanged images to the shared tag"
 grep -Fq 'subject-digest: ${{ steps.image.outputs.digest }}' "$workflow" ||
     fail "release image digest is not attested"
+# Attestations are Enterprise-only in private repositories; the source
+# repository is private, so an unconditional step fails every release.
+grep -Fq "if: matrix.mode == 'build' && !github.event.repository.private" "$workflow" ||
+    fail "attestation would fail every release from a private repository"
 grep -Fq 'org.opencontainers.image.source=https://github.com/${{ github.repository }}' \
     "$workflow" || fail "release images are not linked to their source repository"
 grep -Fq '${{ env.IMAGE }}:sha-${{ needs.release.outputs.vcs-ref }}' "$workflow" ||
@@ -110,5 +114,18 @@ awk '
     }
     END { exit invalid }
 ' "$workflow" || fail "every release action must be pinned to a commit SHA"
+
+# The release is recorded for signing, and signed nowhere near CI. The signing
+# key signs licences and releases for every gateway ever built; a workflow
+# that could reach it would hand it to anyone able to edit a workflow.
+grep -Fq 'release.unsigned.json' "$workflow" ||
+    fail "release workflow does not record the release for signing"
+grep -Fq 'actions/upload-artifact@' "$workflow" ||
+    fail "the unsigned release record is not kept as an artifact"
+if grep -Eiq 'issuer[._-]?key|signing[._-]?key|release-sign|PRIVATE_KEY' "$workflow"; then
+    fail "release workflow must never handle the signing key"
+fi
+grep -Fq '"${force_all}")"' "$workflow" ||
+    fail "release workflow cannot build everything when there is nothing to retain"
 
 printf '%s\n' "release-workflow-test: ok"

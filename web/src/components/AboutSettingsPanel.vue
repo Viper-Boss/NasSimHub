@@ -16,7 +16,6 @@ import {
 import { gateway } from '../api/client'
 import type {
   AboutInfo,
-  UpdateComponentName,
   UpdateOperationComponentState,
   UpdateStatus
 } from '../api/types'
@@ -51,7 +50,6 @@ const {
   updateCheck: update,
   checking,
   applying,
-  startingUpdate,
   displayedComponents,
   componentState,
   progress: updateProgress

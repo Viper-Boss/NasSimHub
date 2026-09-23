@@ -26,10 +26,30 @@ type ReleaseChecker interface {
 }
 
 type Runtime interface {
-	CurrentImage(context.Context, string) (string, bool, error)
+	// Running reports what one component's service is running. component is
+	// the release name (api, web, ...), service the Compose service.
+	Running(ctx context.Context, component, service string) (updatecheck.RunningImage, error)
 	Managed(string) bool
 	StartWorker(context.Context, WorkerRequest) error
 	Apply(context.Context, Plan, ProgressReporter) error
+}
+
+// ServiceMapper is implemented by a runtime whose deployment names Compose
+// services differently from the defaults below. Optional, because the
+// upstream-style stack uses the defaults and its tests should not have to say
+// so.
+type ServiceMapper interface {
+	ServiceFor(component, fallback string) string
+}
+
+// Prefetcher is implemented by a runtime that can fetch a release's images
+// ahead of installing them. See Downloader.
+type Prefetcher interface {
+	// Staged reports whether the target's pinned image is already on this
+	// machine.
+	Staged(context.Context, Target) (bool, error)
+	// Prefetch fetches it. It must never change what is running.
+	Prefetch(context.Context, Target) error
 }
 
 type ProgressReporter func(string, updatecheck.OperationComponentState) error
@@ -44,16 +64,23 @@ type Options struct {
 	Manifests  ManifestLoader
 	Runtime    Runtime
 	Operations OperationStore
-	Now        func() time.Time
+	// Downloads and Preferences are optional. Without them a check simply
+	// carries no download state and no preference, which is how a deployment
+	// without background downloads looks to the UI.
+	Downloads   DownloadStore
+	Preferences PreferenceStore
+	Now         func() time.Time
 }
 
 type Controller struct {
-	checker    ReleaseChecker
-	manifests  ManifestLoader
-	runtime    Runtime
-	operations OperationStore
-	now        func() time.Time
-	mu         sync.Mutex
+	checker     ReleaseChecker
+	manifests   ManifestLoader
+	runtime     Runtime
+	operations  OperationStore
+	downloads   DownloadStore
+	preferences PreferenceStore
+	now         func() time.Time
+	mu          sync.Mutex
 }
 
 type Target struct {
@@ -93,30 +120,70 @@ func New(options Options) (*Controller, error) {
 		now = time.Now
 	}
 	return &Controller{
-		checker:    options.Checker,
-		manifests:  options.Manifests,
-		runtime:    options.Runtime,
-		operations: options.Operations,
-		now:        now,
+		checker:     options.Checker,
+		manifests:   options.Manifests,
+		runtime:     options.Runtime,
+		operations:  options.Operations,
+		downloads:   options.Downloads,
+		preferences: options.Preferences,
+		now:         now,
 	}, nil
 }
 
 func (controller *Controller) Check(ctx context.Context) updatecheck.Result {
 	plan, err := controller.plan(ctx)
 	if err == nil {
-		return plan.Result
+		return controller.annotate(plan.Result)
 	}
 	result := controller.checker.Check(ctx)
 	result.ApplyAvailable = false
-	if errors.Is(err, ErrManifestUnavailable) {
-		result.ErrorCode = "ota_manifest_unavailable"
-	} else {
-		result.ErrorCode = "release_images_unavailable"
+	// A reason the checker already gave is kept: "this release needs a newer
+	// installation first" is more use to an operator than the generic
+	// "manifest unavailable" it would otherwise be flattened into.
+	if result.ErrorCode == "" {
+		if errors.Is(err, ErrManifestUnavailable) {
+			result.ErrorCode = "ota_manifest_unavailable"
+		} else {
+			result.ErrorCode = "release_images_unavailable"
+		}
 	}
 	if operation, loadErr := controller.operations.Load(); loadErr == nil {
 		result.Operation = operation
 	}
+	return controller.annotate(result)
+}
+
+// annotate adds the operator's preference and, when it is for the version on
+// offer, the download state.
+//
+// A download for any OTHER version is left out rather than shown: "ready" next
+// to a newer release than the one downloaded would invite pressing install on
+// the strength of work done for something else.
+func (controller *Controller) annotate(result updatecheck.Result) updatecheck.Result {
+	if controller.preferences != nil {
+		preferences := controller.preferences.Load()
+		enabled := preferences.AutoDownload
+		result.AutoDownload = &enabled
+	}
+	if controller.downloads != nil && result.LatestVersion != "" {
+		if download, err := controller.downloads.Load(); err == nil &&
+			download != nil && download.Version == result.LatestVersion {
+			result.Download = download
+		}
+	}
 	return result
+}
+
+// Plan exposes the install plan to the downloader, which must fetch exactly
+// what an install would -- no more, and by the same digests.
+func (controller *Controller) Plan(ctx context.Context) (Plan, error) {
+	return controller.plan(ctx)
+}
+
+// OperationRunning reports whether an install is in progress.
+func (controller *Controller) OperationRunning() bool {
+	operation, err := controller.operations.Load()
+	return err == nil && operation != nil && operation.State == updatecheck.OperationRunning
 }
 
 func (controller *Controller) Apply(
@@ -322,15 +389,19 @@ func (controller *Controller) plan(ctx context.Context) (Plan, error) {
 	// the same question, and the registry could change it at any moment
 	// without the manifest changing at all.
 
+	mapper, _ := controller.runtime.(ServiceMapper)
 	components := make([]updatecheck.Component, 0, len(targets))
 	for index := range targets {
 		target := &targets[index]
-		currentRef, present, currentErr := controller.runtime.CurrentImage(ctx, target.Service)
+		if mapper != nil {
+			target.Service = mapper.ServiceFor(target.Name, target.Service)
+		}
+		running, currentErr := controller.runtime.Running(ctx, target.Name, target.Service)
 		if currentErr != nil {
 			return Plan{}, currentErr
 		}
-		target.CurrentRef = currentRef
-		target.Current = imageVersion(currentRef)
+		target.CurrentRef = running.Reference
+		target.Current = running.Version
 		if target.Current == "" {
 			target.Current = strings.TrimSpace(result.CurrentVersion)
 			if target.Current == "" {
@@ -338,7 +409,10 @@ func (controller *Controller) plan(ctx context.Context) (Plan, error) {
 			}
 		}
 		target.Reference = target.Image + ":" + target.Version + "@" + target.Digest
-		target.Changed = !present || imageDigest(currentRef) != target.Digest
+		// An unknown running digest counts as changed. That is the case for an
+		// image loaded from a tarball, which has no registry digest at all:
+		// installing a release over it is the only way to learn what it is.
+		target.Changed = !running.Present || running.Digest == "" || running.Digest != target.Digest
 		if target.Name == "hardware" && target.Changed {
 			result.HardwareConfirmationRequired = true
 		}

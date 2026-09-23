@@ -430,4 +430,16 @@ if grep -Eq -- '--filter-policy|ID_MM_DEVICE_' "${repo_dir}/deploy/README.md"; t
     fail "advanced deployment guide prescribes host ModemManager policy"
 fi
 
+# Every base image the release builds from is pinned by digest. An unpinned
+# one changes what ships without any change in this repository -- the embedded
+# NKN node was built from whatever nknorg/nkn:latest was on the day.
+for dockerfile in "${repo_dir}/Dockerfile" "${repo_dir}/hardware/Dockerfile"; do
+    grep -E '^ARG [A-Z_]*IMAGE=' "$dockerfile" | while IFS= read -r line; do
+        case "$line" in
+            *@sha256:????????????????????????????????????????????????????????????????) ;;
+            *) fail "base image is not digest pinned in ${dockerfile#"${repo_dir}"/}: ${line}" ;;
+        esac
+    done
+done
+
 printf '%s\n' "static-test: ok"

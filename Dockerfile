@@ -5,10 +5,17 @@ ARG GO_IMAGE=golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e5
 ARG RUNTIME_IMAGE=alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 ARG NGINX_IMAGE=nginx:1.30.4-alpine-slim@sha256:ddde39c6e51f02fde7410c2e9c234cf2d0a4c7bdbbe176aeb37d8ad7ab4eb58c
 ARG DOCKER_CLI_IMAGE=docker:28.5.2-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b1349fd857dd85035f98c2c9acbdd4d
-# Optional embedded NKN relay node (nknd/nknc, static binaries). Not digest
-# pinned: deployments reuse whatever nknorg/nkn image is already present locally
-# (air-gapped NAS hosts keep an offline copy), matching the GO_IMAGE override.
-ARG NKN_IMAGE=nknorg/nkn:latest
+# Embedded NKN relay node (nknd/nknc, static binaries). Pinned like every other
+# base image: release images are built on GitHub, where an unpinned "latest"
+# would silently put whatever nknorg pushed that day into the api image.
+# `latest` is the only multi-architecture tag nknorg publishes (the numbered
+# tags are amd64-only builds from 2021); this is its index as of 2026-01-09,
+# covering amd64, arm64 and arm/v6.
+#
+# An offline NAS whose local copy is a different digest keeps its old
+# behaviour with --build-arg NKN_IMAGE=nknorg/nkn:latest, the same way
+# deploy/fnos/compose_build_api3.sh overrides GO_IMAGE.
+ARG NKN_IMAGE=nknorg/nkn:latest@sha256:9a96013030545d71bdacee29922bb412a01bb71325ce246c36fb13623dfed07a
 
 FROM ${NODE_IMAGE} AS web-builder
 

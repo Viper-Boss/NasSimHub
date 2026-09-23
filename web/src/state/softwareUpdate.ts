@@ -1,12 +1,15 @@
 import { computed, ref } from 'vue'
 
-import { gateway } from '../api/client'
+import { API_ROOT, fixtureMode, gateway, get, parseUpdateCheck, writeJSON } from '../api/client'
 import type {
   UpdateCheck,
   UpdateComponent,
   UpdateComponentName,
+  UpdateDownload,
+  UpdateDownloadState,
   UpdateOperation,
-  UpdateOperationComponentState
+  UpdateOperationComponentState,
+  UpdateSource
 } from '../api/types'
 import { requestConfirmation } from './confirmation'
 import { showError } from './feedback'
@@ -43,6 +46,8 @@ const updateCheck = ref<UpdateCheck | null>(null)
 const checking = ref(false)
 const applying = ref(false)
 const startingUpdate = ref(false)
+const downloadStarting = ref(false)
+const savingPreference = ref(false)
 
 /** How many mounted screens are watching. The listener lives while any are. */
 let watchers = 0
@@ -143,11 +148,218 @@ function componentState(name: UpdateComponentName): UpdateOperationComponentStat
   return componentStates.value.get(name)
 }
 
+// ---------------------------------------------------------------------------
+// Background download.
+//
+// The gateway fetches a new release's images on its own, ahead of the operator
+// pressing anything, so that installing is a restart rather than a transfer.
+// What arrives here is the updater's record of that. The shell's parser passes
+// these three fields through unchecked -- it is in the startup bundle and this
+// module is not -- so they are validated here, where they are used.
+// ---------------------------------------------------------------------------
+
+const DOWNLOAD_STATES = new Set<UpdateDownloadState>(['pending', 'downloading', 'ready', 'failed'])
+const SOURCE_STATES = new Set<UpdateSource['state']>([
+  'verified',
+  'unreachable',
+  'invalid_signature',
+  'malformed'
+])
+
+/**
+ * The download for the version ON OFFER, or nothing.
+ *
+ * A record for any other version is discarded: "ready" beside a newer release
+ * than the one downloaded would invite pressing install on the strength of
+ * work done for something else. The updater already filters this; checking
+ * again here costs one comparison and does not depend on it.
+ */
+const download = computed<UpdateDownload | undefined>(() => {
+  const current = updateCheck.value
+  const candidate = current?.download
+  if (
+    !candidate ||
+    typeof candidate !== 'object' ||
+    typeof candidate.version !== 'string' ||
+    candidate.version !== current?.latest_version ||
+    !DOWNLOAD_STATES.has(candidate.state)
+  ) {
+    return undefined
+  }
+  return candidate
+})
+
+const downloading = computed(
+  () =>
+    downloadStarting.value ||
+    download.value?.state === 'downloading' ||
+    download.value?.state === 'pending'
+)
+const downloadReady = computed(() => download.value?.state === 'ready')
+const downloadFailed = computed(() => download.value?.state === 'failed')
+
+/** Undefined when this deployment has no updater to hold a preference. */
+const autoDownload = computed<boolean | undefined>(() =>
+  typeof updateCheck.value?.auto_download === 'boolean' ? updateCheck.value.auto_download : undefined
+)
+
+/**
+ * How many of the release's changed images are on the machine, 0-100.
+ *
+ * COUNTED, NOT ESTIMATED. Unlike the install ring, which weights a ladder of
+ * stages, this is simply images present out of images needed -- the updater
+ * reports each one as it lands. It moves in steps because the thing it counts
+ * comes in steps.
+ */
+const downloadProgress = computed(() => {
+  const parts = download.value?.components || []
+  if (parts.length === 0) return downloadReady.value ? 100 : 0
+  const done = parts.filter(part => part.state === 'ready').length
+  return Math.round((done / parts.length) * 100)
+})
+
+/** The release mirrors, as the last check found them. */
+const releaseSources = computed<UpdateSource[]>(() => {
+  const list = updateCheck.value?.sources
+  if (!Array.isArray(list)) return []
+  return list.filter(
+    (entry): entry is UpdateSource =>
+      !!entry &&
+      typeof entry === 'object' &&
+      typeof entry.name === 'string' &&
+      SOURCE_STATES.has(entry.state)
+  )
+})
+
+/**
+ * Mirrors that returned a verifying manifest for the version on offer, out of
+ * all mirrors asked. Counted from what the updater reported, never assumed.
+ */
+const sourceAgreement = computed(() => {
+  const latest = updateCheck.value?.latest_version
+  const all = releaseSources.value
+  return {
+    agreeing: all.filter(entry => entry.state === 'verified' && entry.version === latest).length,
+    total: all.length
+  }
+})
+
+/**
+ * Whether the release on offer came through signature verification.
+ *
+ * True exactly when a mirror reported a VERIFIED manifest for latest_version:
+ * the updater only ever reports a version it has verified against the key
+ * compiled into this build, so a latest_version with no verified source
+ * behind it would be a version nobody vouched for.
+ */
+const signatureVerified = computed(() => sourceAgreement.value.agreeing > 0)
+
+let downloadPoll: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * While a download runs, look again every few seconds.
+ *
+ * Polled rather than streamed: the download is the updater's own background
+ * work, not an operation on the runtime event stream, and it changes a handful
+ * of times over minutes. Only while something is watching, and only while
+ * there is something to watch.
+ */
+function scheduleDownloadPoll(): void {
+  if (downloadPoll) globalThis.clearTimeout(downloadPoll)
+  downloadPoll = undefined
+  if (!downloading.value || watchers === 0) return
+  downloadPoll = globalThis.setTimeout(() => {
+    downloadPoll = undefined
+    void checkForUpdates()
+  }, 8000)
+}
+
+let downloadStartFailedMessage = 'The download could not be started.'
+let preferenceFailedMessage = 'The setting could not be saved.'
+
+export function setSoftwareUpdateDownloadMessages(messages: {
+  downloadStartFailed: string
+  preferenceFailed: string
+}): void {
+  downloadStartFailedMessage = messages.downloadStartFailed
+  preferenceFailedMessage = messages.preferenceFailed
+}
+
+/** Fetch the offered release's images now. Never installs anything. */
+export async function startUpdateDownload(): Promise<void> {
+  const current = updateCheck.value
+  if (!current?.apply_available || downloading.value || applying.value) return
+  downloadStarting.value = true
+  try {
+    if (!fixtureMode) {
+      const started = (await writeJSON(`${API_ROOT}/updates/download`, 'POST', {}, 202)) as UpdateDownload
+      if (updateCheck.value) updateCheck.value = { ...updateCheck.value, download: started }
+    }
+  } catch {
+    showError(downloadStartFailedMessage)
+  } finally {
+    downloadStarting.value = false
+    scheduleDownloadPoll()
+  }
+}
+
+/**
+ * Switch background downloading on or off.
+ *
+ * Shown as changed at once and put back if the save fails, because a switch
+ * that waits on a network round trip before moving reads as broken.
+ */
+export async function setAutoDownload(enabled: boolean): Promise<void> {
+  if (savingPreference.value || autoDownload.value === undefined) return
+  const previous = autoDownload.value
+  savingPreference.value = true
+  if (updateCheck.value) updateCheck.value = { ...updateCheck.value, auto_download: enabled }
+  try {
+    if (!fixtureMode) {
+      const saved = (await writeJSON(
+        `${API_ROOT}/updates/preferences`,
+        'PUT',
+        { auto_download: enabled },
+        200
+      )) as { auto_download?: unknown }
+      if (updateCheck.value && typeof saved?.auto_download === 'boolean') {
+        updateCheck.value = { ...updateCheck.value, auto_download: saved.auto_download }
+      }
+    }
+  } catch {
+    if (updateCheck.value) updateCheck.value = { ...updateCheck.value, auto_download: previous }
+    showError(preferenceFailedMessage)
+  } finally {
+    savingPreference.value = false
+  }
+}
+
+/**
+ * The check, including the background-download fields.
+ *
+ * The shell's parser leaves download, auto_download and sources out: it is in
+ * the startup bundle every visitor downloads, and only these screens use them.
+ * So they are read here from the same response, and validated where they are
+ * used (see `download` and `releaseSources` above). The fixture gateway builds
+ * the whole object itself, so it goes through the gateway unchanged.
+ */
+async function fetchUpdateCheck(refresh: boolean): Promise<UpdateCheck> {
+  if (fixtureMode) return gateway.checkForUpdates(refresh)
+  const raw = await get(`${API_ROOT}/updates/check${refresh ? '?refresh=1' : ''}`)
+  const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return {
+    ...parseUpdateCheck(raw),
+    download: source.download as UpdateCheck['download'],
+    auto_download: source.auto_download as UpdateCheck['auto_download'],
+    sources: source.sources as UpdateCheck['sources']
+  }
+}
+
 export async function checkForUpdates(refresh = false): Promise<void> {
   if (checking.value) return
   checking.value = true
   try {
-    const result = await gateway.checkForUpdates(refresh)
+    const result = await fetchUpdateCheck(refresh)
     updateCheck.value = result
     if (result.operation?.state === 'running') {
       // An update started before this screen was open -- a reload during an
@@ -175,6 +387,7 @@ export async function checkForUpdates(refresh = false): Promise<void> {
     monitorRuntimeUpdateOperation()
   } finally {
     checking.value = false
+    scheduleDownloadPoll()
   }
 }
 
@@ -296,6 +509,7 @@ export function attachSoftwareUpdate(): () => void {
     if (watchers === 0) {
       closeRuntimeSubscription?.()
       closeRuntimeSubscription = undefined
+      scheduleDownloadPoll()
     }
   }
 }
@@ -317,6 +531,16 @@ export function useSoftwareUpdate() {
     changedComponents,
     displayedComponents,
     componentState,
-    progress
+    progress,
+    download,
+    downloading,
+    downloadReady,
+    downloadFailed,
+    downloadProgress,
+    autoDownload,
+    savingPreference,
+    releaseSources,
+    sourceAgreement,
+    signatureVerified
   }
 }

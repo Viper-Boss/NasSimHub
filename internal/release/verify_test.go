@@ -389,3 +389,30 @@ func firstLine(value []byte) string {
 	}
 	return string(value)
 }
+
+// TestAManifestSignedByTheConsoleVerifies feeds the exact document the issuing
+// console emits (nassimhub-license, internal/release, ConsoleDocumentVector)
+// to this package's strict decoder.
+//
+// The golden vector above proves both sides sign the same BYTES. This proves
+// the console writes the same JSON: field names, omitempty, nesting. The
+// decoder refuses unknown fields, so a console that added one -- or renamed
+// one -- would produce releases that sign perfectly and install nowhere.
+func TestAManifestSignedByTheConsoleVerifies(t *testing.T) {
+	_, public := testKeys(t)
+	const consoleDocument = `{"manifest":{"schema_version":3,"release_version":"v1.16.0","created_at":1790000000,"images":[{"name":"api","repository":"ghcr.io/viper-boss/nassimhub","tag":"v1.16.0","digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"name":"hardware","repository":"ghcr.io/viper-boss/nassimhub-hardware","tag":"v1.16.0","digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},{"name":"updater","repository":"ghcr.io/viper-boss/nassimhub-updater","tag":"v1.16.0","digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},{"name":"web","repository":"ghcr.io/viper-boss/nassimhub-web","tag":"v1.16.0","digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},"signature":"wLATKAL7IuoZ6qBQ6+2PZ/jC/ssvVKlNGnMVH353eTkz8THUVPuLxq/lJ3Y02MD7vgBUC3UZYutWWhTcbqGgDA=="}`
+	manifest, err := VerifyJSON(strings.NewReader(consoleDocument), public)
+	if err != nil {
+		t.Fatalf("a manifest signed by the console does not verify here: %v", err)
+	}
+	if manifest.ReleaseVersion != "v1.16.0" || len(manifest.Images) != 4 {
+		t.Fatalf("manifest = %+v", manifest)
+	}
+	// And the gateway's own planner would accept what it names.
+	for _, component := range Components() {
+		image, ok := manifest.Image(component)
+		if !ok || image.Repository != Repositories[component] {
+			t.Fatalf("component %s = %+v, %v", component, image, ok)
+		}
+	}
+}

@@ -27,6 +27,11 @@ jobs:
   release:
     name: Validate release tag
     runs-on: ubuntu-24.04
+    # packages: read only to ask whether the previous release's images exist
+    # under this namespace (see "Decide whether anything can be retained").
+    permissions:
+      contents: read
+      packages: read
     outputs:
       build-date: ${{ steps.release.outputs.build-date }}
       image-count: ${{ steps.release.outputs.image-count }}
@@ -51,6 +56,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           INCLUDE_HARDWARE: ${{ inputs.include_hardware }}
+          GITHUB_TOKEN_FOR_PROBE: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -102,12 +108,38 @@ jobs:
             exit 1
           fi
 
-          image_matrix="$(deploy/release-image-plan.sh \
+          # Decide whether anything can be retained.
+          #
+          # An unchanged component is normally re-tagged from the previous
+          # release rather than rebuilt. That needs the previous release's
+          # images to EXIST under this namespace -- and for this project's
+          # first release they do not: the previous stable tag in the history
+          # is the upstream project's, published somewhere else entirely.
+          # Retaining then fails halfway through the matrix. So ask the
+          # registry, and build everything if any of the four is missing.
+          force_all=false
+          if [[ -z "${previous_tag}" ]]; then
+            force_all=true
+          else
+            echo "${GITHUB_TOKEN_FOR_PROBE}" |
+              docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin >/dev/null
+            for image in nassimhub nassimhub-web nassimhub-hardware nassimhub-updater; do
+              if ! docker buildx imagetools inspect \
+                "ghcr.io/${namespace}/${image}:${previous_tag}" >/dev/null 2>&1; then
+                echo "ghcr.io/${namespace}/${image}:${previous_tag} does not exist; building every component"
+                force_all=true
+                break
+              fi
+            done
+          fi
+
+          image_matrix="$(bash deploy/release-image-plan.sh \
             "${RELEASE_TAG}" \
             "${vcs_ref}" \
             "${previous_tag}" \
             "${namespace}" \
-            "${INCLUDE_HARDWARE:-false}")"
+            "${INCLUDE_HARDWARE:-false}" \
+            "${force_all}")"
           image_count="$(jq -r '.include | length' <<<"${image_matrix}")"
           {
             echo "build-date=${build_date}"
@@ -212,8 +244,12 @@ jobs:
           [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
 
+      # GitHub offers artifact attestations to private repositories only on
+      # Enterprise Cloud; anywhere else this step fails and takes the whole
+      # release with it. Gateways do not rely on it -- they trust the console's
+      # signature over the digests -- so a private repository skips it.
       - name: Attest build provenance
-        if: matrix.mode == 'build'
+        if: matrix.mode == 'build' && !github.event.repository.private
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
           subject-name: ${{ env.IMAGE }}
@@ -233,3 +269,82 @@ jobs:
             echo
             echo "Published as \`${IMAGE}:${RELEASE_TAG}\`."
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  manifest:
+    # The last step a machine may do. It writes down which digests this
+    # release consists of, as release.unsigned.json, and stops.
+    #
+    # It does NOT sign. The signing key signs licences and releases for every
+    # gateway ever built, and it lives on the issuing console, offline -- not
+    # in a CI secret, where anyone who can edit a workflow can use it. Signing
+    # is done by uploading this file to the console's release page, which
+    # checks it against the same rules the gateways use and signs it there.
+    name: Record the release for signing
+    needs: [release, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out the release
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ needs.release.outputs.vcs-ref }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Write release.unsigned.json
+        shell: bash
+        env:
+          NAMESPACE: ${{ needs.release.outputs.namespace }}
+          RELEASE_TAG: ${{ needs.release.outputs.release-tag }}
+        run: |
+          set -euo pipefail
+          # Read back from the registry by the release tag, AFTER every push
+          # has finished: this is what the tag resolves to now, which is what
+          # the release engineer then checks and signs.
+          images='[]'
+          for pair in api:nassimhub web:nassimhub-web hardware:nassimhub-hardware updater:nassimhub-updater; do
+            name="${pair%%:*}"
+            repository="ghcr.io/${NAMESPACE}/${pair#*:}"
+            digest="$(docker buildx imagetools inspect \
+              "${repository}:${RELEASE_TAG}" --format '{{.Manifest.Digest}}')"
+            [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+            images="$(jq -c \
+              --arg name "${name}" --arg repository "${repository}" \
+              --arg tag "${RELEASE_TAG}" --arg digest "${digest}" \
+              '. + [{name: $name, repository: $repository, tag: $tag, digest: $digest}]' \
+              <<<"${images}")"
+          done
+          cloudflared="$(jq -c '{name: "cloudflared", repository: .cloudflared.image,
+            tag: .cloudflared.version, digest: .cloudflared.digest}' deploy/release-manifest.json)"
+          images="$(jq -c --argjson extra "${cloudflared}" '. + [$extra]' <<<"${images}")"
+          jq -n --arg version "${RELEASE_TAG}" --argjson images "${images}" \
+            '{release_version: $version, images: $images}' > release.unsigned.json
+          {
+            echo "### release.unsigned.json"
+            echo
+            echo "Sign this on the issuing console (发布签名), then publish the signed"
+            echo "file to the public release repository. Nothing is live until then."
+            echo
+            echo '```json'
+            cat release.unsigned.json
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Keep it as an artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-unsigned-${{ needs.release.outputs.release-tag }}
+          path: release.unsigned.json
+          if-no-files-found: error
+          retention-days: 90

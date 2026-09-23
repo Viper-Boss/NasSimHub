@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { lucideDirectImports } from './scripts/lucide-direct-imports.mjs'
 
 function repositoryVersion(): string {
   return `v${readFileSync(new URL('../VERSION', import.meta.url), 'utf8').trim()}`
@@ -16,6 +17,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      lucideDirectImports(),
       vue(),
       {
         name: 'modemdeck-build-identity',
@@ -51,7 +53,19 @@ export default defineConfig(({ mode }) => {
               {
                 name: 'icons',
                 test: /node_modules[\\/]@lucide[\\/]vue[\\/]/,
+                // Only the icons the startup shell itself draws. Icons used
+                // only by lazily loaded views stay in those views' chunks --
+                // which works only because scripts/lucide-direct-imports.mjs
+                // keeps the re-export-everything barrel out of the graph.
+                tags: ['$initial'],
                 priority: 10
+              },
+              {
+                // Every other icon, in one chunk that the first lazily loaded
+                // view fetches, rather than one tiny file per shared icon.
+                name: 'icons-lazy',
+                test: /node_modules[\\/]@lucide[\\/]vue[\\/]/,
+                priority: 9
               },
               {
                 name: 'app-shell',

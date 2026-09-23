@@ -342,4 +342,19 @@ func TestTheCanonicalEncodingIsPinned(t *testing.T) {
 	if string(message) != expected {
 		t.Fatalf("the canonical encoding changed.\n got:\n%s\nwant:\n%s", message, expected)
 	}
+
+	// And the signature over it, with the seed testKeys uses. The issuing
+	// console carries this exact vector (internal/report in nassimhub-license):
+	// it is the only thing that proves the console signs the bytes this
+	// package verifies, since the two cannot import each other.
+	private, _, _ := testKeys(t)
+	signed, err := Sign(testNonce, testMachine, time.Unix(1790000000, 0), private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const pinnedSignature = "CuOsDpSDU6Iiwo4ves+emex1uBGQC0AJ7OH9dNoB4u3jTrS0xBvDd+FsknXMREnurz1mPSoTNSQ2mGPfohuvBA=="
+	if signed.Signature != pinnedSignature {
+		t.Fatalf("the signature over the pinned vector changed.\n got: %s\nwant: %s",
+			signed.Signature, pinnedSignature)
+	}
 }

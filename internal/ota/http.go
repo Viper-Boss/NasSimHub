@@ -1,6 +1,7 @@
 package ota
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -14,8 +15,29 @@ import (
 const maximumRequestBytes = 16 << 10
 
 type Handler struct {
-	controller *Controller
-	token      string
+	controller  *Controller
+	token       string
+	downloader  *Downloader
+	preferences PreferenceStore
+	running     RunningImagesReporter
+}
+
+// RunningImagesReporter answers what every component is running.
+type RunningImagesReporter interface {
+	RunningImages(context.Context) ([]updatecheck.RunningImage, error)
+}
+
+// WithDownloads enables the download and preference routes.
+func (handler *Handler) WithDownloads(downloader *Downloader, preferences PreferenceStore) *Handler {
+	handler.downloader = downloader
+	handler.preferences = preferences
+	return handler
+}
+
+// WithRunning enables the running-images route.
+func (handler *Handler) WithRunning(reporter RunningImagesReporter) *Handler {
+	handler.running = reporter
+	return handler
 }
 
 func NewHandler(controller *Controller, token string) (*Handler, error) {
@@ -91,6 +113,63 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		default:
 			writeJSON(response, http.StatusAccepted, operation)
 		}
+	case "/v1/updates/download":
+		if request.Method != http.MethodPost {
+			methodNotAllowed(response, http.MethodPost)
+			return
+		}
+		if handler.downloader == nil {
+			writeError(response, http.StatusServiceUnavailable, "download_unsupported")
+			return
+		}
+		download, err := handler.downloader.Start(request.Context())
+		switch {
+		case errors.Is(err, ErrNothingToDownload):
+			writeError(response, http.StatusConflict, "update_not_available")
+		case err != nil:
+			writeError(response, http.StatusServiceUnavailable, "updater_unavailable")
+		default:
+			writeJSON(response, http.StatusAccepted, download)
+		}
+	case "/v1/updates/preferences":
+		if handler.preferences == nil {
+			writeError(response, http.StatusServiceUnavailable, "download_unsupported")
+			return
+		}
+		switch request.Method {
+		case http.MethodGet:
+			writeJSON(response, http.StatusOK, handler.preferences.Load())
+		case http.MethodPut:
+			var input updatecheck.Preferences
+			decoder := json.NewDecoder(io.LimitReader(request.Body, maximumRequestBytes))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&input); err != nil {
+				writeError(response, http.StatusBadRequest, "invalid_request")
+				return
+			}
+			if err := handler.preferences.Save(input); err != nil {
+				writeError(response, http.StatusServiceUnavailable, "preferences_unavailable")
+				return
+			}
+			writeJSON(response, http.StatusOK, handler.preferences.Load())
+		default:
+			methodNotAllowed(response, http.MethodGet+", "+http.MethodPut)
+		}
+	case "/v1/updates/running":
+		if request.Method != http.MethodGet {
+			methodNotAllowed(response, http.MethodGet)
+			return
+		}
+		if handler.running == nil {
+			writeError(response, http.StatusServiceUnavailable, "running_unavailable")
+			return
+		}
+		images, err := handler.running.RunningImages(request.Context())
+		if err != nil {
+			writeError(response, http.StatusServiceUnavailable, "running_unavailable")
+			return
+		}
+		writeJSON(response, http.StatusOK, map[string]any{"images": images})
 	default:
 		writeError(response, http.StatusNotFound, "not_found")
 	}

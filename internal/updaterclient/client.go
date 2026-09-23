@@ -24,6 +24,11 @@ var (
 	ErrHardwareConfirmationRequired = errors.New("hardware update confirmation is required")
 	ErrOperationRunning             = errors.New("a software update is already running")
 	ErrUnavailable                  = errors.New("software updater is unavailable")
+	// ErrNothingToDownload means there is no installable release to fetch.
+	ErrNothingToDownload = errors.New("no installable release is on offer")
+	// ErrDownloadUnsupported means this updater cannot fetch ahead of
+	// installing -- an older updater, or a runtime without that ability.
+	ErrDownloadUnsupported = errors.New("this updater cannot download ahead of installing")
 )
 
 type HTTPClient interface {
@@ -98,6 +103,34 @@ func (client *Client) Status(ctx context.Context) (updatecheck.Operation, error)
 	return operation, err
 }
 
+// Download starts a background download of the release on offer.
+func (client *Client) Download(ctx context.Context) (updatecheck.Download, error) {
+	var download updatecheck.Download
+	err := client.request(ctx, http.MethodPost, "/v1/updates/download", nil, &download)
+	return download, err
+}
+
+// SetPreferences saves the operator's update preferences.
+func (client *Client) SetPreferences(
+	ctx context.Context,
+	preferences updatecheck.Preferences,
+) (updatecheck.Preferences, error) {
+	var saved updatecheck.Preferences
+	err := client.request(ctx, http.MethodPut, "/v1/updates/preferences", preferences, &saved)
+	return saved, err
+}
+
+// RunningImages reports what every component is running.
+func (client *Client) RunningImages(ctx context.Context) ([]updatecheck.RunningImage, error) {
+	var response struct {
+		Images []updatecheck.RunningImage `json:"images"`
+	}
+	if err := client.request(ctx, http.MethodGet, "/v1/updates/running", nil, &response); err != nil {
+		return nil, err
+	}
+	return response.Images, nil
+}
+
 func (client *Client) request(
 	ctx context.Context,
 	method, path string,
@@ -142,6 +175,10 @@ func (client *Client) request(
 			return ErrHardwareConfirmationRequired
 		case "update_in_progress":
 			return ErrOperationRunning
+		case "update_not_available":
+			return ErrNothingToDownload
+		case "download_unsupported", "not_found":
+			return ErrDownloadUnsupported
 		default:
 			return ErrUnavailable
 		}

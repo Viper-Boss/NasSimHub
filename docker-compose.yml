@@ -112,6 +112,11 @@ services:
       # certificates with cmd/licensegen. See internal/license/issuer_key.go.
       # cmd/modemdeck/compose_env_test.go fails if it reappears in any Compose
       # or example env file.
+      # Where the api looks for the signed stable release when there is no
+      # updater container to ask (the deploy/fnos stack, for one). It can then
+      # SAY an update exists, though nothing here can install it. Empty uses
+      # the built-in mirrors; see internal/releasechannel.
+      MODEMDECK_RELEASE_CHANNEL_URLS: ${MODEMDECK_RELEASE_CHANNEL_URLS:-}
       MODEMDECK_HEALTHCHECK_URL: http://127.0.0.1:8080/api/v1/health/ready
       MODEMDECK_LIVENESS_URL: http://127.0.0.1:8080/api/v1/health/live
     secrets:

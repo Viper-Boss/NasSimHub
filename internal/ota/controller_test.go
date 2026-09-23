@@ -163,9 +163,19 @@ type fakeRuntime struct {
 	started     *WorkerRequest
 }
 
-func (runtime *fakeRuntime) CurrentImage(_ context.Context, service string) (string, bool, error) {
+func (runtime *fakeRuntime) Running(
+	_ context.Context,
+	component, service string,
+) (updatecheck.RunningImage, error) {
 	image, ok := runtime.images[service]
-	return image, ok, nil
+	return updatecheck.RunningImage{
+		Component: component,
+		Service:   service,
+		Present:   ok,
+		Reference: image,
+		Digest:    imageDigest(image),
+		Version:   imageVersion(image),
+	}, nil
 }
 
 func (runtime *fakeRuntime) Managed(service string) bool {
@@ -248,4 +258,29 @@ func testManifest(cloudflaredDigest string) ReleaseManifest {
 
 func testDigest(character string) string {
 	return "sha256:" + strings.Repeat(character, 64)
+}
+
+// An image loaded from a tarball -- how the fnOS package installs -- has no
+// registry digest. It must be planned as changed: the alternative is treating
+// "we cannot tell what this is" as "this is already the release", and never
+// installing over it.
+func TestAnImageWithNoKnownDigestIsPlannedAsChanged(t *testing.T) {
+	t.Parallel()
+	manifest := testManifest(testDigest("8"))
+	runtime := &fakeRuntime{images: map[string]string{
+		"api":       "nassimhub-beta-api:0.9.0",
+		"modemdeck": manifest.Images.Web + ":v2.0.0@" + testDigest("b"),
+		"hardware":  manifest.Images.Hardware + ":v2.0.0@" + testDigest("9"),
+		"updater":   manifest.Images.Updater + ":v2.0.0@" + testDigest("c"),
+	}}
+	controller := newTestController(t, runtime, manifest, testDigest("9"))
+	result := controller.Check(context.Background())
+	for _, component := range result.Components {
+		if component.Name == "api" && !component.Changed {
+			t.Fatal("an image of unknown digest was treated as already installed")
+		}
+		if component.Name != "api" && component.Changed {
+			t.Fatalf("%s changed although its digest matches", component.Name)
+		}
+	}
 }

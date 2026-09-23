@@ -7,7 +7,6 @@ import { reactive } from 'vue'
 // state/hiddenCommands.ts when the other reveals were given the same
 // treatment: typing on the page works for all of them now, not just this one.
 const STORAGE_KEY = 'modemdeck.wireguardChartUnlocked'
-const PHRASE = 'wireguard'
 
 function restore(): boolean {
   try {

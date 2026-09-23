@@ -35,54 +35,59 @@ function code(source) {
 
 // The update card at the foot of the dashboard. It was drawn from a mock-up
 // that showed three green ticks -- integrity, source agreement, signature --
-// and a "3/3 sources agree" badge, on a gateway where exactly one of those
-// four things is true. The tests here are mostly about it staying honest,
-// because the failure mode is silent: a green tick beside "signature verified"
-// costs nothing to render, looks correct, and is read by the person deciding
-// whether an update is safe to install.
+// and a "3/3 sources agree" badge. When the card was built only one of those
+// was true, and these tests kept the other two dark. The release path has
+// since been rebuilt (signed manifests, several mirrors), so the rows may now
+// light -- but only from what the check REPORTED. The failure mode is still
+// silent: a green tick costs nothing to render and is read by the person
+// deciding whether an update is safe to install.
 
-test('the card claims only the one check the gateway actually performs', () => {
-  // Exactly one verification row may be marked active. Integrity is real:
-  // images are pulled by sha256 digest and Docker enforces it. Source
-  // agreement needs a second source, which does not exist. Signature needs a
-  // signature, which releases do not carry.
+test('each verification row is lit only by what the check reported', () => {
   const block = card.slice(
     card.indexOf('const verifications = computed'),
     card.indexOf('const componentLabels')
   )
   assert.ok(block.length > 0, 'the verification rows are gone')
 
-  const actives = [...block.matchAll(/active:\s*(true|false)/g)].map(match => match[1])
-  assert.equal(actives.length, 3, `expected three verification rows, found ${actives.length}`)
-  assert.equal(
-    actives.filter(value => value === 'true').length,
-    1,
-    'more than one verification row is marked active; only digest pinning is actually enforced'
-  )
+  const rows = ['integrity', 'consensus', 'signature'].map(key => {
+    const from = block.indexOf(`key: '${key}'`)
+    assert.ok(from >= 0, `the ${key} row is gone`)
+    const to = block.indexOf('key:', from + 5)
+    return block.slice(from, to < 0 ? undefined : to)
+  })
+  const [integrity, consensus, signature] = rows
 
-  // And the active one has to be the integrity row, not whichever row happens
-  // to be first after an edit.
-  const integrity = block.slice(block.indexOf("key: 'integrity'"), block.indexOf("key: 'consensus'"))
-  assert.match(integrity, /active:\s*true/, 'the integrity row is no longer the enforced one')
+  // Integrity is enforced on every pull by Docker itself: always on.
+  assert.match(integrity, /active:\s*true/)
+  // The other two must come from the check, never a literal.
+  assert.doesNotMatch(consensus, /active:\s*true/, 'source agreement is claimed unconditionally')
+  assert.doesNotMatch(signature, /active:\s*true/, 'the signature is claimed unconditionally')
+  assert.match(consensus, /active:\s*sourceAgreement\.value\.agreeing >= 2/)
+  assert.match(signature, /active:\s*signatureVerified\.value/)
+
+  // And "verified" is derived from a mirror that reported a VERIFIED manifest
+  // for the very version on offer -- not from the version merely existing.
+  assert.match(controller, /entry\.state === 'verified' && entry\.version === latest/)
+  assert.match(controller, /const signatureVerified = computed\(\(\) => sourceAgreement\.value\.agreeing > 0\)/)
 })
 
 test('the card does not invent sources or a consensus count', () => {
-  // The mock-up's "3/3" badge. If a count like this ever appears it has to
-  // come from something that counted, and today nothing does.
+  // The mock-up's "3/3" badge. A count may appear only as computed from what
+  // the mirrors returned.
   assert.doesNotMatch(
     code(card),
     /\b3\s*\/\s*3\b/,
     'a source-agreement count is hardcoded in the card'
   )
-
-  const sources = card.slice(card.indexOf('const sources = computed'), card.indexOf('/** The three verification'))
-  const wired = [...sources.matchAll(/wired:\s*(true|false)/g)].map(match => match[1])
-  assert.equal(wired.length, 3, `expected three sources, found ${wired.length}`)
-  assert.equal(
-    wired.filter(value => value === 'true').length,
-    1,
-    'more than one update source is marked wired up; only GitHub is queried'
-  )
+  const sources = card.slice(card.indexOf('const sources = computed'), card.indexOf('const sourcesSummary'))
+  assert.match(sources, /releaseSources\.value\.map/, 'mirror rows no longer come from the check')
+  // Mirrors are lit only when they verified.
+  assert.match(sources, /wired: entry\.state === 'verified'/)
+  // DHT and NKN are not built, and must say so.
+  for (const key of ['dht', 'nkn']) {
+    const row = sources.slice(sources.indexOf(`key: '${key}'`))
+    assert.match(row.slice(0, 200), /wired: false/, `${key} is presented as a working source`)
+  }
 })
 
 test('the ring is driven by real operation state, not a timer', () => {
@@ -91,7 +96,7 @@ test('the ring is driven by real operation state, not a timer', () => {
   // exactly why it must not be there: the gateway exposes no byte count, so
   // anything smoother than the component ladder would be invented motion.
   assert.doesNotMatch(code(card), /setInterval|setTimeout|Math\.random/)
-  assert.match(card, /progress\s*\}\s*=\s*useSoftwareUpdate\(\)|progress[\s\S]{0,80}useSoftwareUpdate/)
+  assert.match(card, /\n  progress,\n[\s\S]{0,400}\} = useSoftwareUpdate\(\)/)
   assert.match(card, /:stroke-dashoffset=/, 'the ring no longer draws from a computed offset')
   assert.match(card, /role="progressbar"/)
   // Indeterminate until the first frame arrives, rather than reporting zero:
@@ -99,7 +104,7 @@ test('the ring is driven by real operation state, not a timer', () => {
   assert.match(card, /ringIndeterminate/)
   assert.match(
     card,
-    /:aria-valuenow="ringIndeterminate \? undefined : progress"/,
+    /:aria-valuenow="ringIndeterminate \? undefined : ringValue"/,
     'the ring reports a number while it has none to report'
   )
 
@@ -145,17 +150,46 @@ test('the card is admin only and lazily loaded', () => {
   assert.match(dashboard, /<SoftwareUpdateCard \/>/)
 })
 
-test('the card says that nothing is pre-downloaded', () => {
-  // The mock-up showed "auto-download on, waiting to install". There is no
-  // pre-download: `docker pull` runs inside apply. Saying otherwise would set
-  // up the operator to expect an instant install and then watch a spinner.
+test('the download is the updater\'s, shown as reported and never installed from here', () => {
+  // The switch shows the preference the updater holds, and is hidden when
+  // there is no updater to hold one -- not a hardcoded "on" or "off".
+  assert.match(card, /v-if="autoDownloadKnown"/)
+  assert.match(card, /role="switch"/)
+  assert.match(card, /:aria-checked="autoDownload \? 'true' : 'false'"/)
+  assert.doesNotMatch(code(card), /autoDownload\s*=\s*(true|false)\b/)
+
+  // Downloading and preferences go through the controller like everything
+  // else; the card has no request of its own.
+  assert.match(card, /setAutoDownload\(/)
+  assert.match(card, /startUpdateDownload/)
+  assert.doesNotMatch(code(card), /writeJSON|\/updates\/download|\/updates\/preferences/)
+
+  // The install button waits for a running download rather than racing it.
+  // Checked inside canApply itself: the download button's own guard also
+  // mentions !downloading.value, so a whole-file match would prove nothing.
+  const canApplyStart = card.indexOf('const canApply = computed(')
+  assert.ok(canApplyStart >= 0, 'canApply is gone')
+  const canApplyBody = card.slice(canApplyStart, card.indexOf('\n)\n', canApplyStart))
+  assert.match(canApplyBody, /!downloading\.value/)
+  assert.match(canApplyBody, /!applying\.value/)
+
+  // A download for another version is never shown as this one's.
+  assert.match(controller, /candidate\.version !== current\?\.latest_version/)
+
+  // The download ring counts images present, not an invented curve.
+  assert.match(controller, /part\.state === 'ready'/)
+  assert.match(card, /showingDownload\.value \? downloadProgress\.value : progress\.value/)
+
+  // Polling while a download runs lives in the controller, gated on watchers
+  // and on there being a download to watch.
+  assert.match(controller, /if \(!downloading\.value \|\| watchers === 0\) return/)
+
   for (const locale of ['zh-CN', 'en-US']) {
     const labels = softwareUpdateCardLabels(locale)
-    assert.ok(labels.autoDownloadOff, `${locale} has no auto-download-off label`)
-    assert.ok(labels.autoDownloadHint, `${locale} does not explain what that means`)
+    for (const key of ['autoDownloadOn', 'autoDownloadOff', 'downloading', 'downloadReadyHint', 'downloadFailedHint']) {
+      assert.ok(labels[key], `${locale} has no ${key}`)
+    }
   }
-  assert.match(card, /autoDownloadOff/)
-  assert.doesNotMatch(code(card), /autoDownloadOn|已自动下载/)
 })
 
 test('both shipped locales carry the same keys, and the rest fall back to English', () => {

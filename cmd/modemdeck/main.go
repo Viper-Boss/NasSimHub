@@ -34,13 +34,13 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/platform/database"
 	"github.com/human-agent65535/modemdeck/internal/provision"
 	"github.com/human-agent65535/modemdeck/internal/recording"
+	"github.com/human-agent65535/modemdeck/internal/releasechannel"
 	"github.com/human-agent65535/modemdeck/internal/runtimeevents"
 	"github.com/human-agent65535/modemdeck/internal/secretbox"
 	"github.com/human-agent65535/modemdeck/internal/store"
 	"github.com/human-agent65535/modemdeck/internal/telegramruntime"
 	"github.com/human-agent65535/modemdeck/internal/telegramsettings"
 	"github.com/human-agent65535/modemdeck/internal/tlsmanager"
-	"github.com/human-agent65535/modemdeck/internal/updatecheck"
 	"github.com/human-agent65535/modemdeck/internal/updaterclient"
 )
 
@@ -370,7 +370,19 @@ func run(
 		_ = db.Close()
 		return fmt.Errorf("create network runtime: %w", err)
 	}
-	var updateChecker httpapi.UpdateChecker = updatecheck.New(updatecheck.Options{CurrentVersion: version})
+	// Without an updater the api asks the signed release channel itself, so
+	// it can at least say a release exists. It used to ask the GitHub
+	// releases API for the private source repository, which answers 404 to
+	// everyone without a token: every gateway reported "no release" forever.
+	channelURLs, droppedChannelURLs := releasechannel.ParseURLs(os.Getenv("MODEMDECK_RELEASE_CHANNEL_URLS"))
+	if len(droppedChannelURLs) > 0 {
+		logger.Warn("ignoring release channel entries that are not http(s) URLs",
+			"component", "updates", "dropped", droppedChannelURLs)
+	}
+	var updateChecker httpapi.UpdateChecker = releasechannel.New(releasechannel.Options{
+		URLs:           channelURLs,
+		CurrentVersion: func() string { return version },
+	})
 	var updateManager httpapi.UpdateManager
 	if updaterURL := strings.TrimSpace(os.Getenv("MODEMDECK_UPDATER_URL")); updaterURL != "" {
 		tokenFile := strings.TrimSpace(os.Getenv("MODEMDECK_UPDATER_TOKEN_FILE"))
