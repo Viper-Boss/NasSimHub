@@ -1,0 +1,36 @@
+#!/bin/bash
+# r116 deployment: snapshot (done) -> web overlay + api full rebuild (both --no-cache)
+set -u
+SRC=/volume1/docker/homesim/source/nas-comm-gateway-r6
+LOG=/tmp/r116-build.log
+cd "$SRC" || exit 1
+
+echo "=== web overlay build $(date) ===" > "$LOG"
+printf '%s\n' \
+  'FROM nas-comm-web:flat' \
+  'USER root' \
+  'RUN chmod -R u+w /usr/share/nginx/html && rm -rf /usr/share/nginx/html/*' \
+  'COPY dist/ /usr/share/nginx/html/' \
+  'RUN chown -R 101:101 /usr/share/nginx/html' \
+  'USER 101:101' > /tmp/r116-web-overlay.df
+docker build --no-cache -f /tmp/r116-web-overlay.df --tag nas-comm-web:fnos-local-0.1 web/ >> "$LOG" 2>&1
+echo "web rc=$?" >> "$LOG"
+
+echo "=== api full build $(date) ===" >> "$LOG"
+docker build --no-cache \
+  --build-arg APT_MIRROR=mirrors.aliyun.com \
+  --build-arg GO_IMAGE="golang:1.26.5-bookworm@sha256:53eeac89074db483fdf0ab3be1df32bf6e47562263d2d0d6baa7f26acb4957dd" \
+  --build-arg MODEMDECK_UID=10001 \
+  --build-arg MODEMDECK_GID=10001 \
+  --build-arg VERSION=fnos-local-0.1 \
+  --build-arg BUILD_DATE=unknown \
+  --build-arg VCS_REF=r116 \
+  --target runtime \
+  --tag nas-comm-api:fnos-local-0.1 \
+  --file Dockerfile \
+  . >> "$LOG" 2>&1
+echo "api rc=$?" >> "$LOG"
+
+echo "=== images $(date) ===" >> "$LOG"
+docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep -E '^nas-comm-(api|web):fnos-local-0.1' >> "$LOG" 2>&1
+echo "=== BUILD ALL DONE $(date) ===" >> "$LOG"

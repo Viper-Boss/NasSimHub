@@ -35,6 +35,12 @@ RUN npm run build
 
 FROM ${GO_IMAGE} AS go-toolchain
 
+# Build machines that cannot reach deb.debian.org (several fnOS NAS boxes
+# resolve it to a refused connection) can pass
+# --build-arg APT_MIRROR=mirrors.aliyun.com without changing anything else;
+# the default keeps the upstream sources. Same escape hatch as NKN_IMAGE.
+ARG APT_MIRROR=deb.debian.org
+
 ENV GOTOOLCHAIN=local \
     CGO_ENABLED=1 \
     GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
@@ -42,7 +48,8 @@ WORKDIR /workspace
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update \
+    sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends libopus-dev=1.3.1-3
 
 
