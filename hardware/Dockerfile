@@ -2,6 +2,10 @@
 
 ARG DEBIAN_IMAGE=debian:trixie-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd
 ARG GO_IMAGE=golang:1.26.5-trixie@sha256:4ee9ffa999b4583ce281939cdff828763083610292f252279a0cee77473bd9a7
+# Optional apt mirror override for restricted networks (e.g. NAS cannot reach
+# deb.debian.org). Pass --build-arg APT_MIRROR=mirrors.aliyun.com at build time;
+# the default keeps upstream sources untouched.
+ARG APT_MIRROR=deb.debian.org
 
 FROM --platform=${BUILDPLATFORM} ${GO_IMAGE} AS agent-builder
 
@@ -56,11 +60,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM ${DEBIAN_IMAGE} AS modemmanager-builder
 
 ARG MODEMMANAGER_DEBIAN_VERSION=1.24.0-1+deb13u1
+ARG APT_MIRROR=deb.debian.org
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /source
 
-RUN sed -i 's/^Types: deb$/Types: deb deb-src/' \
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
+        /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's/^Types: deb$/Types: deb deb-src/' \
         /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -118,10 +125,13 @@ ARG VERSION=dev
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 ARG MODEMMANAGER_DEBIAN_VERSION=1.24.0-1+deb13u1
+ARG APT_MIRROR=deb.debian.org
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         adb \
         alsa-utils \
