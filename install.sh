@@ -943,7 +943,10 @@ else
             --format '{{range .RepoDigests}}{{println .}}{{end}}' \
             "$pin_tagged_ref" |
             awk -F@ -v image="$pin_image" '
-                $1 == image && $2 ~ /^sha256:[0-9a-f]{64}$/ {
+                # mawk (fnOS appliances) does not support interval
+                # expressions like {64}, so the digest length is checked
+                # with length() instead of a counted repetition.
+                $1 == image && $2 ~ /^sha256:[0-9a-f]+$/ && length($2) == 71 {
                     print $2
                     found = 1
                     exit

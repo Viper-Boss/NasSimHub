@@ -107,7 +107,9 @@ awk '
         ref = $0
         sub(/^.*@/, "", ref)
         sub(/[[:space:]]+#.*$/, "", ref)
-        if (ref !~ /^[0-9a-f]{40}$/) {
+        # mawk (fnOS appliances) lacks interval expressions, so the 40-char
+        # commit-SHA length is checked with length() instead of {40}.
+        if (ref !~ /^[0-9a-f]+$/ || length(ref) != 40) {
             print "unpinned action: " $0 > "/dev/stderr"
             invalid = 1
         }
