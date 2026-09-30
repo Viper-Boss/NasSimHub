@@ -126,6 +126,25 @@ test('a pill is only tinted by a state that arrived from the endpoint', () => {
   )
 })
 
+test('a row the gateway sent without a value is worded by its state, never "on" by default', () => {
+  // The gateway sends "pinning: off" and "replay: ok" as bare states. A pill
+  // that fell back to "on" for any row without a value -- which is what this
+  // card did while nothing answered -- would tell the operator their gateway
+  // pins keys, which nothing in it does.
+  const template = cardTemplate('dashboard.secTitle')
+  assert.doesNotMatch(
+    template,
+    /\|\|\s*t\('dashboard\.secOn'\)/,
+    'a pill without a value falls back to "on" whatever its state'
+  )
+  const fn = extra.slice(extra.indexOf('function pillText'), extra.indexOf('function pillTitle'))
+  assert.match(fn, /case 'ok': return t\('dashboard\.secOn'\)/)
+  assert.match(fn, /case 'off': return t\('dashboard\.secOff'\)/)
+  // Anything else -- "unknown", or a state added later -- is unknown, not on.
+  assert.match(fn, /default: return t\('dashboard\.secUnknown'\)/)
+  assert.match(template, /\{\{ pillText\(entry\.row\) \}\}/, 'the pill no longer uses its state-aware wording')
+})
+
 test('each pending card says its endpoint is missing, and stops saying so once it is not', () => {
   // Without this the dashes read as "nothing happened today" rather than "we
   // have not been told". And the note has to disappear when the payload
@@ -224,6 +243,7 @@ test('every new label exists in all nine locales', () => {
     'secReplay', 'secPacketAuth', 'secOta', 'secEventsPending', 'secEventsTitle',
     'secAnomalous', 'secKeyState', 'secReplayBlocked', 'secDowngradeGuard',
     'secKeyOk', 'secKeyWarn', 'secKeyExpired', 'secOn', 'secOff',
+    'secUnknown', 'secUnknownNote',
     'modTitle', 'modPortsLabel',
     'statsTitle', 'statsWindow', 'statsSmsIn', 'statsSmsOut', 'statsSmsFailed',
     'statsSmsCode', 'statsTrend'

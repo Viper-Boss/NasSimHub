@@ -59,6 +59,8 @@ func TestEveryEnvironmentVariableReachesTheContainer(t *testing.T) {
 	// exists for, sitting just outside where it was looking.
 	binaries := []string{
 		filepath.Join("cmd", "modemdeck", "main.go"),
+		// Node settings are read beside their wiring, not in main.go.
+		filepath.Join("cmd", "modemdeck", "nassimhub_nodes.go"),
 		filepath.Join("cmd", "modemdeck-updater", "main.go"),
 	}
 

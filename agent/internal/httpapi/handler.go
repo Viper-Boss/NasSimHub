@@ -137,6 +137,8 @@ func NewWithOptions(
 	mux.HandleFunc("PUT /v1/dht", h.putDHT)
 	mux.HandleFunc("GET /v1/dht/identity", h.getDHTIdentity)
 	mux.HandleFunc("POST /v1/dht/dial", h.postDHTDial)
+	mux.HandleFunc("PUT /v1/dht/release", h.putDHTRelease)
+	mux.HandleFunc("POST /v1/dht/release/fetch", h.postDHTReleaseFetch)
 	mux.HandleFunc("GET /v1/lines/{id}/configuration", h.getDeviceConfiguration)
 	mux.HandleFunc("PATCH /v1/lines/{id}/configuration", h.patchDeviceConfiguration)
 	mux.HandleFunc("GET /v1/lines/{id}/sim", h.getSIMStatus)

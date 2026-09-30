@@ -127,6 +127,9 @@ var allowedProtocols = []string{
 	"/ipfs/id/push/1.0.0", // identify push
 	"/ipfs/ping/1.0.0",    // liveness only
 	ProtocolPrefix + "/kad/1.0.0",
+	// The signed release manifest, and nothing else: see release.go for why
+	// this one document is not "other people's traffic".
+	ReleaseProtocol,
 }
 
 // Service owns the host for the life of the process.
@@ -145,6 +148,10 @@ type Service struct {
 	// lanFound counts peers mDNS has handed us, so the status can say whether
 	// LAN discovery is doing anything rather than leaving it a mystery.
 	lanFound int
+	// release is the signed manifest this node shares (release.go). It
+	// outlives the host: switching the DHT off and on again keeps sharing
+	// what the api last handed over.
+	release releaseShelf
 }
 
 func New(stateDir string) *Service {
@@ -269,6 +276,7 @@ func (s *Service) startLocked(ctx context.Context, cfg Config) error {
 		_ = created.Close()
 		return fmt.Errorf("start Kademlia: %w", err)
 	}
+	created.SetStreamHandler(ReleaseProtocol, s.serveRelease)
 	// Belt and braces over the option list above: whatever the stack actually
 	// registered, only the allowlist survives.
 	removed := pruneStreamHandlers(created)

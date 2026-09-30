@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Probe v4: try apt sandbox/root and forceipv4 knobs inside failing RUN."""
+
+SRC = '/volume1/docker/homesim/source/nas-comm-gateway-r6/hardware/Dockerfile'
+DST = '/tmp/hwdebug4.Dockerfile'
+
+src = open(SRC).read()
+probe = (
+    '&& echo APT-TRY-SANDBOX-ROOT && apt-get update -o APT::Sandbox::User=root '
+    '-o Acquire::ForceIPv4=true -o Debug::pkgAcquire::Worker=1'
+)
+count = src.count('&& apt-get update')
+out = src.replace('&& apt-get update', probe, 1)
+open(DST, 'w').write(out)
+print('injected:', count)

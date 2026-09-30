@@ -50,6 +50,8 @@ type loginFailureLimiter struct {
 	now      func() time.Time
 	global   loginFailureState
 	accounts map[[sha256.Size]byte]loginFailureState
+	// history outlives the throttling state above: see loginFailureHistory.
+	history *loginFailureHistory
 }
 
 func newLoginFailureLimiter(policy loginFailurePolicy) *loginFailureLimiter {
@@ -57,6 +59,7 @@ func newLoginFailureLimiter(policy loginFailurePolicy) *loginFailureLimiter {
 		policy:   policy,
 		now:      time.Now,
 		accounts: make(map[[sha256.Size]byte]loginFailureState),
+		history:  newLoginFailureHistory(time.Now()),
 	}
 }
 
@@ -86,6 +89,7 @@ func (limiter *loginFailureLimiter) retryAfter(username string) time.Duration {
 func (limiter *loginFailureLimiter) recordFailure(username string) {
 	now := limiter.now()
 	accountKey := loginAccountKey(username)
+	limiter.history.record(now)
 
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()

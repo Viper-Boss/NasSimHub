@@ -1,0 +1,6 @@
+# syntax=docker/dockerfile:1.19@sha256:b6afd42430b15f2d2a4c5a02b919e98a525b785b1aaff16747d2f623364e39b6
+FROM debian:trixie-slim@sha256:020c0d20b9880058cbe785a9db107156c3c75c2ac944a6aa7ab59f2add76a7bd
+RUN getent hosts mirrors.aliyun.com; echo one=$?
+RUN getent hosts mirrors.aliyun.com; echo two=$?
+RUN getent hosts mirrors.aliyun.com; echo three=$?
+RUN getent hosts mirrors.aliyun.com; echo four=$?

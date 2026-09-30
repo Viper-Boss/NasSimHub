@@ -1282,9 +1282,10 @@ onBeforeUnmount(() => {
                        own. Four tracks fit across at the widths this dashboard
                        is used at, and the network cards only ever fill two of
                        them, so the row used to end in two card-shaped holes.
-                       Both of these cards are built to the same ~565px height
-                       as the drawings, which is what makes them belong to this
-                       height class rather than needing a row of their own. -->
+                       Both wear the drawings' chrome and are laid out to fit
+                       within their height, in flow and with nothing scrolling
+                       inside -- so a wheel over them scrolls the page, as it
+                       does over every other card. -->
                   <ModuleSecurityCard />
                   <SoftwareUpdateCard />
                 </div>
@@ -1553,8 +1554,8 @@ onBeforeUnmount(() => {
 .dashboard-module-grid :deep(.insight-card),
 .dashboard-module-grid > :deep(.globe-card),
 .dashboard-module-grid > :deep(.mesh-card),
-.dashboard-module-grid > :deep(.modsec-shell),
-.dashboard-module-grid > :deep(.update-shell) {
+.dashboard-module-grid > :deep(.modsec-card),
+.dashboard-module-grid > :deep(.update-card) {
   max-width: none;
 }
 

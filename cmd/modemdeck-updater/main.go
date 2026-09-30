@@ -50,6 +50,7 @@ type updater struct {
 	controller  *ota.Controller
 	runtime     *ota.DockerRuntime
 	downloader  *ota.Downloader
+	channel     *releasechannel.Channel
 	preferences ota.PreferenceStore
 	token       string
 }
@@ -183,6 +184,7 @@ func buildController(logger *slog.Logger) (*updater, error) {
 		controller:  controller,
 		runtime:     runtime,
 		downloader:  downloader,
+		channel:     channel,
 		preferences: preferences,
 		token:       token,
 	}, nil
@@ -246,7 +248,11 @@ func serve(
 	if err != nil {
 		return err
 	}
-	handler.WithDownloads(built.downloader, built.preferences).WithRunning(built.runtime)
+	handler.WithDownloads(built.downloader, built.preferences).
+		WithRunning(built.runtime).
+		// The api hands over what the peer networks answered, and fetches
+		// the signed document to share; see internal/httpapi/release_peers.go.
+		WithRelease(built.channel)
 	// Background downloads live with the server, not the worker: the worker
 	// is a one-shot install and exits when it is done.
 	go built.downloader.Run(ctx)

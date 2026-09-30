@@ -80,14 +80,42 @@ test('the card does not invent sources or a consensus count', () => {
     'a source-agreement count is hardcoded in the card'
   )
   const sources = card.slice(card.indexOf('const sources = computed'), card.indexOf('const sourcesSummary'))
-  assert.match(sources, /releaseSources\.value\.map/, 'mirror rows no longer come from the check')
+  assert.match(sources, /releaseSources\.value\s*\.filter\(entry => entry\.kind === 'mirror'\)\s*\.map/, 'mirror rows no longer come from the check')
   // Mirrors are lit only when they verified.
   assert.match(sources, /wired: entry\.state === 'verified'/)
-  // DHT and NKN are not built, and must say so.
-  for (const key of ['dht', 'nkn']) {
-    const row = sources.slice(sources.indexOf(`key: '${key}'`))
-    assert.match(row.slice(0, 200), /wired: false/, `${key} is presented as a working source`)
-  }
+})
+
+test('the peer networks show what they answered, and silence is not a pass', () => {
+  const peers = card.slice(card.indexOf('function peerSource'), card.indexOf('const peerSources'))
+  assert.ok(peers.length > 0, 'the peer-network rows are gone')
+  // Only a verified answer is green; the count is the gateways that answered.
+  assert.match(peers, /entry\.state === 'verified'[\s\S]{0,120}tone: 'is-good'/)
+  assert.match(peers, /entry\.peers \? label\('sourcePeerVerified', \{ count: entry\.peers \}\)/)
+  // Not asked, and asked without an answer, are both neutral -- neither is
+  // a pass, and neither is an alarm.
+  assert.match(peers, /if \(!entry\) return \{ \.\.\.base, tone: '', detail: label\('sourcePeerIdle'\)/)
+  assert.match(peers, /entry\.state === 'unreachable'\)[\s\S]{0,60}tone: '', detail: label\('sourcePeerSilent'\)/)
+  // A bad signature or a malformed answer is shown as the fault it is.
+  assert.match(peers, /tone: 'is-bad', detail: label\(`sourceState_\$\{entry\.state\}`\)/)
+  // And nothing is hardcoded as working any more.
+  assert.doesNotMatch(card, /wired: false/, 'a source is hardcoded as not wired')
+})
+
+test('an unknown source kind is dropped, not shown as a mirror', () => {
+  const reader = controller.slice(controller.indexOf('const releaseSources = computed'), controller.indexOf('const releaseSharing'))
+  assert.match(reader, /entry\.kind === undefined \|\| SOURCE_KINDS\.has\(entry\.kind\)/)
+  // An older gateway sends no kind: all of its sources were mirrors.
+  assert.match(reader, /kind: entry\.kind \?\? 'mirror'/)
+})
+
+test('the sharing switch appears only when the gateway has the setting', () => {
+  assert.match(card, /v-if="releaseSharing"[\s\S]{0,260}role="switch"/)
+  assert.match(card, /:aria-checked="releaseSharing\.enabled \? 'true' : 'false'"/)
+  // Put back if the save fails, like the auto-download switch.
+  const setter = controller.slice(controller.indexOf('export async function setReleaseSharing'))
+  assert.match(setter.slice(0, 1400), /catch \{\s*releaseSharing\.value = current/)
+  // The save names the revision it read, so two tabs cannot silently fight.
+  assert.match(setter.slice(0, 1400), /expected_revision: current\.revision/)
 })
 
 test('the ring is driven by real operation state, not a timer', () => {
@@ -218,4 +246,23 @@ test('the labels merge on a locale watch, not once on mount', () => {
   assert.match(card, /watch\(\s*\(\) => i18n\.global\.locale\.value/)
   assert.match(card, /immediate: true, flush: 'sync'/)
   assert.match(card, /mergeLocaleMessage/)
+})
+
+test('the version facts are what the gateway reported, and history never drives an install', () => {
+  // The signing key is shown as the gateway reports it -- the same form the
+  // console prints -- and read strictly: anything but eight hex digits is not
+  // a fingerprint and is dropped rather than displayed.
+  assert.match(card, /const signingKey = computed\(\(\) => updateCheck\.value\?\.signing_key \|\| ''\)/)
+  assert.match(controller, /\/\^\[0-9a-f\]\{8\}\$\/\.test\(value\)/)
+
+  // The last install is its own field. A running one is refused, and nothing
+  // about it may feed the operation being tracked: an old finished operation
+  // in `operation` would make the next install's first frames look foreign.
+  assert.match(controller, /last_operation: readFinishedOperation\(source\.last_operation\)/)
+  assert.match(controller, /if \(state !== 'succeeded' && state !== 'failed'\) return undefined/)
+  assert.doesNotMatch(controller, /[^_]operation:\s*readFinishedOperation/)
+  assert.doesNotMatch(code(card), /last_operation[\s\S]{0,80}applyUpdate/)
+
+  // "None yet" only where there is an updater that would have kept a record.
+  assert.match(card, /v-else-if="updaterPresent"[\s\S]{0,200}lastUpdateNone/)
 })

@@ -115,7 +115,9 @@ CREATE TABLE sms (
 				revision INTEGER NOT NULL DEFAULT 1,
 				timestamp DATETIME,
 				created_at DATETIME,
-				deleted_at DATETIME
+				deleted_at DATETIME,
+				node_id TEXT NOT NULL DEFAULT '',
+				sim_id TEXT NOT NULL DEFAULT ''
 			);
 
 CREATE TABLE sms_contacts (
@@ -178,7 +180,9 @@ CREATE TABLE call_history (
 			audio_encoding TEXT NOT NULL DEFAULT '',
 			audio_resolution TEXT NOT NULL DEFAULT '',
 			audio_rate INTEGER NOT NULL DEFAULT 0,
-			media_available NUMERIC NOT NULL DEFAULT 0
+			media_available NUMERIC NOT NULL DEFAULT 0,
+			node_id TEXT NOT NULL DEFAULT '',
+			sim_id TEXT NOT NULL DEFAULT ''
 			);
 
 CREATE TABLE modemdeck_user_call_state (
@@ -727,3 +731,54 @@ INSERT INTO modemdeck_system_settings (
 INSERT INTO modemdeck_recording_settings (
 	singleton, default_enabled, revision, updated_at
 ) VALUES (1, 0, 1, CURRENT_TIMESTAMP);
+
+CREATE TABLE nassimhub_nodes (
+			node_id TEXT PRIMARY KEY,
+			platform TEXT NOT NULL DEFAULT '',
+			display_name TEXT NOT NULL DEFAULT '',
+			public_key BLOB NOT NULL,
+			certificate BLOB,
+			pair_state TEXT NOT NULL DEFAULT 'unpaired'
+				CHECK (pair_state IN ('unpaired', 'pairing', 'paired')),
+			transport TEXT NOT NULL DEFAULT '',
+			usb_endpoint TEXT NOT NULL DEFAULT '',
+			wifi_endpoint TEXT NOT NULL DEFAULT '',
+			capabilities TEXT NOT NULL DEFAULT '',
+			revision INTEGER NOT NULL DEFAULT 1,
+			last_seen_at DATETIME,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+CREATE TABLE nassimhub_node_sims (
+			node_id TEXT NOT NULL,
+			sim_id TEXT NOT NULL,
+			slot INTEGER NOT NULL DEFAULT 0,
+			iccid TEXT NOT NULL DEFAULT '',
+			imsi TEXT NOT NULL DEFAULT '',
+			local_phone TEXT NOT NULL DEFAULT '',
+			operator_name TEXT NOT NULL DEFAULT '',
+			present NUMERIC NOT NULL DEFAULT 0,
+			line_id TEXT NOT NULL DEFAULT '',
+			revision INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (node_id, sim_id),
+			FOREIGN KEY (node_id) REFERENCES nassimhub_nodes(node_id) ON DELETE CASCADE ON UPDATE CASCADE
+		);
+
+CREATE TABLE nassimhub_node_hardware_sync (
+			node_id TEXT PRIMARY KEY,
+			boot_epoch TEXT NOT NULL DEFAULT '',
+			snapshot_revision TEXT NOT NULL DEFAULT '',
+			sequence INTEGER NOT NULL DEFAULT 0,
+			observed_at DATETIME,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (node_id) REFERENCES nassimhub_nodes(node_id) ON DELETE CASCADE ON UPDATE CASCADE
+		);
+
+CREATE INDEX idx_sms_node_sim_timestamp ON sms(node_id, sim_id, COALESCE(timestamp, '') DESC, id DESC);
+
+CREATE INDEX idx_call_history_node_sim_ended_at ON call_history(node_id, sim_id, COALESCE(ended_at, '') DESC, id DESC);
+
+CREATE INDEX idx_nassimhub_node_sims_line ON nassimhub_node_sims(line_id) WHERE line_id <> '';

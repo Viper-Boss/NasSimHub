@@ -1713,17 +1713,36 @@ export function createFixtureGateway(options: FixtureGatewayOptions = {}): Modem
           sources: [
             { name: 'raw.githubusercontent.com', state: 'unreachable' },
             { name: 'cdn.jsdelivr.net', state: 'verified', version: 'v1.9.3' },
-            { name: 'fastly.jsdelivr.net', state: 'verified', version: 'v1.9.3' }
-          ]
+            { name: 'fastly.jsdelivr.net', state: 'verified', version: 'v1.9.3' },
+            // Other gateways handed the same release over NKN; nobody on the
+            // DHT answered. Both states the card has to show early on.
+            { name: 'nkn', kind: 'nkn', state: 'verified', version: 'v1.9.3', peers: 3 },
+            { name: 'dht', kind: 'dht', state: 'unreachable' }
+          ],
+          signing_key: 'a1b2c3d4',
+          last_operation: {
+            id: 'fixture-previous',
+            state: 'succeeded',
+            target_version: 'v1.9.2',
+            started_at: '2026-07-30T08:00:00Z',
+            finished_at: '2026-07-30T08:01:12Z'
+          }
         }
       }
       return {
         status: 'unavailable',
         current_version: fixtureApplicationVersion,
         checked_at: new Date().toISOString(),
-        error_code: 'github_no_release',
+        error_code: 'release_channel_unavailable',
         apply_available: false,
-        hardware_confirmation_required: false
+        hardware_confirmation_required: false,
+        sources: [
+          { name: 'raw.githubusercontent.com', state: 'unreachable' },
+          { name: 'cdn.jsdelivr.net', state: 'unreachable' },
+          { name: 'fastly.jsdelivr.net', state: 'unreachable' },
+          { name: 'nkn', kind: 'nkn', state: 'unreachable' }
+        ],
+        signing_key: 'a1b2c3d4'
       }
     },
 

@@ -68,6 +68,7 @@ func tlsStatus(status tlsmanager.Status) httpapi.TLSSettingsStatus {
 		FingerprintSHA256:   status.FingerprintSHA256,
 		Expired:             status.Expired,
 		RenewsAutomatically: status.RenewsAutomatically,
+		KeyAlgorithm:        status.KeyAlgorithm,
 	}
 }
 

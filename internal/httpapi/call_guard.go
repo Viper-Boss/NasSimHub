@@ -152,6 +152,19 @@ func (g *callGuard) Remaining() (int, bool) {
 	return remaining, false
 }
 
+// Usage reports today's distinct destinations, the budget, whether the guard
+// is lifted, and the day the count belongs to.
+//
+// Read-only, and a count rather than the numbers: the dashboard needs to say
+// how much of the allowance is gone, and has no business listing who was
+// called.
+func (g *callGuard) Usage() (used, limit int, unlocked bool, date string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.rolloverLocked()
+	return len(g.state.Numbers), g.limit, g.state.Unlocked, g.state.Date
+}
+
 func (g *callGuard) Unlock() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -205,4 +218,54 @@ func (api *API) callGuardResource(response http.ResponseWriter, request *http.Re
 	}
 	response.Header().Set("Cache-Control", "no-store")
 	writeJSON(response, http.StatusOK, map[string]bool{"unlocked": true})
+}
+
+// nextGuardRollover is the next local midnight after now: the instant
+// rolloverLocked, which compares local calendar dates, starts a new day.
+func nextGuardRollover(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+}
+
+// moduleSecurity answers GET /api/v1/security/module, the dashboard's
+// module-security card.
+//
+// It reports only what this gateway actually runs: the anti-fraud guard's
+// budgets, today's use of them, and whether it has been lifted. The card's
+// other rows -- a risk level, module and system integrity, secure boot, a
+// trust period -- have nothing behind them in this product, so they are left
+// out of the response rather than filled in, and the card says "not wired"
+// for each. A field present here is a claim; an absent one is not.
+func (api *API) moduleSecurity(response http.ResponseWriter, request *http.Request) {
+	if !api.requireAdmin(response, request) {
+		return
+	}
+	guard := map[string]any{}
+	unlocked := false
+	if calls, ok := api.callGuardStore(); ok {
+		used, limit, lifted, date := calls.Usage()
+		guard["call_used"], guard["call_limit"], guard["date"] = used, limit, date
+		unlocked = unlocked || lifted
+	}
+	if messages, ok := api.messageGuardStore(); ok {
+		used, limit, lifted, date := messages.Usage()
+		guard["message_used"], guard["message_limit"] = used, limit
+		if _, set := guard["date"]; !set {
+			guard["date"] = date
+		}
+		unlocked = unlocked || lifted
+	}
+	body := map[string]any{}
+	if len(guard) > 0 {
+		// One unlock lifts both channels (see callGuardResource), so either
+		// being lifted is the state worth reporting.
+		guard["unlocked"] = unlocked
+		// When today's counts go back to zero, as an absolute instant. Said by
+		// the gateway rather than assumed by the browser: the rollover is the
+		// GATEWAY's local midnight, and a container with no TZ set is on UTC
+		// -- 08:00 in Beijing, not the midnight a reader would guess.
+		guard["resets_at"] = nextGuardRollover(time.Now()).Format(time.RFC3339)
+		body["guard"] = guard
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	writeJSON(response, http.StatusOK, body)
 }

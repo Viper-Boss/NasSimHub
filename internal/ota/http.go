@@ -3,6 +3,7 @@ package ota
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,6 +21,35 @@ type Handler struct {
 	downloader  *Downloader
 	preferences PreferenceStore
 	running     RunningImagesReporter
+	release     ReleaseRelay
+}
+
+// ReleaseRelay is the release channel as the peer networks see it: the api
+// process speaks NKN and asks the DHT, and hands whatever the other gateways
+// answered to the channel here, which verifies it like any mirror's. The
+// other way round, the api fetches the signed document to share.
+type ReleaseRelay interface {
+	Offer(kind string, signed []byte, peers int) (updatecheck.Source, error)
+	Signed() []byte
+}
+
+// ReleaseOffer is the body of POST /v1/release/offer and of
+// GET /v1/release/signed. The document travels as base64 so it arrives as
+// the exact bytes the other gateway sent.
+type ReleaseOffer struct {
+	Kind         string `json:"kind,omitempty"`
+	SignedBase64 string `json:"signed_base64"`
+	Peers        int    `json:"peers,omitempty"`
+}
+
+// maximumOfferBytes fits a manifest at its size limit, base64-encoded, with
+// room for the envelope.
+const maximumOfferBytes = 96 << 10
+
+// WithRelease enables the peer-network routes.
+func (handler *Handler) WithRelease(relay ReleaseRelay) *Handler {
+	handler.release = relay
+	return handler
 }
 
 // RunningImagesReporter answers what every component is running.
@@ -170,6 +200,52 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 			return
 		}
 		writeJSON(response, http.StatusOK, map[string]any{"images": images})
+	case "/v1/release/offer":
+		if request.Method != http.MethodPost {
+			methodNotAllowed(response, http.MethodPost)
+			return
+		}
+		if handler.release == nil {
+			writeError(response, http.StatusServiceUnavailable, "release_relay_unsupported")
+			return
+		}
+		var input ReleaseOffer
+		decoder := json.NewDecoder(io.LimitReader(request.Body, maximumOfferBytes))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		var signed []byte
+		if input.SignedBase64 != "" {
+			decoded, err := base64.StdEncoding.DecodeString(input.SignedBase64)
+			if err != nil {
+				writeError(response, http.StatusBadRequest, "invalid_request")
+				return
+			}
+			signed = decoded
+		}
+		source, err := handler.release.Offer(input.Kind, signed, input.Peers)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		writeJSON(response, http.StatusOK, source)
+	case "/v1/release/signed":
+		if request.Method != http.MethodGet {
+			methodNotAllowed(response, http.MethodGet)
+			return
+		}
+		if handler.release == nil {
+			writeError(response, http.StatusServiceUnavailable, "release_relay_unsupported")
+			return
+		}
+		signed := handler.release.Signed()
+		if len(signed) == 0 {
+			writeError(response, http.StatusNotFound, "release_not_found")
+			return
+		}
+		writeJSON(response, http.StatusOK, ReleaseOffer{SignedBase64: base64.StdEncoding.EncodeToString(signed)})
 	default:
 		writeError(response, http.StatusNotFound, "not_found")
 	}

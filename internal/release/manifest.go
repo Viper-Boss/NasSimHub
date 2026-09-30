@@ -42,6 +42,11 @@ const (
 	maxImages        = 16
 )
 
+// MaxManifestBytes is the largest signed manifest this package will read. A
+// transport carrying manifests between gateways uses it as its own ceiling,
+// so nothing bigger than a manifest can ever travel as one.
+const MaxManifestBytes = maxManifestBytes
+
 var (
 	// ErrMalformed covers anything structurally wrong, including a manifest
 	// this build is too old to understand.

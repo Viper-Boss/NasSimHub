@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -216,5 +217,22 @@ func TestTheCacheIsForTheVersionThatWasRunning(t *testing.T) {
 	current = "v1.3.0"
 	if result := channel.Check(context.Background()); result.Status != updatecheck.StatusUpToDate {
 		t.Fatalf("after install = %s; the just-installed release is still on offer", result.Status)
+	}
+}
+
+// The dashboard shows which key this gateway verifies releases against, in the
+// console's own form, so the operator can match the two by eye. It is reported
+// whether or not any mirror answered: the key is compiled in, not fetched.
+func TestTheSigningKeyIsReportedInTheConsolesForm(t *testing.T) {
+	_, public := testKey(t)
+	decoded, _ := base64.StdEncoding.DecodeString(public)
+	want := hex.EncodeToString(decoded[:4])
+
+	down := serve(t, nil, http.StatusNotFound, nil)
+	if got := newChannel(public, "v1.1.0", down.URL).Check(context.Background()).SigningKey; got != want {
+		t.Fatalf("signing key = %q with no mirror reachable; want %q", got, want)
+	}
+	if got := keyFingerprint("not a key"); got != "" {
+		t.Fatalf("a malformed key produced a fingerprint %q", got)
 	}
 }

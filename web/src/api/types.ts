@@ -330,6 +330,10 @@ export type UpdateCheck = {
   auto_download?: boolean
   /** What each release mirror said on the last check. */
   sources?: UpdateSource[]
+  /** First four bytes, hex, of the key releases are verified against. */
+  signing_key?: string
+  /** The most recent install that has finished. Never the one in progress. */
+  last_operation?: UpdateOperation
 }
 
 export type UpdateDownloadState = 'pending' | 'downloading' | 'ready' | 'failed'
@@ -344,10 +348,18 @@ export type UpdateDownload = {
 }
 
 export type UpdateSource = {
-  /** The mirror's host only. */
+  /** The mirror's host only, or the peer network's name. */
   name: string
   state: 'verified' | 'unreachable' | 'invalid_signature' | 'malformed'
   version?: string
+  /**
+   * An HTTPS mirror, or one of the two peer networks, where other gateways
+   * handed the signed manifest over. Absent on gateways older than the peer
+   * networks, where every source was a mirror.
+   */
+  kind?: 'mirror' | 'nkn' | 'dht'
+  /** For a peer network: how many gateways answered with that version. */
+  peers?: number
 }
 
 export type UpdateComponentName = 'api' | 'web' | 'hardware' | 'updater' | 'cloudflared'

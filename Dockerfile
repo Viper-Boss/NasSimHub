@@ -60,6 +60,9 @@ ARG TARGETARCH
 ARG VERSION=dev
 
 COPY go.mod go.sum ./
+# The NasSimHub Node protocol and client modules are vendored as local
+# replacements; go.mod names them, so they must be present before download.
+COPY third_party/nassimhub-node/ ./third_party/nassimhub-node/
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go mod download

@@ -57,6 +57,7 @@ import {
   shutdownRuntimeEvents
 } from '../state/runtimeEvents'
 import { sessionState } from '../state/session'
+import { simNodeInventoryCopy } from '../i18n/simNodeInventory'
 import {
   initializeApplicationVersionChecks
 } from '../state/staleAssetRecovery'
@@ -85,7 +86,8 @@ import { profileAvatarState } from '../state/profileAvatar'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const simNodesTitle = computed(() => simNodeInventoryCopy(String(locale.value)).title)
 const permanentDialer = ref(false)
 const nonModalDialer = ref(false)
 const mobileMoreOpen = ref(false)
@@ -543,6 +545,9 @@ onBeforeUnmount(() => {
       </nav>
 
       <nav class="rail__secondary">
+        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'sim-nodes' }" :to="{ name: 'sim-nodes' }" :title="simNodesTitle">
+          <Server :size="22" /><span>{{ simNodesTitle }}</span>
+        </RouterLink>
         <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
           <MessageCircleHeart :size="22" /><span>{{ t('homesim.nmobile.title') }}</span>
         </RouterLink>

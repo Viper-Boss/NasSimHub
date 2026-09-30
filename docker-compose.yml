@@ -117,6 +117,11 @@ services:
       # SAY an update exists, though nothing here can install it. Empty uses
       # the built-in mirrors; see internal/releasechannel.
       MODEMDECK_RELEASE_CHANNEL_URLS: ${MODEMDECK_RELEASE_CHANNEL_URLS:-}
+      # NasSimHub Nodes (UFI003 sticks). Empty = defaults: enabled, USB at
+      # https://10.55.0.2:7580, polled every 10 s. "off" disables Node support.
+      MODEMDECK_NASSIMHUB_NODES: ${MODEMDECK_NASSIMHUB_NODES:-}
+      MODEMDECK_NASSIMHUB_USB_URL: ${MODEMDECK_NASSIMHUB_USB_URL:-}
+      MODEMDECK_NASSIMHUB_POLL_SECONDS: ${MODEMDECK_NASSIMHUB_POLL_SECONDS:-}
       MODEMDECK_HEALTHCHECK_URL: http://127.0.0.1:8080/api/v1/health/ready
       MODEMDECK_LIVENESS_URL: http://127.0.0.1:8080/api/v1/health/live
     secrets:

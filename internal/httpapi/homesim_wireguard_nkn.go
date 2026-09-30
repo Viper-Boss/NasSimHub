@@ -25,6 +25,11 @@ func (api *API) receiveNKNControl(ctx context.Context, client *homeSIMNKNClient)
 			if !ok {
 				return
 			}
+			// First: it claims only its own two message types, and a release
+			// answer is waited on by a round with a deadline.
+			if api.receiveReleaseMessage(client, message) {
+				continue
+			}
 			if api.receiveNKNChat(message) {
 				continue
 			}

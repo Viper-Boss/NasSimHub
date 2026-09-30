@@ -30,12 +30,24 @@
 // highest version that verifies means one honest, reachable mirror is enough to
 // defeat any number of stale or hostile ones. A mirror serving an older release
 // than the rest is reported as such, not trusted as the answer.
+//
+// # OTHER GATEWAYS ARE SOURCES TOO
+//
+// Since r121 the two peer networks, NKN and the DHT, hand in what other
+// gateways answered (Offer). They are untrusted in exactly the way a mirror is
+// and join the same rule, and the winning document's exact bytes are kept
+// (Signed) so this gateway can pass it on. See docs/p2p-updates.md.
 package releasechannel
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,13 +126,37 @@ type Channel struct {
 
 	mu       sync.Mutex
 	snapshot *snapshot
+	// peers holds the last manifest each peer network handed over (Offer),
+	// by source kind. It outlives a snapshot: a mirror re-check must not
+	// forget what the peers said an hour ago.
+	peers map[string]peerOffer
+}
+
+// candidate is one verified manifest together with the exact bytes it was
+// verified from. The bytes are kept so this gateway can pass the same signed
+// document on to other gateways without re-encoding it.
+type candidate struct {
+	manifest *release.Manifest
+	signed   []byte
+}
+
+type peerOffer struct {
+	source updatecheck.Source
+	best   *candidate
 }
 
 type snapshot struct {
 	forVersion string
+	checkedAt  time.Time
 	result     updatecheck.Result
 	manifest   *release.Manifest
+	signed     []byte
 	expires    time.Time
+	// What the HTTPS mirrors said at the last check. The result above is
+	// these combined with the peer offers, and is recomposed whenever a peer
+	// network reports.
+	mirrorBest    *candidate
+	mirrorSources []updatecheck.Source
 }
 
 // New builds a channel. An empty URL list means the defaults.
@@ -192,15 +228,95 @@ func (channel *Channel) Check(ctx context.Context) updatecheck.Result {
 		return cloneResult(cached.result)
 	}
 
-	manifest, sources := channel.fetchAll(ctx)
+	best, sources := channel.fetchAll(ctx)
+	ttl := failureTTL
+	if best != nil {
+		ttl = successTTL
+	}
+	channel.snapshot = &snapshot{
+		forVersion:    current,
+		checkedAt:     now,
+		expires:       now.Add(ttl),
+		mirrorBest:    best,
+		mirrorSources: sources,
+	}
+	channel.composeLocked()
+	return cloneResult(channel.snapshot.result)
+}
+
+// Offer hands the channel a manifest that a peer network produced: kind is
+// SourceKindNKN or SourceKindDHT, signed is the best signed document the
+// gateways on that network answered with (nil when none answered), and peers
+// is how many of them answered with that version.
+//
+// NOTHING ABOUT A PEER IS TRUSTED, exactly as nothing about a mirror is. The
+// document is verified here against the compiled-in key, whatever the caller
+// already checked, and it joins the same "highest verified version wins" rule
+// as the mirrors -- so a peer can at worst fail to help, or offer an older
+// release that loses to a newer one from anywhere else.
+func (channel *Channel) Offer(kind string, signed []byte, peers int) (updatecheck.Source, error) {
+	if kind != updatecheck.SourceKindNKN && kind != updatecheck.SourceKindDHT {
+		return updatecheck.Source{}, fmt.Errorf("releasechannel: unknown peer source %q", kind)
+	}
+	source := updatecheck.Source{Name: kind, Kind: kind, State: updatecheck.SourceUnreachable}
+	var best *candidate
+	if len(signed) > 0 {
+		source, best = verifyCandidate(source, signed, channel.publicKey)
+		if best != nil && peers > 0 {
+			source.Peers = peers
+		}
+	}
+	channel.mu.Lock()
+	defer channel.mu.Unlock()
+	if channel.peers == nil {
+		channel.peers = make(map[string]peerOffer)
+	}
+	channel.peers[kind] = peerOffer{source: source, best: best}
+	if channel.snapshot != nil {
+		channel.composeLocked()
+	}
+	return source, nil
+}
+
+// Signed is the signed document behind the current answer, byte for byte as
+// it was verified -- what this gateway shares with others. Nil before any
+// verified release has been seen.
+func (channel *Channel) Signed() []byte {
+	channel.mu.Lock()
+	defer channel.mu.Unlock()
+	if channel.snapshot == nil || len(channel.snapshot.signed) == 0 {
+		return nil
+	}
+	return append([]byte(nil), channel.snapshot.signed...)
+}
+
+// composeLocked builds the snapshot's result from the mirrors' answer and the
+// peer networks' latest offers.
+func (channel *Channel) composeLocked() {
+	cached := channel.snapshot
+	best := cached.mirrorBest
+	sources := append([]updatecheck.Source(nil), cached.mirrorSources...)
+	for _, kind := range []string{updatecheck.SourceKindNKN, updatecheck.SourceKindDHT} {
+		offer, ok := channel.peers[kind]
+		if !ok {
+			continue
+		}
+		sources = append(sources, offer.source)
+		if better(best, offer.best) {
+			best = offer.best
+		}
+	}
+	current := cached.forVersion
 	result := updatecheck.Result{
 		Status:         updatecheck.StatusUnavailable,
 		CurrentVersion: current,
-		CheckedAt:      now.Format(time.RFC3339),
+		CheckedAt:      cached.checkedAt.Format(time.RFC3339),
 		Sources:        sources,
+		SigningKey:     keyFingerprint(channel.publicKey),
 	}
-	ttl := failureTTL
-	if manifest == nil {
+	cached.manifest = nil
+	cached.signed = nil
+	if best == nil {
 		result.ErrorCode = "release_channel_unavailable"
 		for _, source := range sources {
 			if source.State == updatecheck.SourceInvalidSignature {
@@ -211,34 +327,51 @@ func (channel *Channel) Check(ctx context.Context) updatecheck.Result {
 				break
 			}
 		}
-	} else {
-		ttl = successTTL
-		latest := manifest.ReleaseVersion
-		result.LatestVersion = latest
-		result.ReleaseName = "NasSimHub " + latest
-		result.ReleaseURL = channel.releasePage + url.PathEscape(latest) + ".md"
-		result.PublishedAt = time.Unix(manifest.CreatedAt, 0).UTC().Format(time.RFC3339)
-		result.Status = updatecheck.StatusDevelopment
-		if order, ok := updatecheck.CompareVersions(current, latest); ok {
-			switch order {
-			case -1:
-				result.Status = updatecheck.StatusUpdateAvailable
-			case 0:
-				result.Status = updatecheck.StatusUpToDate
-			}
-		}
-		if result.Status == updatecheck.StatusUpdateAvailable && belowMinimum(current, manifest.MinimumVersion) {
-			result.ErrorCode = "release_requires_newer_installation"
+		cached.result = result
+		return
+	}
+	manifest := best.manifest
+	cached.manifest = manifest
+	cached.signed = best.signed
+	latest := manifest.ReleaseVersion
+	result.LatestVersion = latest
+	result.ReleaseName = "NasSimHub " + latest
+	result.ReleaseURL = channel.releasePage + url.PathEscape(latest) + ".md"
+	result.PublishedAt = time.Unix(manifest.CreatedAt, 0).UTC().Format(time.RFC3339)
+	result.Status = updatecheck.StatusDevelopment
+	if order, ok := updatecheck.CompareVersions(current, latest); ok {
+		switch order {
+		case -1:
+			result.Status = updatecheck.StatusUpdateAvailable
+		case 0:
+			result.Status = updatecheck.StatusUpToDate
 		}
 	}
+	if result.Status == updatecheck.StatusUpdateAvailable && belowMinimum(current, manifest.MinimumVersion) {
+		result.ErrorCode = "release_requires_newer_installation"
+	}
+	cached.result = result
+}
 
-	channel.snapshot = &snapshot{
-		forVersion: current,
-		result:     result,
-		manifest:   manifest,
-		expires:    now.Add(ttl),
+// better reports whether next should replace current: a higher version, or
+// the same version signed later. Two documents for one version happen only
+// when a release is re-signed, and the later signature is the publisher's
+// latest word on it.
+func better(current, next *candidate) bool {
+	if next == nil || next.manifest == nil {
+		return false
 	}
-	return cloneResult(result)
+	if current == nil || current.manifest == nil {
+		return true
+	}
+	order, ok := updatecheck.CompareVersions(current.manifest.ReleaseVersion, next.manifest.ReleaseVersion)
+	if !ok {
+		return false
+	}
+	if order != 0 {
+		return order < 0
+	}
+	return next.manifest.CreatedAt > current.manifest.CreatedAt
 }
 
 // Latest returns the verified manifest behind the last check, if it is for
@@ -272,44 +405,41 @@ func belowMinimum(current, minimum string) bool {
 }
 
 type fetched struct {
-	index    int
-	source   updatecheck.Source
-	manifest *release.Manifest
+	index  int
+	source updatecheck.Source
+	best   *candidate
 }
 
 // fetchAll asks every mirror at once and keeps the highest verified version.
 //
 // Concurrently, because the mirrors that fail usually fail by timing out, and
 // asking them in turn would make one dead mirror cost every check ten seconds.
-func (channel *Channel) fetchAll(ctx context.Context) (*release.Manifest, []updatecheck.Source) {
+func (channel *Channel) fetchAll(ctx context.Context) (*candidate, []updatecheck.Source) {
 	results := make(chan fetched, len(channel.urls))
 	for index, address := range channel.urls {
 		go func(index int, address string) {
-			source, manifest := channel.fetchOne(ctx, address)
-			results <- fetched{index: index, source: source, manifest: manifest}
+			source, best := channel.fetchOne(ctx, address)
+			results <- fetched{index: index, source: source, best: best}
 		}(index, address)
 	}
 	sources := make([]updatecheck.Source, len(channel.urls))
-	var best *release.Manifest
+	var best *candidate
 	for range channel.urls {
 		result := <-results
 		sources[result.index] = result.source
-		if result.manifest == nil {
-			continue
-		}
-		if best == nil {
-			best = result.manifest
-			continue
-		}
-		if order, ok := updatecheck.CompareVersions(best.ReleaseVersion, result.manifest.ReleaseVersion); ok && order < 0 {
-			best = result.manifest
+		if better(best, result.best) {
+			best = result.best
 		}
 	}
 	return best, sources
 }
 
-func (channel *Channel) fetchOne(ctx context.Context, address string) (updatecheck.Source, *release.Manifest) {
-	source := updatecheck.Source{Name: hostOf(address), State: updatecheck.SourceUnreachable}
+func (channel *Channel) fetchOne(ctx context.Context, address string) (updatecheck.Source, *candidate) {
+	source := updatecheck.Source{
+		Name:  hostOf(address),
+		Kind:  updatecheck.SourceKindMirror,
+		State: updatecheck.SourceUnreachable,
+	}
 	requestContext, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, address, nil)
@@ -327,7 +457,21 @@ func (channel *Channel) fetchOne(ctx context.Context, address string) (updateche
 	if response.StatusCode != http.StatusOK {
 		return source, nil
 	}
-	manifest, err := release.VerifyJSON(response.Body, channel.publicKey)
+	body, err := io.ReadAll(io.LimitReader(response.Body, release.MaxManifestBytes+1))
+	if err != nil {
+		return source, nil
+	}
+	return verifyCandidate(source, body, channel.publicKey)
+}
+
+// verifyCandidate checks one signed document and fills in the source's state.
+// A document over the size limit is malformed, not truncated and retried.
+func verifyCandidate(source updatecheck.Source, signed []byte, publicKey string) (updatecheck.Source, *candidate) {
+	if len(signed) > release.MaxManifestBytes {
+		source.State = updatecheck.SourceMalformed
+		return source, nil
+	}
+	manifest, err := release.VerifyJSON(bytes.NewReader(signed), publicKey)
 	switch {
 	case errors.Is(err, release.ErrBadSignature):
 		source.State = updatecheck.SourceInvalidSignature
@@ -338,7 +482,7 @@ func (channel *Channel) fetchOne(ctx context.Context, address string) (updateche
 	}
 	source.State = updatecheck.SourceVerified
 	source.Version = manifest.ReleaseVersion
-	return source, &manifest
+	return source, &candidate{manifest: &manifest, signed: append([]byte(nil), signed...)}
 }
 
 // hostOf names a mirror by host only. The full URL may carry credentials for a
@@ -349,6 +493,18 @@ func hostOf(address string) string {
 		return "mirror"
 	}
 	return parsed.Hostname()
+}
+
+// keyFingerprint is the first four bytes of a base64 Ed25519 public key, hex.
+// The console prints its own key the same way; matching the two is how an
+// operator tells that a gateway will accept what they sign. Empty for a key
+// that does not decode, rather than a fingerprint of garbage.
+func keyFingerprint(publicKeyBase64 string) string {
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(publicKeyBase64))
+	if err != nil || len(decoded) != ed25519.PublicKeySize {
+		return ""
+	}
+	return hex.EncodeToString(decoded[:4])
 }
 
 func cloneResult(result updatecheck.Result) updatecheck.Result {

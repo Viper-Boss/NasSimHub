@@ -312,18 +312,21 @@ type Options struct {
 	// IssuerPublicKey is the base64 Ed25519 key that licence certificates are
 	// verified against. Empty locks every paid feature, which is the correct
 	// behaviour for a build with no key -- see internal/license.
-	IssuerPublicKey       string
-	LineServices          LineService
-	CallPolicies          CallPolicyService
-	MessagePolicies       MessagePolicyService
-	CallMedia             CallMediaService
-	CallLeases            CallLeaseService
-	Recording             RecordingService
-	Network               NetworkService
-	TelegramSettings      TelegramSettingsService
-	TLSSettings           TLSSettingsService
-	CloudflareOriginTLS   CloudflareOriginTLSService
-	MobilePairing         mobilepairing.Availability
+	IssuerPublicKey     string
+	LineServices        LineService
+	CallPolicies        CallPolicyService
+	MessagePolicies     MessagePolicyService
+	CallMedia           CallMediaService
+	CallLeases          CallLeaseService
+	Recording           RecordingService
+	Network             NetworkService
+	TelegramSettings    TelegramSettingsService
+	TLSSettings         TLSSettingsService
+	CloudflareOriginTLS CloudflareOriginTLSService
+	MobilePairing       mobilepairing.Availability
+	// NasSimHubNodes pairs and manages UFI003 Nodes. Nil keeps the
+	// read-only inventory and USB probe.
+	NasSimHubNodes        NasSimHubNodeService
 	IOSCallTests          IOSCallTestService
 	RTCConfiguration      rtcconfig.Provider
 	Authenticator         Authenticator
@@ -334,6 +337,7 @@ type Options struct {
 	RuntimeEvents         runtimeevents.Source
 	UpdateChecker         UpdateChecker
 	UpdateManager         UpdateManager
+	ReleaseRelay          ReleaseRelay
 	ApplicationVersion    string
 	SettingsSecrets       SecretBox
 	disableAuthentication bool
@@ -350,6 +354,7 @@ type Options struct {
 }
 
 type API struct {
+	nodeFleet                  NasSimHubNodeService
 	contactBackupMu            sync.Mutex
 	homeSIMDraftMu             sync.Mutex
 	homeSIMQuotaMu             sync.Mutex
@@ -418,6 +423,8 @@ type API struct {
 	updateChecker              UpdateChecker
 	updateManager              UpdateManager
 	applicationVersion         string
+	releaseRelay               ReleaseRelay
+	releasePeers               *releasePeers
 }
 
 func New(repository Repository, options Options) (*API, error) {
@@ -435,7 +442,7 @@ func New(repository Repository, options Options) (*API, error) {
 	if healthProbe == nil && options.Communications != nil {
 		healthProbe, _ = options.Communications.(HealthProbe)
 	}
-	return &API{
+	api := &API{
 		contactBackupDirectory:     options.ContactBackupDirectory,
 		settingsSecrets:            options.SettingsSecrets,
 		repository:                 repository,
@@ -461,6 +468,7 @@ func New(repository Repository, options Options) (*API, error) {
 		tlsSettingsService:         options.TLSSettings,
 		cloudflareOriginTLSService: options.CloudflareOriginTLS,
 		mobilePairingAvailability:  options.MobilePairing,
+		nodeFleet:                  options.NasSimHubNodes,
 		iosCallTests:               options.IOSCallTests,
 		rtcConfiguration:           options.RTCConfiguration,
 		authenticator:              options.Authenticator,
@@ -476,7 +484,13 @@ func New(repository Repository, options Options) (*API, error) {
 		updateChecker:              options.UpdateChecker,
 		updateManager:              options.UpdateManager,
 		applicationVersion:         normalizedApplicationVersion(options.ApplicationVersion),
-	}, nil
+		releaseRelay:               options.ReleaseRelay,
+	}
+	// The directory listing and the control client are one identity: an
+	// address listed in the directory has to be one that can be messaged.
+	api.nknNetwork.seed = api.managedNKNSeed
+	api.releasePeers = newReleasePeers(api)
+	return api, nil
 }
 
 func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -527,6 +541,16 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	}
 
 	switch request.URL.Path {
+	case "/api/v1/nodes":
+		api.getOnly(response, request, api.nassimhubNodes)
+	case "/api/v1/nodes/discover":
+		api.getOnly(response, request, api.nassimhubDiscover)
+	case "/api/v1/nodes/pair":
+		api.postOnly(response, request, api.nassimhubPair)
+	case "/api/v1/nodes/unpair":
+		api.postOnly(response, request, api.nassimhubUnpair)
+	case "/api/v1/nodes/refresh":
+		api.postOnly(response, request, api.nassimhubRefresh)
 	case "/api/v1/mobile/session":
 		api.getOnly(response, request, api.mobileSession)
 	case "/api/v1/bootstrap":
@@ -543,6 +567,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.postOnly(response, request, api.updateDownload)
 	case "/api/v1/updates/preferences":
 		api.updatePreferences(response, request)
+	case "/api/v1/updates/sharing":
+		api.releaseSharingHandler(response, request)
 	case "/api/v1/account/password":
 		api.accountPassword(response, request)
 	case "/api/v1/account/contact":
@@ -631,6 +657,12 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.getOnly(response, request, api.activeCalls)
 	case "/api/v1/calls/guard":
 		api.callGuardResource(response, request)
+	case "/api/v1/security/module":
+		api.getOnly(response, request, api.moduleSecurity)
+	case "/api/v1/security/posture":
+		api.getOnly(response, request, api.securityPosture)
+	case "/api/v1/stats/communication":
+		api.getOnly(response, request, api.communicationStats)
 	case "/api/v1/recordings":
 		api.getOnly(response, request, api.recordingEntries)
 	case "/api/v1/recordings/batch":

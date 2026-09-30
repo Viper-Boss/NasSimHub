@@ -298,6 +298,33 @@ cloudflare_redirect_target_count=$(
 )
 [ "$cloudflare_redirect_target_count" -eq 2 ] ||
     fail "Cloudflare listeners do not preserve host and request URI on HTTPS redirect"
+
+# The dashboard's secure-transport card describes the viewer's own connection
+# from these headers; the API never sees TLS itself. Direct HTTPS names the
+# handshake, Cloudflare names only the edge, and each is SET on every proxy so
+# a client can never supply its own.
+nginx_count() {
+    grep -Fc -- "$1" "${repo_dir}/web/nginx.conf" || true
+}
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-Edge direct;')" -eq 1 ] ||
+    fail "The HTTPS listener does not name its edge to the API"
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Protocol $ssl_protocol;')" -eq 1 ] ||
+    fail "The HTTPS listener does not pass the negotiated TLS version"
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Group $ssl_curve;')" -eq 1 ] ||
+    fail "The HTTPS listener does not pass the key-exchange group"
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Cipher $ssl_cipher;')" -eq 1 ] ||
+    fail "The HTTPS listener does not pass the cipher"
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-Edge cloudflare;')" -eq 2 ] ||
+    fail "The Cloudflare listeners do not both name their edge"
+for header in X-ModemDeck-TLS-Protocol X-ModemDeck-TLS-Group X-ModemDeck-TLS-Cipher; do
+    [ "$(nginx_count "proxy_set_header ${header} \"\";")" -eq 2 ] ||
+        fail "The Cloudflare listeners do not blank ${header}"
+done
+# The card reports replay protection from TLS record sequencing, which 0-RTT
+# early data does not have.
+if grep -Eq '^[[:space:]]*ssl_early_data[[:space:]]+on' "${repo_dir}/web/nginx.conf"; then
+    fail "TLS early data is on, which the replay row does not allow for"
+fi
 grep -Fq 'return 404;' "${repo_dir}/web/nginx.conf" ||
     fail "Nginx does not reject non-API paths on port 7575"
 grep -Fq 'server api:8080 resolve;' "${repo_dir}/web/nginx.conf" ||

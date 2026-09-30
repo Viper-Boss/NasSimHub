@@ -68,6 +68,16 @@ type Result struct {
 	// Sources says which release mirrors answered and what each one said, so
 	// "3 of 3 mirrors agree" is a measurement rather than a slogan.
 	Sources []Source `json:"sources,omitempty"`
+	// SigningKey is the first four bytes, in hex, of the key releases are
+	// verified against -- the same form the console shows beside its own key,
+	// so an operator can see that this gateway trusts their signatures.
+	SigningKey string `json:"signing_key,omitempty"`
+	// LastOperation is the most recent install that has FINISHED, for the
+	// dashboard's "last updated" line. Kept apart from Operation, which is the
+	// install being tracked: a finished one there would be taken for it, and
+	// the first progress frames of the next install dropped as belonging to
+	// some other operation.
+	LastOperation *Operation `json:"last_operation,omitempty"`
 }
 
 type Component struct {

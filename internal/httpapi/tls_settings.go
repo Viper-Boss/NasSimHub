@@ -21,6 +21,8 @@ type TLSSettingsStatus struct {
 	FingerprintSHA256   string   `json:"fingerprint_sha256"`
 	Expired             bool     `json:"expired"`
 	RenewsAutomatically bool     `json:"renews_automatically"`
+	// KeyAlgorithm is the served certificate's key, e.g. "ECDSA P-256".
+	KeyAlgorithm string `json:"key_algorithm,omitempty"`
 }
 
 type TLSSettingsService interface {

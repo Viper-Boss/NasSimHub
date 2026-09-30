@@ -49,6 +49,10 @@ type Status struct {
 	RenewalDue          bool
 	RenewsAutomatically bool
 	FingerprintSHA256   string
+	// KeyAlgorithm names the leaf's public key, e.g. "ECDSA P-256" or
+	// "RSA-2048" -- what the browser is actually shown as this gateway's
+	// identity.
+	KeyAlgorithm string
 }
 
 func Open(config Config) (*Manager, error) {

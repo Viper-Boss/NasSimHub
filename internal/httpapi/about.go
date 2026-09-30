@@ -64,6 +64,15 @@ func (api *API) updateCheck(response http.ResponseWriter, request *http.Request)
 	ctx := request.Context()
 	if request.URL.Query().Get("refresh") == "1" {
 		ctx = updatecheck.WithRefresh(ctx)
+		// Asked by a person, so the peer networks are asked too, before the
+		// channel answers -- briefly: a gateway that is online answers in a
+		// second or two, and the page should not wait on the ones that are
+		// not. What arrives later reaches the channel on the next round.
+		if api.releasePeers != nil {
+			roundCtx, cancel := context.WithTimeout(ctx, releaseRefreshWindow+2*time.Second)
+			api.releasePeers.Round(roundCtx, releaseRefreshWindow)
+			cancel()
+		}
 	}
 	writeJSON(response, http.StatusOK, api.updateChecker.Check(ctx))
 }

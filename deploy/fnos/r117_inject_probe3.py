@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Probe v2: getaddrinfo path + apt debug inside the failing RUN."""
+
+SRC = '/volume1/docker/homesim/source/nas-comm-gateway-r6/hardware/Dockerfile'
+DST = '/tmp/hwdebug3.Dockerfile'
+
+src = open(SRC).read()
+probe = (
+    '&& echo AHOSTS && getent ahostsv4 mirrors.aliyun.com; echo ahosts-rc=$?; '
+    'echo APT-DEBUG-START && apt-get update -o Debug::Acquire::http=true'
+)
+count = src.count('&& apt-get update')
+out = src.replace('&& apt-get update', probe, 1)
+open(DST, 'w').write(out)
+print('injected:', count, '-> replaced first only')

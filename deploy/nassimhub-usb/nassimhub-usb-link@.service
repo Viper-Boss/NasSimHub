@@ -1,0 +1,10 @@
+[Unit]
+Description=NasSimHub stick USB link on %I (10.55.0.1/29)
+BindsTo=sys-subsystem-net-devices-%i.device
+After=sys-subsystem-net-devices-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/nassimhub-usb-link up %I
+ExecStop=/usr/local/libexec/nassimhub-usb-link down %I

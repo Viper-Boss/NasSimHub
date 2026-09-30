@@ -160,6 +160,11 @@ func (controller *Controller) Check(ctx context.Context) updatecheck.Result {
 // to a newer release than the one downloaded would invite pressing install on
 // the strength of work done for something else.
 func (controller *Controller) annotate(result updatecheck.Result) updatecheck.Result {
+	if operation, err := controller.operations.Load(); err == nil &&
+		operation != nil && operation.State != updatecheck.OperationRunning {
+		finished := *operation
+		result.LastOperation = &finished
+	}
 	if controller.preferences != nil {
 		preferences := controller.preferences.Load()
 		enabled := preferences.AutoDownload

@@ -1,0 +1,99 @@
+#!/bin/sh
+# nassimhub-usb-link up|down|status IFACE
+#
+# Gives the NAS its fixed end of the stick's USB link: 10.55.0.1/29, with the
+# stick at 10.55.0.2 (frozen address plan, FIRMWARE_INTERFACE.md section 3).
+#
+# One stick at a time owns the USB link: every stick uses 10.55.0.2, so a
+# second stick plugged in while the first is connected is left unaddressed and
+# reached over Wi-Fi instead. Its interface is never given the address.
+set -eu
+
+NAS_ADDRESS=10.55.0.1/29
+SYSFS=${NASSIMHUB_USB_SYSFS:-/sys}
+VENDOR=1d6b
+PRODUCT=0104
+MANUFACTURER=NasSimHub
+
+log() {
+    logger -t nassimhub-usb -- "$*" 2>/dev/null || true
+    printf 'nassimhub-usb: %s\n' "$*" >&2
+}
+
+usage() {
+    printf 'usage: %s up|down|status IFACE\n' "$0" >&2
+    exit 2
+}
+
+[ "$#" -eq 2 ] || usage
+action=$1
+iface=$2
+case "$iface" in
+    ''|*[!A-Za-z0-9_.-]*) usage ;;
+esac
+
+# is_stick IFACE: the interface belongs to a NasSimHub stick's USB gadget.
+# The udev rule already matched this; checking again keeps a hand-run or a
+# mistyped unit instance from putting the address on the wrong device.
+is_stick() {
+    device=$SYSFS/class/net/$1/device
+    [ -e "$device" ] || return 1
+    usb=$(readlink -f "$device/..") || return 1
+    [ "$(cat "$usb/idVendor" 2>/dev/null)" = "$VENDOR" ] &&
+        [ "$(cat "$usb/idProduct" 2>/dev/null)" = "$PRODUCT" ] &&
+        [ "$(cat "$usb/manufacturer" 2>/dev/null)" = "$MANUFACTURER" ]
+}
+
+# holder: the interface that currently has the NAS address, if any.
+holder() {
+    ip -o -4 addr show 2>/dev/null | awk -v a="$NAS_ADDRESS" '$4 == a { print $2; exit }'
+}
+
+link_up() {
+    [ "$(cat "$SYSFS/class/net/$1/operstate" 2>/dev/null)" != "down" ] &&
+        [ -e "$SYSFS/class/net/$1" ]
+}
+
+case "$action" in
+up)
+    if [ ! -e "$SYSFS/class/net/$iface" ]; then
+        log "$iface is gone; nothing to do"
+        exit 0
+    fi
+    if ! is_stick "$iface"; then
+        log "$iface is not a NasSimHub stick; refusing to configure it"
+        exit 1
+    fi
+    current=$(holder)
+    if [ -n "$current" ] && [ "$current" != "$iface" ]; then
+        if link_up "$current"; then
+            log "$current already carries the USB link; $iface stays unaddressed (reach that stick over Wi-Fi)"
+            exit 0
+        fi
+        log "removing stale USB link address from $current"
+        ip addr del "$NAS_ADDRESS" dev "$current" 2>/dev/null || true
+    fi
+    ip link set dev "$iface" up
+    ip addr replace "$NAS_ADDRESS" dev "$iface"
+    log "$iface up with $NAS_ADDRESS (stick at 10.55.0.2)"
+    ;;
+down)
+    ip addr del "$NAS_ADDRESS" dev "$iface" 2>/dev/null || true
+    log "$iface released"
+    ;;
+status)
+    current=$(holder)
+    if [ "$current" = "$iface" ]; then
+        printf '%s carries the USB link (%s)\n' "$iface" "$NAS_ADDRESS"
+    elif [ -n "$current" ]; then
+        printf '%s does not; %s does\n' "$iface" "$current"
+        exit 1
+    else
+        printf 'no interface carries the USB link\n'
+        exit 1
+    fi
+    ;;
+*)
+    usage
+    ;;
+esac

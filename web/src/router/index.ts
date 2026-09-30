@@ -54,6 +54,11 @@ const router = createRouter({
           component: () => import('../views/TrafficView.vue')
         },
         {
+          path: 'sim-nodes',
+          name: 'sim-nodes',
+          component: () => import('../views/NasSimHubNodesView.vue')
+        },
+        {
           path: 'nmobile',
           name: 'nmobile',
           component: () => import('../views/NMobileChatView.vue')

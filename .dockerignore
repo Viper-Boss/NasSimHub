@@ -11,7 +11,8 @@ ios-client
 docs
 integration
 packaging
-third_party
+third_party/*
+!third_party/nassimhub-node
 scripts
 !scripts/
 !scripts/docker-entrypoint.sh

@@ -1,0 +1,24 @@
+#!/bin/bash
+# r117: hardware full rebuild at current HEAD (a862ff8) with APT_MIRROR aliyun
+set -u
+SRC=/volume1/docker/homesim/source/nas-comm-gateway-r6
+LOG=/tmp/r117-hw-build.log
+cd "$SRC" || exit 1
+
+echo "=== hardware full build $(date) ===" > "$LOG"
+df -h /volume1 | tail -1 >> "$LOG"
+docker build --no-cache --network=host \
+  --add-host mirrors.aliyun.com:112.15.7.206 \
+  --add-host mirrors.aliyun.com:39.173.148.49 \
+  --build-arg APT_MIRROR=mirrors.aliyun.com \
+  --build-arg VERSION=fnos-local-0.1 \
+  --build-arg BUILD_DATE=unknown \
+  --build-arg VCS_REF=r117 \
+  --target runtime \
+  --tag nas-comm-hardware:fnos-local-0.1 \
+  --file hardware/Dockerfile \
+  . >> "$LOG" 2>&1
+echo "hardware rc=$?" >> "$LOG"
+echo "=== images $(date) ===" >> "$LOG"
+docker images nas-comm-hardware --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.CreatedAt}}' >> "$LOG" 2>&1
+echo "=== BUILD DONE $(date) ===" >> "$LOG"

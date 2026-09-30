@@ -112,7 +112,7 @@ test('the guard limits are labelled as the shipped default when they are', () =>
   assert.match(card, /fromDefaults/)
   assert.match(
     card,
-    /v-if="guardLimits\.fromDefaults"[\s\S]{0,200}guardDefaultNote/,
+    /v-(?:else-)?if="guardLimits\.fromDefaults"[\s\S]{0,200}guardDefaultNote/,
     'the card no longer says when the limits are the factory default'
   )
   for (const locale of ['zh-CN', 'en-US']) {
@@ -217,42 +217,44 @@ test('the labels merge on a locale watch, not once on mount', () => {
   assert.match(card, /immediate: true, flush: 'sync'/)
 })
 
-test('the tall row cards cannot stretch the network drawings', async () => {
-  // Both of these cards live in the tall row beside the NKN globe and the DHT
-  // mesh, which are 713px of fixed-height canvas plus chrome. A grid row is as
-  // tall as its tallest item, and `align-items: stretch` then stretches the
-  // rest to match -- so a card whose content wanted more would not be clipped,
-  // it would make the row taller and leave that much void inside each drawing.
-  // Measured before this was fixed: 874px against their 713px.
+test('the tall row cards scroll the page, not themselves', async () => {
+  // These two cards sit in the tall row beside the NKN globe and the DHT mesh.
+  // They used to be pinned to the drawings' height with a scrolling middle
+  // (`overflow-y: auto` plus `overscroll-behavior: contain`), which kept the
+  // row even -- and meant a wheel over either card scrolled the card instead
+  // of the page, unlike every other card on the dashboard. The operator
+  // reported exactly that.
   //
-  // The shell is what prevents it. It is the grid item; the card is positioned
-  // absolutely inside it, so the card's content has no say in the row height.
-  // Remove the shell and the voids come back silently -- nothing errors, the
-  // drawings just grow empty space at the bottom.
+  // They are now laid out to fit within the drawings' height, in flow. That
+  // was measured in a browser across the widths this dashboard is used at; what
+  // a static test can hold is the rule that made the old behaviour possible:
+  // nothing in either card, or in the stylesheet they share, scrolls.
   const update = await readFile(
     new URL('../src/components/SoftwareUpdateCard.vue', import.meta.url),
     'utf8'
   )
+  const panel = await readFile(new URL('../src/components/panelCard.css', import.meta.url), 'utf8')
 
-  for (const [name, source, shell, root] of [
-    ['ModuleSecurityCard', card, 'modsec-shell', 'modsec-card'],
-    ['SoftwareUpdateCard', update, 'update-shell', 'update-card']
+  for (const [name, source] of [
+    ['ModuleSecurityCard', card],
+    ['SoftwareUpdateCard', update],
+    ['panelCard.css', panel]
   ]) {
-    assert.match(
-      source,
-      new RegExp(`\\.${shell}\\s*\\{[^}]*position:\\s*relative`),
-      `${name}: the shell is no longer a positioning context`
+    const body = code(source)
+    assert.doesNotMatch(
+      body,
+      /overflow(?:-y)?\s*:\s*(?:auto|scroll)/,
+      `${name} scrolls inside, so a wheel over the card no longer scrolls the page`
     )
-    assert.match(
-      source,
-      new RegExp(`\\.${root}\\s*\\{\\s*position:\\s*absolute;\\s*inset:\\s*0;`),
-      `${name}: the card is back in flow and can stretch the row`
-    )
-    // And the body must actually be able to scroll, or taking it out of flow
-    // would clip content with no way to reach it.
-    assert.match(source, new RegExp(`\\.${root}__scroll\\s*\\{[^}]*overflow-y:\\s*auto`), name)
-    assert.match(source, new RegExp(`\\.${root}__scrollwrap::after`), `${name}: no scroll fade`)
+    assert.doesNotMatch(body, /overscroll-behavior/, `${name} traps the wheel again`)
+    assert.doesNotMatch(body, /position:\s*absolute;\s*inset:\s*0/, `${name} is pinned out of flow again`)
   }
+
+  // Both wear the drawings' chrome, so the row reads as one set of cards.
+  assert.match(card, /class="modsec-card net-card pc-card"/)
+  assert.match(update, /class="update-card net-card pc-card"/)
+  assert.match(card, /import '\.\/networkCard\.css'/)
+  assert.match(update, /import '\.\/networkCard\.css'/)
 
   // Both sit in the tall grid, not in rows of their own.
   // Searched forward from the marker: the first </LoadingSkeletonBoundary> in
@@ -270,4 +272,28 @@ test('the tall row cards cannot stretch the network drawings', async () => {
     /dashboard-module-grid--full/,
     'a full-width row is back; these cards belong in the tall row with the drawings'
   )
+})
+
+test('today\'s allowance is the gateway\'s count or nothing', () => {
+  // The guard's use today comes from GET /api/v1/security/module. A gateway
+  // too old to report it must leave the count out -- "0 of 5 used" would be a
+  // claim about the day that nothing measured.
+  assert.match(card, /allowance\(guard\.value\?\.call_used, guardLimits\.value\.call\)/)
+  assert.match(card, /allowance\(guard\.value\?\.message_used, guardLimits\.value\.message\)/)
+  assert.doesNotMatch(code(card), /_used\s*\?\?\s*0/, 'a missing count is shown as zero')
+  assert.match(card, /v-if="entry\.usage\.known"/)
+})
+
+test('the reset is the gateway\'s midnight, never the browser\'s', () => {
+  // The guard rolls over at the gateway's local midnight. On a container with
+  // no time zone that is UTC -- eight in the morning in Beijing -- so a
+  // countdown worked out from the reader's own clock would be wrong by hours
+  // and look exactly right.
+  assert.match(card, /const at = guard\.value\?\.resets_at/)
+  assert.doesNotMatch(code(card), /setHours\s*\(|new Date\(\)\.setDate|getTimezoneOffset/)
+  // A gateway that does not report it gets the plain fact, not a guess.
+  assert.match(card, /v-else class="modsec-card__word">\{\{ label\('guardResetDaily'\) \}\}/)
+  // And the filter moved into the guard: inbound and outbound are one job.
+  const guardSection = card.slice(card.indexOf('modsec-card__guard"'), card.indexOf('integrityTitle'))
+  assert.match(guardSection, /label\('filterTitle'\)/, 'the call filter left the anti-fraud panel')
 })

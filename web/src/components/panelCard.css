@@ -1,0 +1,585 @@
+/* Sections, tiles and buttons for the two cards that share the tall row with
+ * the network drawings: module security and version & update.
+ *
+ * Both cards ARE network cards as far as their chrome goes -- they carry
+ * `.net-card` and use its head, badge and ground from networkCard.css -- so the
+ * four cards in the row read as one set. What this file adds is the inside:
+ * the operator's reference for these two was a dense panel of tiles, status
+ * chips and a hero strip, and none of that exists in the drawings' stylesheet.
+ *
+ * Global, like networkCard.css and for the same reason: two cards, one look.
+ * Hence the `pc-` prefix on every class.
+ *
+ * NO SCROLLING INSIDE. The cards used to be pinned to the drawings' height and
+ * scroll their middle, which meant a wheel over either card scrolled the card
+ * instead of the page -- unlike every other card on the dashboard. They are now
+ * laid out to fit, in flow, and nothing here may set `overflow: auto`.
+ */
+
+.pc-card {
+  --pc-section-bg: #0f1b2e;
+  --pc-section-line: #22344b;
+  --pc-tile-bg: #0b1627;
+  --pc-tile-line: #213247;
+  --pc-label: #8ea5c3;
+  --pc-value: #e6edf7;
+  --pc-faint: #6e85a2;
+  --pc-accent: #7ed9fb;
+  --pc-accent-soft: #7ed9fb14;
+  --pc-accent-line: #7ed9fb40;
+  --pc-good: #81d9b8;
+  --pc-good-soft: #81d9b814;
+  --pc-good-line: #81d9b845;
+  --pc-warn: #ffd67c;
+  --pc-warn-soft: #ffd67c14;
+  --pc-warn-line: #ffd67c4d;
+  --pc-bad: #ff9b9b;
+  --pc-bad-soft: #ff9b9b14;
+  --pc-bad-line: #ff9b9b4d;
+  --pc-idle: #7d8fa6;
+  --pc-idle-soft: #9aa8ba0d;
+  --pc-idle-line: #9aa8ba29;
+  --pc-bar-track: #1b2b40;
+  --pc-hero-top: #13263f;
+  --pc-hero-bottom: #0e1c30;
+  --pc-hero-line: #2a4666;
+  --pc-primary-from: #27b4f2;
+  --pc-primary-to: #2d6fe8;
+  --pc-primary-text: #ffffff;
+  --pc-primary-glow: #2a8ff04d;
+  --pc-ghost-line: #2c3f57;
+  --pc-ghost-hover: #ffffff0a;
+}
+
+/* The body under the shared head. Fills the card, and when the row makes the
+   card taller than its content the extra room is shared out between the
+   sections rather than left as one hole above the buttons. */
+.pc-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 22px;
+}
+
+/* ---- Sections -------------------------------------------------------- */
+
+.pc-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px 13px 13px;
+  background: var(--pc-section-bg);
+  border: 1px solid var(--pc-section-line);
+  border-radius: 14px;
+}
+
+.pc-section__head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.pc-section__head > svg {
+  flex: none;
+  color: var(--pc-accent);
+}
+
+.pc-section__head h5 {
+  margin: 0;
+  color: var(--pc-value);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pc-section__aside {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--pc-faint);
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Tiles ----------------------------------------------------------- */
+
+.pc-tiles {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
+}
+
+.pc-tiles--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.pc-tile {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 11px;
+  background: var(--pc-tile-bg);
+  border: 1px solid var(--pc-tile-line);
+  border-radius: 10px;
+}
+
+.pc-tile__label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  color: var(--pc-label);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pc-tile__label > svg {
+  flex: none;
+  color: var(--pc-accent);
+}
+
+.pc-tile__label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-tile__value {
+  min-width: 0;
+  color: var(--pc-value);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.pc-tile__value--mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+}
+
+.pc-tile__sub {
+  color: var(--pc-faint);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+/* A tile whose thing is not running, or not built. Drawn as absent, never as
+   a fault: nothing is wrong, it just does not exist yet. */
+.pc-tile.is-idle .pc-tile__label > svg { color: var(--pc-idle); }
+
+/* ---- State words and chips --------------------------------------------- */
+
+.pc-state {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pc-state > svg { flex: none; }
+.pc-state.is-good { color: var(--pc-good); }
+.pc-state.is-warn { color: var(--pc-warn); }
+.pc-state.is-bad { color: var(--pc-bad); }
+.pc-state.is-accent { color: var(--pc-accent); }
+.pc-state.is-idle { color: var(--pc-idle); font-weight: 500; }
+
+.pc-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px 8px;
+  color: var(--pc-idle);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  background: var(--pc-idle-soft);
+  border: 1px solid var(--pc-idle-line);
+  border-radius: 999px;
+}
+
+.pc-chip.is-good { color: var(--pc-good); background: var(--pc-good-soft); border-color: var(--pc-good-line); }
+.pc-chip.is-warn { color: var(--pc-warn); background: var(--pc-warn-soft); border-color: var(--pc-warn-line); }
+.pc-chip.is-bad { color: var(--pc-bad); background: var(--pc-bad-soft); border-color: var(--pc-bad-line); }
+.pc-chip.is-accent { color: var(--pc-accent); background: var(--pc-accent-soft); border-color: var(--pc-accent-line); }
+
+/* The shared head's pill in its two extra states. Amber is reserved for the
+   one thing worth interrupting for on each card. */
+.net-card__badge.is-warn {
+  color: var(--pc-warn);
+  background: var(--pc-warn-soft);
+  border-color: var(--pc-warn-line);
+}
+
+.net-card__badge.is-idle {
+  color: var(--net-badge-off-fg);
+  background: var(--net-badge-off-bg);
+  border-color: var(--net-badge-off-line);
+}
+
+/* ---- Rows ------------------------------------------------------------- */
+
+.pc-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  gap: 10px;
+  color: var(--pc-label);
+  font-size: 12px;
+}
+
+.pc-row + .pc-row { border-top: 1px solid var(--pc-tile-line); }
+
+.pc-row > svg { flex: none; color: var(--pc-accent); }
+
+.pc-row__name { flex: none; white-space: nowrap; }
+
+.pc-row__value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-left: auto;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  color: var(--pc-value);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.pc-arrow { color: var(--pc-faint); font-weight: 400; }
+.pc-next { color: var(--pc-accent); }
+
+/* ---- Hero strip ------------------------------------------------------- */
+
+.pc-hero {
+  display: grid;
+  align-items: center;
+  gap: 12px 14px;
+  padding: 14px 15px;
+  background: linear-gradient(150deg, var(--pc-hero-top), var(--pc-hero-bottom));
+  border: 1px solid var(--pc-hero-line);
+  border-radius: 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.pc-hero.is-good { border-color: var(--pc-good-line); }
+.pc-hero.is-warn { border-color: var(--pc-warn-line); }
+
+.pc-hero__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--pc-accent);
+  background: var(--pc-accent-soft);
+  border: 1px solid var(--pc-accent-line);
+  border-radius: 50%;
+}
+
+.pc-hero.is-good .pc-hero__mark { color: var(--pc-good); background: var(--pc-good-soft); border-color: var(--pc-good-line); }
+.pc-hero.is-warn .pc-hero__mark { color: var(--pc-warn); background: var(--pc-warn-soft); border-color: var(--pc-warn-line); }
+.pc-hero.is-idle .pc-hero__mark { color: var(--pc-idle); background: var(--pc-idle-soft); border-color: var(--pc-idle-line); }
+
+.pc-hero__text { min-width: 0; }
+
+.pc-hero__title {
+  margin: 0;
+  color: var(--pc-value);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.pc-hero__body {
+  margin: 4px 0 0;
+  color: var(--pc-label);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* The step strip spans the whole hero under the text. */
+.pc-steps {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+  grid-column: 1 / -1;
+}
+
+.pc-step {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  color: var(--pc-idle);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.pc-step > svg { flex: none; }
+.pc-step.is-done { color: var(--pc-good); }
+.pc-step.is-active { color: var(--pc-accent); font-weight: 600; }
+
+/* The connector between two steps takes the remaining width. */
+.pc-step__line {
+  flex: 1;
+  min-width: 10px;
+  height: 1px;
+  background: var(--pc-tile-line);
+}
+
+.pc-step__line.is-done { background: var(--pc-good-line); }
+
+/* ---- Ring --------------------------------------------------------------- */
+
+.pc-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  flex: none;
+}
+
+.pc-ring svg {
+  width: 70px;
+  height: 70px;
+  transform: rotate(-90deg);
+}
+
+.pc-ring__track {
+  fill: none;
+  stroke: var(--pc-bar-track);
+  stroke-width: 5;
+}
+
+.pc-ring__fill {
+  fill: none;
+  stroke: var(--pc-accent);
+  stroke-width: 5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--motion-slow) var(--ease-standard);
+}
+
+.pc-ring.is-done .pc-ring__fill { stroke: var(--pc-good); }
+
+.pc-ring__label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.pc-ring__value {
+  color: var(--pc-value);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-ring__caption {
+  max-width: 50px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--pc-label);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-ring svg.is-spinning { animation: pc-spin 1.1s linear infinite; }
+
+/* ---- Usage bar ---------------------------------------------------------- */
+
+.pc-bar {
+  height: 4px;
+  overflow: hidden;
+  background: var(--pc-bar-track);
+  border-radius: 999px;
+}
+
+.pc-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--pc-accent);
+  border-radius: inherit;
+  transition: width var(--motion-slow) var(--ease-standard);
+}
+
+.pc-bar.is-full > span { background: var(--pc-warn); }
+
+/* ---- Notes ------------------------------------------------------------- */
+
+.pc-note {
+  margin: 0;
+  color: var(--pc-faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.pc-note--warn { color: var(--pc-warn); }
+
+.pc-note--alarm {
+  padding: 8px 10px;
+  color: var(--pc-warn);
+  background: var(--pc-warn-soft);
+  border: 1px solid var(--pc-warn-line);
+  border-radius: 10px;
+}
+
+/* ---- Footer and buttons ----------------------------------------------- */
+
+.pc-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pc-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 15px;
+  gap: 8px;
+  color: var(--pc-value);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid var(--pc-ghost-line);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.pc-button:hover:not(:disabled) { background: var(--pc-ghost-hover); }
+
+.pc-button:focus-visible {
+  outline: 2px solid var(--pc-accent);
+  outline-offset: 2px;
+}
+
+.pc-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pc-button--primary {
+  flex: 1;
+  color: var(--pc-primary-text);
+  background: linear-gradient(135deg, var(--pc-primary-from), var(--pc-primary-to));
+  border: 0;
+  box-shadow: 0 6px 18px var(--pc-primary-glow);
+}
+
+.pc-button--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--pc-primary-from), var(--pc-primary-to));
+  box-shadow: 0 8px 24px var(--pc-primary-glow);
+  filter: brightness(1.06);
+}
+
+/* "Go" rather than "do something": the install button once the images are here. */
+.pc-button--go {
+  --pc-primary-from: #3fd0a2;
+  --pc-primary-to: #1f9e77;
+  --pc-primary-glow: #2fbf8f4d;
+}
+
+.pc-button.is-working { cursor: progress; opacity: 1; }
+
+/* In the narrowest tracks three buttons share a row; a little less padding is
+   what keeps them on one line rather than pushing the primary onto a second. */
+@container (max-width: 400px) {
+  .pc-button { padding: 0 11px; gap: 6px; }
+}
+
+.pc-icon-hint {
+  display: inline-flex;
+  align-items: center;
+  color: var(--pc-faint);
+  cursor: help;
+}
+
+.pc-spin { animation: pc-spin 1.1s linear infinite; }
+
+@keyframes pc-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-spin,
+  .pc-ring svg.is-spinning { animation: none; }
+  .pc-ring__fill,
+  .pc-bar > span { transition: none; }
+}
+
+@media (width <= 420px) {
+  .pc-body { padding: 16px 16px 20px; }
+  .pc-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .pc-hero .pc-ring { grid-column: 1 / -1; justify-self: start; }
+  .pc-steps { flex-wrap: wrap; }
+  .pc-step__line { display: none; }
+}
+
+/* The light theme. Same structure, pale grounds; the accent darkens so it
+   still reads on white. */
+html[data-theme='light'] .pc-card {
+  --pc-section-bg: #f5f8fc;
+  --pc-section-line: #dfe7f1;
+  --pc-tile-bg: #ffffff;
+  --pc-tile-line: #dfe7f1;
+  --pc-label: #53657e;
+  --pc-value: #15233a;
+  --pc-faint: #6a7c95;
+  --pc-accent: #0373ad;
+  --pc-accent-soft: #0373ad12;
+  --pc-accent-line: #0373ad40;
+  --pc-good: #157047;
+  --pc-good-soft: #15704712;
+  --pc-good-line: #15704740;
+  --pc-warn: #9a5b00;
+  --pc-warn-soft: #9a5b0012;
+  --pc-warn-line: #9a5b0045;
+  --pc-bad: #b3261e;
+  --pc-bad-soft: #b3261e10;
+  --pc-bad-line: #b3261e40;
+  --pc-idle: #6a7c95;
+  --pc-idle-soft: #eef2f7;
+  --pc-idle-line: #d9e2ee;
+  --pc-bar-track: #e3eaf3;
+  --pc-hero-top: #f3f8fe;
+  --pc-hero-bottom: #eaf2fb;
+  --pc-hero-line: #cfe0f2;
+  --pc-primary-from: #1ea5e6;
+  --pc-primary-to: #2563d9;
+  --pc-primary-glow: #2563d933;
+  --pc-ghost-line: #d3dde9;
+  --pc-ghost-hover: #15233a08;
+}

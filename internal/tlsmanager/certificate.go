@@ -614,7 +614,33 @@ func statusFor(
 		RenewalDue:          source == SourceAutomatic && certificate.NotAfter.Sub(now) <= renewalWindow,
 		RenewsAutomatically: source == SourceAutomatic,
 		FingerprintSHA256:   formatFingerprint(sum[:]),
+		KeyAlgorithm:        keyAlgorithm(certificate.PublicKey),
 	}
+}
+
+// keyAlgorithm names a certificate's public key the way people write it. An
+// unrecognised key answers "", and the caller shows nothing rather than a
+// guess.
+func keyAlgorithm(publicKey any) string {
+	switch key := publicKey.(type) {
+	case *ecdsa.PublicKey:
+		if key.Curve == nil {
+			return ""
+		}
+		switch key.Curve.Params().Name {
+		case "P-256", "P-384", "P-521":
+			return "ECDSA " + key.Curve.Params().Name
+		}
+		return ""
+	case *rsa.PublicKey:
+		if key.N == nil {
+			return ""
+		}
+		return fmt.Sprintf("RSA-%d", key.N.BitLen())
+	case ed25519.PublicKey:
+		return "Ed25519"
+	}
+	return ""
 }
 
 func formatFingerprint(value []byte) string {

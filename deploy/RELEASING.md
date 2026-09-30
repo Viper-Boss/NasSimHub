@@ -93,8 +93,12 @@
 - `https://cdn.jsdelivr.net/gh/Viper-Boss/nassimhub-releases@main/stable.signed.json`
 - `https://fastly.jsdelivr.net/gh/Viper-Boss/nassimhub-releases@main/stable.signed.json`
 
-要加地址（Gitee 的 raw、对象存储、局域网里的一个文件都行），设 `MODEMDECK_RELEASE_CHANNEL_URLS`，
+要加地址（对象存储、局域网里的一个文件都行），设 `MODEMDECK_RELEASE_CHANNEL_URLS`，
 逗号分隔。这会**替换**默认列表，所以想保留默认的就把它们也写上。
+
+**另外两个来源：NKN 和 DHT（r121 起）。** 网关还会向其他网关要清单，和上面三个地址一起比版本。
+发布时**不用多做任何事**：你自己的网关从 GitHub 拿到新版本后，会自动转交给来问的其他网关，
+那些网关再转交给下一批。签名保证了谁转交都一样。细节见 `docs/p2p-updates.md`。
 
 ## 给国内网关加镜像
 

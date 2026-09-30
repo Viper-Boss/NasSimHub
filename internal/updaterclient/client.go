@@ -3,6 +3,7 @@ package updaterclient
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,8 @@ var (
 	// ErrDownloadUnsupported means this updater cannot fetch ahead of
 	// installing -- an older updater, or a runtime without that ability.
 	ErrDownloadUnsupported = errors.New("this updater cannot download ahead of installing")
+	// errNotFound means the updater has no verified release to share yet.
+	errNotFound = errors.New("the updater has no verified release yet")
 )
 
 type HTTPClient interface {
@@ -131,6 +134,37 @@ func (client *Client) RunningImages(ctx context.Context) ([]updatecheck.RunningI
 	return response.Images, nil
 }
 
+// OfferRelease hands the updater's release channel what a peer network
+// answered. The updater verifies it; nothing here is trusted.
+func (client *Client) OfferRelease(ctx context.Context, kind string, signed []byte, peers int) error {
+	offer := struct {
+		Kind         string `json:"kind"`
+		SignedBase64 string `json:"signed_base64"`
+		Peers        int    `json:"peers,omitempty"`
+	}{Kind: kind, Peers: peers}
+	if len(signed) > 0 {
+		offer.SignedBase64 = base64.StdEncoding.EncodeToString(signed)
+	}
+	var source updatecheck.Source
+	return client.request(ctx, http.MethodPost, "/v1/release/offer", offer, &source)
+}
+
+// SignedRelease is the verified signed document behind the updater's current
+// answer, for sharing with other gateways. Nil with no error when there is
+// none yet.
+func (client *Client) SignedRelease(ctx context.Context) ([]byte, error) {
+	var payload struct {
+		SignedBase64 string `json:"signed_base64"`
+	}
+	if err := client.request(ctx, http.MethodGet, "/v1/release/signed", nil, &payload); err != nil {
+		if errors.Is(err, errNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return base64.StdEncoding.DecodeString(payload.SignedBase64)
+}
+
 func (client *Client) request(
 	ctx context.Context,
 	method, path string,
@@ -177,6 +211,8 @@ func (client *Client) request(
 			return ErrOperationRunning
 		case "update_not_available":
 			return ErrNothingToDownload
+		case "release_not_found":
+			return errNotFound
 		case "download_unsupported", "not_found":
 			return ErrDownloadUnsupported
 		default:

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/base64"
 	"net/http"
 
 	"github.com/human-agent65535/modemdeck/agent/internal/dht"
@@ -76,4 +77,54 @@ func (h *handler) getDHTIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]any{"peer_id": id})
+}
+
+// putDHTRelease sets the signed release manifest this node shares with its
+// DHT peers. The api sends only a document it has verified; an empty one
+// stops sharing (the operator switched sharing off).
+func (h *handler) putDHTRelease(w http.ResponseWriter, r *http.Request) {
+	if h.dht == nil {
+		h.writeAPIError(w, http.StatusServiceUnavailable, domain.ErrorUnavailable, "dht", "", "DHT service is not configured")
+		return
+	}
+	var request struct {
+		SignedBase64 string `json:"signed_base64"`
+	}
+	if err := decodeJSON(w, r, &request); err != nil {
+		h.writeAPIError(w, http.StatusBadRequest, domain.ErrorInvalidArgument, "dht", "", err.Error())
+		return
+	}
+	signed, err := base64.StdEncoding.DecodeString(request.SignedBase64)
+	if err != nil {
+		h.writeAPIError(w, http.StatusBadRequest, domain.ErrorInvalidArgument, "dht", "signed_base64", "not base64")
+		return
+	}
+	if err := h.dht.SetRelease(signed); err != nil {
+		h.writeAPIError(w, http.StatusBadRequest, domain.ErrorInvalidArgument, "dht", "signed_base64", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// postDHTReleaseFetch asks the connected peers for their signed release
+// documents and returns them as they came -- unverified. The api verifies.
+func (h *handler) postDHTReleaseFetch(w http.ResponseWriter, r *http.Request) {
+	if h.dht == nil {
+		h.writeAPIError(w, http.StatusServiceUnavailable, domain.ErrorUnavailable, "dht", "", "DHT service is not configured")
+		return
+	}
+	releases, err := h.dht.FetchReleases(r.Context())
+	if err != nil {
+		h.writeAPIError(w, http.StatusServiceUnavailable, domain.ErrorUnavailable, "dht", "", err.Error())
+		return
+	}
+	type answer struct {
+		Peer         string `json:"peer"`
+		SignedBase64 string `json:"signed_base64"`
+	}
+	answers := make([]answer, 0, len(releases))
+	for _, release := range releases {
+		answers = append(answers, answer{Peer: release.Peer, SignedBase64: base64.StdEncoding.EncodeToString(release.Signed)})
+	}
+	h.writeJSON(w, http.StatusOK, map[string]any{"releases": answers})
 }

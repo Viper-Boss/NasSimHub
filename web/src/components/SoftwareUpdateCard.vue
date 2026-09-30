@@ -1,21 +1,34 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
+  BadgeCheck,
+  ChevronRight,
   CircleCheck,
+  CircleDashed,
+  CircleDot,
   CircleOff,
-  CloudUpload,
+  CloudDownload,
+  CloudOff,
   Download,
   ExternalLink,
   Globe2,
-  Info,
+  Hash,
+  Layers,
   LoaderCircle,
   Network,
+  Package,
   RefreshCw,
+  RotateCcw,
+  Share2,
   ShieldCheck,
+  TriangleAlert,
   Waypoints
 } from '@lucide/vue'
 
+import './networkCard.css'
+import './panelCard.css'
 import type { UpdateComponentName, UpdateOperationComponentState } from '../api/types'
 import { i18n, resolvedLocale } from '../i18n'
 import { softwareUpdateCardLabels } from '../i18n/softwareUpdateCardLabels'
@@ -25,14 +38,16 @@ import {
   attachSoftwareUpdate,
   checkForUpdates,
   ensureInitialUpdateCheck,
+  loadReleaseSharing,
   setAutoDownload,
+  setReleaseSharing,
   setSoftwareUpdateDownloadMessages,
   setSoftwareUpdateMessages,
   startUpdateDownload,
   useSoftwareUpdate
 } from '../state/softwareUpdate'
 
-// The update card at the foot of the dashboard.
+// The update card on the dashboard.
 //
 // WHAT IT IS FOR. Updating used to live only in settings, three clicks from
 // anywhere, which is the wrong place for the one action an operator takes when
@@ -40,28 +55,29 @@ import {
 // change, and the button on the page they already have open.
 //
 // IT SAYS WHAT IS AND IS NOT CHECKED, and that is the part to leave alone.
-// The layout follows a mock-up that showed three green ticks -- integrity,
-// source agreement, signature -- and a "3/3 sources agree" badge. When this
-// card was first built only one of those was true, and it said so. Since then
-// the release path has been rebuilt: releases are signed, verified against the
-// key compiled into this build, and fetched from several mirrors. So the rows
-// now light up -- but each one is still DRIVEN BY WHAT THE UPDATER REPORTED on
-// this check, never by what the code is supposed to do. The signature row is
-// green only when a mirror returned a manifest that verified; the agreement
-// row counts the mirrors that did. On a check that reached nothing, they go
-// dark again, which is correct: nothing was verified.
+// The layout follows a mock-up that showed green ticks everywhere -- integrity,
+// source agreement, signature, hardware compatibility, a rollback point -- and
+// a "3/3 sources agree" badge. Each tile here is DRIVEN BY WHAT THE UPDATER
+// REPORTED on this check, never by what the code is supposed to do. The
+// signature tile is green only when a mirror returned a manifest that
+// verified; the agreement tile counts the mirrors that did; the rollback tile
+// is lit only when there is an updater to roll back with. On a check that
+// reached nothing, they go dark again, which is correct: nothing was verified.
+// There is no hardware-compatibility tile, because nothing checks that.
 //
-// THE BUTTON FOLLOWS THE DOWNLOAD. The gateway fetches a new release's images
-// in the background as soon as it sees one. While that runs the button is a
-// ring counting images fetched; when it is done the button is the green
-// "update now", and pressing it is a restart rather than a download.
-
+// THE HERO FOLLOWS THE DOWNLOAD. The gateway fetches a new release's images
+// in the background as soon as it sees one. While that runs the hero's ring
+// counts images fetched; when it is done the ring is full, the steps read
+// "waiting to install", and the button is the green "update now" -- pressing
+// it is a restart rather than a download.
+//
 // THE RING IS HONEST TOO, in a smaller way. It is driven by which stage each
 // component has reached, not by bytes: `docker pull` runs through
 // CombinedOutput in the gateway, so its progress stream is read and discarded
-// and no byte count reaches the API. The ring therefore moves in steps and the
-// note under it says so. Making it look smoother would mean inventing the
-// motion between the steps.
+// and no byte count reaches the API. The ring therefore moves in steps.
+// Making it look smoother would mean inventing the motion between the steps.
+//
+// NO SCROLLING INSIDE. See panelCard.css.
 
 const { t } = useI18n()
 const {
@@ -80,7 +96,9 @@ const {
   savingPreference,
   releaseSources,
   sourceAgreement,
-  signatureVerified
+  signatureVerified,
+  releaseSharing,
+  savingSharing
 } = useSoftwareUpdate()
 
 let detach: (() => void) | undefined
@@ -122,29 +140,11 @@ const currentVersion = computed(
 const latestVersion = computed(() => updateCheck.value?.latest_version || '')
 const hasUpdate = computed(() => status.value === 'update_available')
 
-const headline = computed(() => {
-  if (checking.value && !updateCheck.value) {
-    return { key: 'checking', title: label('checkingTitle'), body: '' }
-  }
-  switch (status.value) {
-    case 'update_available':
-      return { key: 'available', title: label('availableTitle'), body: label('availableBody') }
-    case 'up_to_date':
-      return { key: 'current', title: label('upToDateTitle'), body: label('upToDateBody') }
-    case 'development':
-      return {
-        key: 'development',
-        title: label('developmentTitle'),
-        body: label('developmentBody')
-      }
-    default:
-      return {
-        key: 'unavailable',
-        title: label('unavailableTitle'),
-        body: label('unavailableBody')
-      }
-  }
-})
+/**
+ * Whether this deployment has an updater at all. The updater is what reports
+ * the auto-download preference, so its absence from the check is the signal.
+ */
+const updaterPresent = computed(() => autoDownload.value !== undefined)
 
 /**
  * Why the update button is unavailable, when it is.
@@ -179,7 +179,7 @@ const canApply = computed(
     !downloading.value
 )
 
-/** Whether the ring in the button is showing the download or the install. */
+/** Whether the ring is showing the download or the install. */
 const showingDownload = computed(() => !applying.value && hasUpdate.value && downloading.value)
 
 /** The switch in the header, or nothing when there is no updater to ask. */
@@ -202,28 +202,150 @@ const canDownloadNow = computed(
 )
 
 /**
- * The update sources and their real state.
- *
- * The release mirrors come from the check itself, one row each, by host: what
- * each one returned this time. DHT and NKN are listed because the gateway
- * already speaks both and fetching a release over them is the planned next
- * channel for networks that reach none of the mirrors; they are marked as not
- * wired up, because they are not.
+ * The hero strip: one sentence for where things stand, and what happens next.
  */
-const sources = computed(() => [
-  ...releaseSources.value.map(entry => ({
-    key: `mirror-${entry.name}`,
-    icon: Globe2,
-    name: entry.name,
-    wired: entry.state === 'verified',
-    detail:
-      entry.state === 'verified'
-        ? label('sourceVerified', { version: entry.version || '' })
-        : label(`sourceState_${entry.state}`)
-  })),
-  { key: 'dht', icon: Waypoints, name: label('sourceDHT'), wired: false, detail: label('sourceNotWired') },
-  { key: 'nkn', icon: Network, name: label('sourceNKN'), wired: false, detail: label('sourceNotWired') }
-])
+const hero = computed(() => {
+  if (checking.value && !updateCheck.value) {
+    return { key: 'checking', tone: '', icon: LoaderCircle, spin: true, title: label('checkingTitle'), body: '' }
+  }
+  if (applying.value) {
+    return { key: 'applying', tone: '', icon: Download, spin: false, title: label('heroApplyingTitle'), body: label('updatingHint') }
+  }
+  switch (status.value) {
+    case 'update_available':
+      if (blockedReason.value) {
+        return { key: 'available', tone: 'is-warn', icon: TriangleAlert, spin: false, title: label('availableTitle'), body: blockedReason.value.body }
+      }
+      if (downloadReady.value) {
+        return { key: 'ready', tone: 'is-good', icon: CircleCheck, spin: false, title: label('heroReadyTitle'), body: label('downloadReadyHint') }
+      }
+      if (showingDownload.value) {
+        return { key: 'downloading', tone: '', icon: CloudDownload, spin: false, title: label('heroDownloadingTitle'), body: label('downloadingHint') }
+      }
+      if (downloadFailed.value) {
+        return { key: 'failed', tone: 'is-warn', icon: TriangleAlert, spin: false, title: label('heroFailedTitle'), body: label('downloadFailedHint') }
+      }
+      return {
+        key: 'available',
+        tone: '',
+        icon: CloudDownload,
+        spin: false,
+        title: label('availableTitle'),
+        body: autoDownload.value ? label('downloadQueuedHint') : label('autoDownloadHintShort')
+      }
+    case 'up_to_date':
+      return { key: 'current', tone: 'is-good', icon: CircleCheck, spin: false, title: label('upToDateTitle'), body: label('upToDateBody') }
+    case 'development':
+      return { key: 'development', tone: 'is-idle', icon: Package, spin: false, title: label('developmentTitle'), body: label('developmentBody') }
+    default:
+      return { key: 'unavailable', tone: 'is-idle', icon: CloudOff, spin: false, title: label('unavailableTitle'), body: label('unavailableBody') }
+  }
+})
+
+/**
+ * The three steps under the hero, each from reported state: the manifest
+ * verified, the images on the machine, and the install.
+ */
+const steps = computed(() => {
+  const downloadStep = downloadReady.value
+    ? 'is-done'
+    : showingDownload.value
+      ? 'is-active'
+      : ''
+  const installStep = applying.value || downloadReady.value ? 'is-active' : ''
+  return [
+    { key: 'signature', tone: signatureVerified.value ? 'is-done' : '', name: label('stepSignature') },
+    { key: 'download', tone: downloadStep, name: label('stepDownload') },
+    {
+      key: 'install',
+      tone: installStep,
+      name: applying.value ? label('stepInstalling') : label('stepInstall')
+    }
+  ]
+})
+
+/**
+ * A step's mark: ticked when done, turning while it is actually running, a
+ * filled dot when it is the next thing and waiting on the operator, dashed
+ * when it has not been reached.
+ */
+function stepIcon(step: { key: string; tone: string }) {
+  if (step.tone === 'is-done') return CircleCheck
+  if (step.tone !== 'is-active') return CircleDashed
+  return stepRunning(step) ? LoaderCircle : CircleDot
+}
+
+function stepRunning(step: { key: string; tone: string }): boolean {
+  if (step.tone !== 'is-active') return false
+  return step.key === 'download' || (step.key === 'install' && applying.value)
+}
+
+/** Friendly names for the mirrors this build ships with; anything else by host. */
+const MIRROR_NAMES: Record<string, string> = {
+  'raw.githubusercontent.com': 'GitHub',
+  'cdn.jsdelivr.net': 'jsDelivr',
+  'fastly.jsdelivr.net': 'Fastly'
+}
+
+/**
+ * The HTTPS mirrors, one tile each: what each returned this time. Lit only
+ * when it returned a manifest that verified.
+ */
+const sources = computed(() =>
+  releaseSources.value
+    .filter(entry => entry.kind === 'mirror')
+    .map(entry => ({
+      key: `mirror-${entry.name}`,
+      icon: Globe2,
+      name: MIRROR_NAMES[entry.name] || entry.name,
+      host: entry.name,
+      wired: entry.state === 'verified',
+      tone: entry.state === 'verified' ? 'is-good' : entry.state === 'unreachable' ? 'is-idle' : 'is-bad',
+      detail: entry.state === 'verified' ? label('sourceVerified') : label(`sourceState_${entry.state}`),
+      version: entry.version || ''
+    }))
+)
+
+const mirrorTiles = computed(() => sources.value)
+
+/**
+ * The two peer networks, as this check found them: the same signed manifest,
+ * handed over by other gateways.
+ *
+ * Absent from the check means this gateway did not ask over that network --
+ * it is switched off, or the gateway predates the peer networks -- and that
+ * is "not taking part", never a pass. Asked with no answer is its own state:
+ * early on, with few gateways holding a release, it is the common one, and it
+ * must not read as a failure.
+ */
+function peerSource(kind: 'dht' | 'nkn') {
+  const entry = releaseSources.value.find(source => source.kind === kind)
+  const base = {
+    key: kind,
+    icon: kind === 'dht' ? Waypoints : Network,
+    name: label(kind === 'dht' ? 'sourceDHT' : 'sourceNKN')
+  }
+  if (!entry) return { ...base, tone: '', detail: label('sourcePeerIdle'), title: label('sourcePeerIdleNote') }
+  if (entry.state === 'verified') {
+    return {
+      ...base,
+      tone: 'is-good',
+      detail: entry.peers ? label('sourcePeerVerified', { count: entry.peers }) : label('sourceVerified'),
+      title: entry.version || ''
+    }
+  }
+  if (entry.state === 'unreachable') {
+    return { ...base, tone: '', detail: label('sourcePeerSilent'), title: label('sourcePeerSilentNote') }
+  }
+  return { ...base, tone: 'is-bad', detail: label(`sourceState_${entry.state}`), title: '' }
+}
+
+const peerSources = computed(() => [peerSource('dht'), peerSource('nkn')])
+
+function toggleSharing(): void {
+  if (!releaseSharing.value) return
+  void setReleaseSharing(!releaseSharing.value.enabled)
+}
 
 const sourcesSummary = computed(() =>
   sourceAgreement.value.total === 0
@@ -234,17 +356,27 @@ const sourcesSummary = computed(() =>
       })
 )
 
+/** The agreement as a fraction, counted from what the mirrors returned. */
+const agreementFraction = computed(() =>
+  sourceAgreement.value.total === 0
+    ? label('notAvailable')
+    : `${sourceAgreement.value.agreeing}/${sourceAgreement.value.total}`
+)
+
 /**
- * The three verification rows, each lit only by what this check reported.
+ * The verification tiles, each lit only by what this check reported.
  *
  * Integrity is always enforced -- every pull is by digest and Docker checks
  * it. Signature is lit when a mirror returned a manifest that verified against
  * the compiled-in key. Agreement is lit when at least two mirrors returned the
- * same verified release; with one there is nothing to agree with.
+ * same verified release; with one there is nothing to agree with. Rollback is
+ * lit when there is an updater: it is the updater that restores the previous
+ * images when a restarted component does not come up.
  */
 const verifications = computed(() => [
   {
     key: 'integrity',
+    icon: Hash,
     name: label('verifyIntegrity'),
     value: label('verifyIntegrityValue'),
     note: label('verifyIntegrityNote'),
@@ -252,17 +384,29 @@ const verifications = computed(() => [
   },
   {
     key: 'consensus',
+    icon: Layers,
     name: label('verifyConsensus'),
-    value: sourcesSummary.value,
-    note: label('verifyConsensusNote'),
+    value: agreementFraction.value,
+    note: `${sourcesSummary.value}. ${label('verifyConsensusNote')}`,
     active: sourceAgreement.value.agreeing >= 2
   },
   {
     key: 'signature',
+    icon: BadgeCheck,
     name: label('verifySignature'),
     value: signatureVerified.value ? label('verifySignatureValue') : label('verifySignatureNone'),
-    note: label('verifySignatureNote'),
+    note: signingKey.value
+      ? `${label('verifySignatureNote')} ${label('signingKeyInline', { fingerprint: signingKey.value })}`
+      : label('verifySignatureNote'),
     active: signatureVerified.value
+  },
+  {
+    key: 'rollback',
+    icon: RotateCcw,
+    name: label('verifyRollback'),
+    value: updaterPresent.value ? label('verifyRollbackValue') : label('verifyRollbackNone'),
+    note: label('verifyRollbackNote'),
+    active: updaterPresent.value
   }
 ])
 
@@ -289,11 +433,71 @@ function stageLabel(state?: UpdateOperationComponentState): string {
   return label(keys[state])
 }
 
-// The ring. r=13 in a 32-box, so the stroke sits inside the button's edge.
-const RING_RADIUS = 13
+function stageTone(state?: UpdateOperationComponentState): string {
+  switch (state) {
+    case 'ready':
+      return 'is-good'
+    case 'failed':
+      return 'is-bad'
+    case 'rolling_back':
+    case 'rolled_back':
+      return 'is-warn'
+    default:
+      return 'is-accent'
+  }
+}
+
+/**
+ * The key this gateway verifies releases against, as the first four bytes in
+ * hex -- the form the signing console prints beside its own key. The two
+ * matching is how an operator tells that this gateway will accept what they
+ * sign. Reported by the gateway; never derived here.
+ */
+const signingKey = computed(() => updateCheck.value?.signing_key || '')
+
+function formatWhen(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString(resolvedLocale(), {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+/**
+ * The last install that finished, as the updater recorded it. Nothing when
+ * there is no record -- and "none yet" only when there is an updater that
+ * would have kept one, because without one the absence says nothing.
+ */
+const lastUpdate = computed(() => {
+  const operation = updateCheck.value?.last_operation
+  if (!operation) return null
+  return {
+    version: operation.target_version,
+    succeeded: operation.state === 'succeeded',
+    when: formatWhen(operation.finished_at || operation.started_at)
+  }
+})
+
+/** When the check ran, as a local time -- or nothing if it never did. */
+const checkedAt = computed(() => {
+  const value = updateCheck.value?.checked_at
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString(resolvedLocale(), { hour: '2-digit', minute: '2-digit' })
+})
+
+// The ring. r=30 in a 70-box, 5px stroke.
+const RING_RADIUS = 30
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
-const ringOffset = computed(
-  () => RING_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, ringValue.value)) / 100)
+
+/** The ring is shown while there is a download or an install to report. */
+const ringShown = computed(
+  () => hasUpdate.value && (showingDownload.value || applying.value || downloadReady.value)
 )
 
 /**
@@ -307,8 +511,25 @@ const ringIndeterminate = computed(() =>
     : applying.value && (startingUpdate.value || displayedComponents.value.length === 0)
 )
 
-/** The ring's number: images fetched while downloading, the ladder while installing. */
-const ringValue = computed(() => (showingDownload.value ? downloadProgress.value : progress.value))
+/**
+ * The ring's number: images fetched while downloading -- and once they are all
+ * here, the same count, which is then full -- or the ladder while installing.
+ */
+const ringValue = computed(() =>
+  !applying.value && downloadReady.value
+    ? downloadProgress.value
+    : showingDownload.value ? downloadProgress.value : progress.value
+)
+
+const ringOffset = computed(
+  () => RING_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, ringValue.value)) / 100)
+)
+
+const ringCaption = computed(() => {
+  if (applying.value) return label('updating')
+  if (showingDownload.value) return label('downloading')
+  return label('ringDownloaded')
+})
 
 async function onUpdate(): Promise<void> {
   if (!canApply.value) return
@@ -330,6 +551,7 @@ onMounted(() => {
   if (!visible.value) return
   detach = attachSoftwareUpdate()
   void ensureInitialUpdateCheck()
+  void loadReleaseSharing()
 })
 
 onBeforeUnmount(() => {
@@ -339,669 +561,412 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="visible" class="update-shell">
-    <article class="update-card" :class="`update-card--${headline.key}`">
-    <header class="update-card__head">
-      <span class="update-card__mark"><CloudUpload :size="15" /></span>
-      <div class="update-card__heading">
-        <h4>{{ label('title') }}</h4>
-        <p class="update-card__eyebrow">{{ label('subtitle') }}</p>
+  <article v-if="visible" class="update-card net-card pc-card" :class="`update-card--${hero.key}`">
+    <header class="net-card__head">
+      <div>
+        <div class="net-card__title">
+          <RefreshCw class="net-card__icon" />
+          <h4>{{ label('title') }}</h4>
+        </div>
+        <p class="net-card__eyebrow">{{ label('subtitle') }}</p>
       </div>
       <button
         v-if="autoDownloadKnown"
         type="button"
-        class="update-card__auto"
-        :class="{ 'is-on': autoDownload }"
+        class="net-card__badge update-card__auto"
+        :class="{ 'is-idle': !autoDownload }"
         role="switch"
         :aria-checked="autoDownload ? 'true' : 'false'"
         :disabled="savingPreference"
         :title="label('autoDownloadHint')"
         @click="toggleAutoDownload"
       >
-        <Download v-if="autoDownload" :size="13" />
-        <CircleOff v-else :size="13" />
         {{ autoDownload ? label('autoDownloadOn') : label('autoDownloadOff') }}
       </button>
     </header>
 
-    <div class="update-card__body">
-      <div class="update-card__banner">
-        <p class="update-card__banner-title">{{ headline.title }}</p>
-        <p v-if="headline.body" class="update-card__banner-body">{{ headline.body }}</p>
-      </div>
-
-      <div class="update-card__versions">
-        <div class="update-card__version">
-          <span class="update-card__version-label">{{ label('currentVersion') }}</span>
-          <strong class="update-card__version-value">{{ currentVersion }}</strong>
+    <div class="pc-body">
+      <section class="pc-hero" :class="hero.tone" aria-live="polite">
+        <span class="pc-hero__mark">
+          <component :is="hero.icon" :size="21" :class="{ 'pc-spin': hero.spin }" />
+        </span>
+        <div class="pc-hero__text">
+          <p class="pc-hero__title">{{ hero.title }}</p>
+          <p v-if="hero.body" class="pc-hero__body">{{ hero.body }}</p>
         </div>
-        <span v-if="hasUpdate" class="update-card__arrow" aria-hidden="true">→</span>
-        <div v-if="hasUpdate" class="update-card__version update-card__version--next">
-          <span class="update-card__version-label">{{ label('latestVersion') }}</span>
-          <strong class="update-card__version-value">{{ latestVersion }}</strong>
-        </div>
-      </div>
-
-      <div class="update-card__scrollwrap">
-      <div class="update-card__scroll">
-      <div class="update-card__columns">
-        <section class="update-card__panel">
-          <h5>{{ label('sourcesTitle') }}</h5>
-          <ul class="update-card__sources">
-            <li
-              v-for="source in sources"
-              :key="source.key"
-              :class="{ 'is-idle': !source.wired }"
-            >
-              <component :is="source.icon" :size="14" />
-              <span class="update-card__source-name">{{ source.name }}</span>
-              <span class="update-card__source-detail">{{ source.detail }}</span>
-            </li>
-          </ul>
-          <p class="update-card__note" :title="label('sourcesNote')">
-            {{ sourcesSummary }}
-          </p>
-        </section>
-
-        <section class="update-card__panel">
-          <h5>{{ label('verifyTitle') }}</h5>
-          <ul class="update-card__checks">
-            <li
-              v-for="entry in verifications"
-              :key="entry.key"
-              :class="{ 'is-idle': !entry.active }"
-            >
-              <CircleCheck v-if="entry.active" :size="14" />
-              <CircleOff v-else :size="14" />
-              <!-- The explanation is the tooltip here; the value is what has
-                   to stay legible, because "not enabled" is the whole point of
-                   the row. -->
-              <div :title="entry.note">
-                <span class="update-card__check-name">{{ entry.name }}</span>
-                <span class="update-card__check-value">{{ entry.value }}</span>
-              </div>
-            </li>
-          </ul>
-        </section>
-
-        <section v-if="hasUpdate" class="update-card__panel">
-          <h5>{{ label('componentsTitle') }}</h5>
-          <ul v-if="displayedComponents.length" class="update-card__components">
-            <li v-for="component in displayedComponents" :key="component.name">
-              <span class="update-card__component-tag">
-                {{ componentLabels[component.name] }}
-              </span>
-              <span class="update-card__component-target">
-                {{
-                  component.target_version
-                    ? label('componentTo', { version: component.target_version })
-                    : label('componentUnchanged')
-                }}
-              </span>
-              <span
-                v-if="applying && componentState(component.name)"
-                class="update-card__component-stage"
-                :class="`is-${componentState(component.name)}`"
-              >
-                {{ stageLabel(componentState(component.name)) }}
-              </span>
-            </li>
-          </ul>
-          <p v-else class="update-card__note">{{ label('componentsNone') }}</p>
-        </section>
-      </div>
-
-      </div>
-      </div>
-
-      <div v-if="blockedReason" class="update-card__blocked">
-        <Info :size="14" />
-        <div>
-          <strong>{{ blockedReason.title }}</strong>
-          <p>{{ blockedReason.body }}</p>
-        </div>
-      </div>
-
-      <footer class="update-card__foot">
-        <a
-          v-if="hasUpdate && updateCheck?.release_url"
-          class="update-card__link"
-          :href="updateCheck.release_url"
-          target="_blank"
-          rel="noreferrer noopener"
+        <!-- The ring reports the download while it runs and the component
+             ladder while installing. role/aria say the same thing to a screen
+             reader, and the value is left off while it is indeterminate rather
+             than reported as zero. -->
+        <span
+          v-if="ringShown"
+          class="pc-ring"
+          :class="{ 'is-done': !applying && downloadReady }"
+          role="progressbar"
+          :aria-label="showingDownload || downloadReady ? label('downloadProgressLabel') : label('progressLabel')"
+          :aria-valuenow="ringIndeterminate ? undefined : ringValue"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :title="applying ? label('progressNote') : undefined"
         >
-          {{ label('releaseNotes') }}
-          <ExternalLink :size="13" />
-        </a>
+          <svg viewBox="0 0 70 70" aria-hidden="true" :class="{ 'is-spinning': ringIndeterminate }">
+            <circle class="pc-ring__track" cx="35" cy="35" :r="RING_RADIUS" />
+            <circle
+              class="pc-ring__fill"
+              cx="35"
+              cy="35"
+              :r="RING_RADIUS"
+              :stroke-dasharray="RING_CIRCUMFERENCE"
+              :stroke-dashoffset="ringIndeterminate ? RING_CIRCUMFERENCE * 0.72 : ringOffset"
+            />
+          </svg>
+          <span class="pc-ring__label">
+            <span v-if="!ringIndeterminate" class="pc-ring__value">{{ ringValue }}%</span>
+            <span class="pc-ring__caption">{{ ringCaption }}</span>
+          </span>
+        </span>
+        <ol v-if="hasUpdate" class="pc-steps">
+          <template v-for="(step, index) in steps" :key="step.key">
+            <li
+              v-if="index > 0"
+              class="pc-step__line"
+              :class="{ 'is-done': steps[index - 1]?.tone === 'is-done' }"
+              aria-hidden="true"
+            ></li>
+            <li class="pc-step" :class="step.tone">
+              <component
+                :is="stepIcon(step)"
+                :size="14"
+                :class="{ 'pc-spin': stepRunning(step) }"
+              />
+              {{ step.name }}
+            </li>
+          </template>
+        </ol>
+      </section>
 
+      <section class="pc-section">
+        <div class="pc-section__head">
+          <Package :size="15" />
+          <h5>{{ label('versionTitle') }}</h5>
+          <a
+            v-if="hasUpdate && updateCheck?.release_url"
+            class="pc-section__aside update-card__notes"
+            :href="updateCheck.release_url"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {{ label('releaseNotes') }}
+            <ExternalLink :size="12" />
+          </a>
+          <span v-else-if="checkedAt" class="pc-section__aside">
+            {{ label('lastChecked', { time: checkedAt }) }}
+          </span>
+        </div>
+        <ul class="pc-rows">
+          <!-- One row for the move from this version to the next: the arrow
+               says "update" without a chip to say it again. -->
+          <li v-if="hasUpdate" class="pc-row">
+            <span class="pc-row__name">{{ label('versionChange') }}</span>
+            <span class="pc-row__value">
+              {{ currentVersion }}
+              <span class="pc-arrow" aria-hidden="true">→</span>
+              <span class="pc-next">{{ latestVersion }}</span>
+            </span>
+          </li>
+          <li v-else class="pc-row">
+            <span class="pc-row__name">{{ label('currentVersion') }}</span>
+            <span class="pc-row__value">
+              {{ currentVersion }}
+              <span v-if="status === 'up_to_date'" class="pc-chip is-good">{{ label('chipLatest') }}</span>
+            </span>
+          </li>
+          <!-- With no release on offer the section has room for the facts
+               around the version: where releases come from, which key they
+               must be signed with, and what happened last time. Each row is
+               there only when the gateway reported it. -->
+          <template v-if="!hasUpdate">
+            <li class="pc-row" :title="label('channelNote')">
+              <span class="pc-row__name">{{ label('channelTitle') }}</span>
+              <span class="pc-row__value">{{ label('channelStable') }}</span>
+            </li>
+            <li v-if="signingKey" class="pc-row" :title="label('signingKeyNote')">
+              <span class="pc-row__name">{{ label('signingKeyTitle') }}</span>
+              <span class="pc-row__value update-card__mono">{{ signingKey }}</span>
+            </li>
+            <li v-if="lastUpdate" class="pc-row">
+              <span class="pc-row__name">{{ label('lastUpdateTitle') }}</span>
+              <span class="pc-row__value">
+                {{ lastUpdate.version }}
+                <span class="pc-chip" :class="lastUpdate.succeeded ? 'is-good' : 'is-bad'">
+                  {{ lastUpdate.succeeded ? label('lastUpdateSucceeded') : label('lastUpdateFailed') }}
+                </span>
+                <span v-if="lastUpdate.when" class="update-card__muted">{{ lastUpdate.when }}</span>
+              </span>
+            </li>
+            <li v-else-if="updaterPresent" class="pc-row">
+              <span class="pc-row__name">{{ label('lastUpdateTitle') }}</span>
+              <span class="pc-row__value update-card__muted">{{ label('lastUpdateNone') }}</span>
+            </li>
+          </template>
+          <li v-if="hasUpdate" class="pc-row">
+            <span class="pc-row__name">{{ label('componentsTitle') }}</span>
+            <span v-if="displayedComponents.length" class="pc-row__value">
+              <span
+                v-for="component in displayedComponents"
+                :key="component.name"
+                class="pc-chip"
+                :class="applying ? stageTone(componentState(component.name)) : 'is-accent'"
+                :title="
+                  applying && componentState(component.name)
+                    ? stageLabel(componentState(component.name))
+                    : component.target_version
+                      ? label('componentTo', { version: component.target_version })
+                      : label('componentUnchanged')
+                "
+              >
+                {{ componentLabels[component.name] }}
+                <template v-if="applying && componentState(component.name)">
+                  · {{ stageLabel(componentState(component.name)) }}
+                </template>
+              </span>
+            </span>
+            <span v-else class="pc-row__value update-card__muted">{{ label('componentsNone') }}</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="pc-section">
+        <div class="pc-section__head">
+          <Globe2 :size="15" />
+          <h5>{{ label('sourcesTitle') }}</h5>
+          <span class="pc-section__aside" :title="label('sourcesNote')">{{ sourcesSummary }}</span>
+        </div>
+        <div v-if="mirrorTiles.length" class="pc-tiles update-card__mirrors">
+          <div
+            v-for="source in mirrorTiles"
+            :key="source.key"
+            class="pc-tile"
+            :class="{ 'is-idle': !source.wired }"
+            :title="source.version ? `${source.host} · ${source.version}` : source.host"
+          >
+            <span class="pc-tile__label">
+              <component :is="source.icon" :size="13" />
+              <span>{{ source.name }}</span>
+            </span>
+            <span class="pc-state" :class="source.tone">
+              <CircleCheck v-if="source.wired" :size="13" />
+              <CircleOff v-else :size="13" />
+              {{ source.detail }}
+            </span>
+          </div>
+        </div>
+        <div class="update-card__planned">
+          <span
+            v-for="source in peerSources"
+            :key="source.key"
+            class="update-card__planned-item"
+            :title="source.title || undefined"
+          >
+            <component :is="source.icon" :size="13" />
+            {{ source.name }}
+            <span class="pc-chip" :class="source.tone">{{ source.detail }}</span>
+          </span>
+          <button
+            v-if="releaseSharing"
+            type="button"
+            class="update-card__share"
+            :class="{ 'is-idle': !releaseSharing.enabled }"
+            role="switch"
+            :aria-checked="releaseSharing.enabled ? 'true' : 'false'"
+            :disabled="savingSharing"
+            :title="label('shareHint')"
+            @click="toggleSharing"
+          >
+            <Share2 :size="12" />
+            {{ releaseSharing.enabled ? label('shareOn') : label('shareOff') }}
+          </button>
+        </div>
+      </section>
+
+      <section class="pc-section">
+        <div class="pc-section__head">
+          <ShieldCheck :size="15" />
+          <h5>{{ label('verifyTitle') }}</h5>
+        </div>
+        <div class="pc-tiles update-card__checks">
+          <!-- The explanation is the tooltip; the value is what has to stay
+               legible, because "not verified" is the whole point of a tile. -->
+          <div
+            v-for="entry in verifications"
+            :key="entry.key"
+            class="pc-tile"
+            :class="{ 'is-idle': !entry.active }"
+            :title="entry.note"
+          >
+            <span class="pc-tile__label">
+              <component :is="entry.icon" :size="13" />
+              <span>{{ entry.name }}</span>
+            </span>
+            <span class="pc-state" :class="entry.active ? 'is-good' : 'is-idle'">
+              <CircleCheck v-if="entry.active" :size="13" />
+              <CircleOff v-else :size="13" />
+              {{ entry.value }}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="pc-foot">
+        <!-- Where the update history and the full settings live: the
+             mock-up's "view log", named for what is there. -->
+        <RouterLink
+          class="pc-button"
+          :to="{ name: 'settings', params: { section: 'about' } }"
+        >
+          {{ label('updateDetails') }}
+          <ChevronRight :size="15" />
+        </RouterLink>
         <button
           type="button"
-          class="update-card__recheck"
+          class="pc-button"
+          :class="{ 'pc-button--primary': !hasUpdate }"
           :disabled="checking || applying"
           @click="checkForUpdates(true)"
         >
-          <RefreshCw :size="14" :class="{ spin: checking }" />
+          <RefreshCw :size="15" :class="{ 'pc-spin': checking }" />
           {{ checking ? label('checking') : label('recheck') }}
         </button>
 
         <button
           v-if="canDownloadNow"
           type="button"
-          class="update-card__recheck"
+          class="pc-button"
           @click="startUpdateDownload"
         >
-          <Download :size="14" />
+          <Download :size="15" />
           {{ downloadFailed ? label('downloadRetry') : label('downloadNow') }}
         </button>
 
         <button
           v-if="hasUpdate"
           type="button"
-          class="update-card__apply"
-          :class="{ 'is-working': applying || showingDownload, 'is-ready': downloadReady }"
+          class="pc-button pc-button--primary"
+          :class="{ 'is-working': applying || showingDownload, 'pc-button--go': downloadReady }"
           :disabled="!canApply"
           @click="onUpdate"
         >
-          <!-- The ring reports how far through the component ladder the
-               operation is. role/aria say the same thing to a screen reader,
-               and the value is left off while it is indeterminate rather than
-               reported as zero. -->
-          <span
-            v-if="applying || showingDownload"
-            class="update-card__ring"
-            role="progressbar"
-            :aria-label="showingDownload ? label('downloadProgressLabel') : label('progressLabel')"
-            :aria-valuenow="ringIndeterminate ? undefined : ringValue"
-            aria-valuemin="0"
-            aria-valuemax="100"
-          >
-            <svg viewBox="0 0 32 32" aria-hidden="true" :class="{ 'is-spinning': ringIndeterminate }">
-              <circle class="update-card__ring-track" cx="16" cy="16" :r="RING_RADIUS" />
-              <circle
-                class="update-card__ring-fill"
-                cx="16"
-                cy="16"
-                :r="RING_RADIUS"
-                :stroke-dasharray="RING_CIRCUMFERENCE"
-                :stroke-dashoffset="ringIndeterminate ? RING_CIRCUMFERENCE * 0.72 : ringOffset"
-              />
-            </svg>
-            <span v-if="!ringIndeterminate" class="update-card__ring-value">{{ ringValue }}</span>
-            <LoaderCircle v-else :size="13" class="spin" />
-          </span>
-          <ShieldCheck v-else :size="15" />
+          <LoaderCircle v-if="applying || showingDownload" :size="15" class="pc-spin" />
+          <Download v-else :size="15" />
           {{ applying ? label('updating') : showingDownload ? label('downloading') : label('update') }}
         </button>
       </footer>
-
-      <p
-        v-if="applying"
-        class="update-card__note update-card__note--warn"
-        :title="label('progressNote')"
-      >
-        {{ label('updatingHint') }}
-      </p>
-      <p v-else-if="hasUpdate && showingDownload" class="update-card__note">
-        {{ label('downloadingHint') }}
-      </p>
-      <p v-else-if="hasUpdate && downloadReady" class="update-card__note update-card__note--good">
-        {{ label('downloadReadyHint') }}
-      </p>
-      <p v-else-if="hasUpdate && downloadFailed" class="update-card__note update-card__note--warn">
-        {{ label('downloadFailedHint') }}
-      </p>
-      <p v-else-if="hasUpdate" class="update-card__note" :title="label('autoDownloadHint')">
-        {{ autoDownload ? label('downloadQueuedHint') : label('autoDownloadHintShort') }}
-      </p>
     </div>
-    </article>
-  </div>
+  </article>
 </template>
 
 <style scoped>
-/* Built to the same height as the network drawings it shares a row with. The
-   head, the version tiles and the footer are pinned; only the middle scrolls,
-   so the version and the update button are always in view. */
-/* THE SHELL IS THE GRID ITEM, AND THE CARD FILLS IT ABSOLUTELY.
-   
-   This card shares its row with the two network drawings, which are 713px
-   tall. A grid row is as tall as its tallest item and `align-items: stretch`
-   then stretches the rest to match -- so a card whose content wanted 874px
-   would not be clipped, it would make the whole row 874px and leave 161px of
-   void inside each drawing. Taking the card out of flow means its content can
-   never set the row height: the drawings decide it, this fills whatever they
-   decided, and anything that does not fit scrolls inside.
-   
-   The min-height is the floor for when this card is alone in a row, which is
-   what happens at narrower widths where the grid drops to two tracks. */
-.update-shell {
-  position: relative;
-  min-height: 565px;
-}
+.update-card--ready { border-color: var(--pc-good-line); }
 
-.update-card {
-  position: absolute;
-  inset: 0;
-}
-
-.update-card {
-  display: flex;
-  flex-direction: column;
-  padding: 16px 16px 14px;
-  gap: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 14px);
-}
-
-.update-card__scrollwrap {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-/* A fade over the scroll area's bottom edge, so a row that is half cut off
-   reads as "there is more below" rather than as a clipped layout. It is
-   painted in the card's own background, so where the content ends before the
-   edge it fades nothing and is invisible. */
-.update-card__scrollwrap::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 22px;
-  background: linear-gradient(to bottom, transparent, var(--surface));
-  pointer-events: none;
-}
-
-.update-card__scroll {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  gap: 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-}
-
-.update-card__scroll::-webkit-scrollbar { width: 6px; }
-.update-card__scroll::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 999px;
-}
-
-.update-card--available {
-  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
-}
-
-.update-card__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.update-card__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-radius: 9px;
-  flex: none;
-}
-
-.update-card__heading { min-width: 0; }
-.update-card__heading h4 { margin: 0; font-size: 15px; }
-
-.update-card__eyebrow {
-  margin: 0;
-  color: var(--faint);
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-}
-
-/* Pushed to the far end rather than floated, so it keeps its place when the
-   heading wraps at narrow widths. */
+/* The switch wears the head's pill, and is a button. */
 .update-card__auto {
-  display: inline-flex;
-  align-items: center;
-  margin-left: auto;
-  padding: 4px 10px;
-  gap: 6px;
-  color: var(--muted);
   font: inherit;
-  font-size: 11.5px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  font-size: 11px;
   cursor: pointer;
-}
-
-/* On is the state worth noticing: it means updates will already be here
-   when the operator looks. */
-.update-card__auto.is-on {
-  color: var(--success);
-  border-color: var(--success-border);
 }
 
 .update-card__auto:disabled { cursor: progress; opacity: 0.7; }
 
-.update-card__body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  gap: 12px;
+.update-card__auto:focus-visible {
+  outline: 2px solid var(--pc-accent);
+  outline-offset: 2px;
 }
 
-.update-card__banner {
-  padding: 12px 14px;
-  background: var(--surface-subtle);
-  border-radius: var(--radius-md, 10px);
-}
-
-.update-card__banner-title { margin: 0; font-size: 14px; font-weight: 600; }
-.update-card--available .update-card__banner-title { color: var(--success); }
-.update-card__banner-body { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; }
-
-.update-card__versions {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.update-card__version {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  padding: 10px 14px;
-  gap: 2px;
-  background: var(--surface-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px);
-}
-
-.update-card__version--next {
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 50%, var(--border));
-}
-
-.update-card__version-label { color: var(--muted); font-size: 11px; }
-.update-card__version--next .update-card__version-label { color: inherit; }
-
-.update-card__version-value {
-  font-size: 17px;
-  font-variant-numeric: tabular-nums;
-}
-
-.update-card__arrow {
-  align-self: center;
-  color: var(--faint);
-  font-size: 17px;
-}
-
-/* Three panels across when there is room, stacking at the width where a column
-   would otherwise be too narrow for a sentence.
-
-   `align-items: start` rather than the stretch a grid defaults to: the three
-   panels hold very different amounts of text -- three checks with their
-   explanations against a list of three component names -- and stretching them
-   to a shared height left about three hundred pixels of empty panel under the
-   shortest one. Bottoms that line up are worth having when the contents are
-   comparable; here they were buying a void. */
-.update-card__columns {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.update-card__panel {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: 12px 14px;
-  gap: 8px;
-  background: var(--surface-subtle);
-  border-radius: var(--radius-md, 10px);
-}
-
-.update-card__panel h5 {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-}
-
-.update-card__sources,
-.update-card__checks,
-.update-card__components {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  gap: 8px;
-  list-style: none;
-}
-
-.update-card__sources li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  font-size: 12.5px;
-}
-
-.update-card__sources li > svg { color: var(--accent); flex: none; }
-.update-card__source-name { font-weight: 500; }
-
-.update-card__source-detail {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 11.5px;
-  text-align: right;
-}
-
-/* A source or a check that is not wired up is drawn as absent, not as failed:
-   nothing is wrong, it does not exist yet. */
-.update-card__sources li.is-idle,
-.update-card__checks li.is-idle {
-  color: var(--faint);
-}
-
-.update-card__sources li.is-idle > svg,
-.update-card__checks li.is-idle > svg {
-  color: var(--faint);
-}
-
-.update-card__checks li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 12.5px;
-}
-
-.update-card__checks li > svg { margin-top: 2px; color: var(--success, #1a7f4b); flex: none; }
-.update-card__checks li > div { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
-.update-card__check-name { color: var(--muted); font-size: 11px; }
-.update-card__check-value { font-weight: 600; }
-.update-card__check-note { color: var(--faint); font-size: 11px; line-height: 1.45; }
-
-.update-card__components li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-}
-
-.update-card__component-tag {
-  padding: 1px 8px;
-  color: var(--muted);
-  font-size: 11px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-}
-
-.update-card__component-target { color: var(--muted); font-size: 11.5px; }
-
-.update-card__component-stage {
-  margin-left: auto;
-  color: var(--accent);
-  font-size: 11.5px;
-}
-
-.update-card__component-stage.is-ready { color: var(--success, #1a7f4b); }
-.update-card__component-stage.is-failed { color: var(--danger, #b3261e); }
-.update-card__component-stage.is-rolling_back,
-.update-card__component-stage.is-rolled_back { color: var(--warning, #9a6200); }
-
-.update-card__blocked {
-  display: flex;
-  align-items: flex-start;
-  padding: 10px 12px;
-  gap: 8px;
-  color: var(--warning, #9a6200);
-  background: color-mix(in srgb, var(--warning, #9a6200) 12%, transparent);
-  border-radius: var(--radius-md, 10px);
-  font-size: 12.5px;
-}
-
-.update-card__blocked svg { margin-top: 2px; flex: none; }
-.update-card__blocked strong { display: block; }
-.update-card__blocked p { margin: 2px 0 0; }
-
-.update-card__foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.update-card__link {
+.update-card__notes {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: var(--accent);
-  font-size: 12.5px;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--pc-accent);
+  font-size: 11.5px;
+  font-weight: 500;
   text-decoration: none;
 }
 
-.update-card__link:hover { text-decoration: underline; }
+.update-card__notes:hover { text-decoration: underline; }
 
-.update-card__recheck,
-.update-card__apply {
+.update-card__muted { color: var(--pc-faint); font-weight: 400; }
+
+.update-card__mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  letter-spacing: 0.04em;
+}
+
+.update-card__planned {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  gap: 6px 14px;
+}
+
+.update-card__planned-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
+  gap: 6px;
+  color: var(--pc-idle);
+  font-size: 11.5px;
+}
+
+/* Sharing sits at the end of the peer row: it is about those two networks,
+   and a line of its own would make the card taller than the row allows. */
+.update-card__share {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--pc-good-line);
+  border-radius: 999px;
+  background: var(--pc-good-soft);
+  color: var(--pc-good);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 9px;
+  font-size: 11px;
   cursor: pointer;
 }
 
-.update-card__recheck {
-  color: var(--text);
-  background: transparent;
-  border: 1px solid var(--border);
+.update-card__share.is-idle {
+  border-color: var(--pc-idle-line);
+  background: none;
+  color: var(--pc-idle);
 }
 
-/* Green rather than the accent, because this button means "go" and the app's
-   accent is already the colour of every ordinary control. The text colour is
-   the shared on-accent token, not white: both --accent and --success are light
-   in this theme, and white on either is the washed-out pairing this started
-   out with. */
-.update-card__apply {
-  margin-left: auto;
-  color: var(--on-accent);
-  background: var(--success);
-  border: 0;
+.update-card__share:focus-visible {
+  outline: 2px solid var(--pc-accent);
+  outline-offset: 2px;
 }
 
-.update-card__apply:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--success) 88%, #fff);
+.update-card__share:disabled { cursor: progress; opacity: 0.7; }
+
+/* One row each, at every width this card is drawn in the tall row: three
+   mirrors across, four checks across. Wrapping either to a second row is what
+   made this card taller than the drawings beside it at the narrower tracks
+   (measured 876px against their 734px at a 386px track), and a row as tall as
+   its tallest card leaves the drawings with a void under them. A fourth or
+   fifth mirror, set by the operator, wraps -- rarely, and honestly. */
+.update-card { container-type: inline-size; }
+
+.update-card__mirrors { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.update-card__checks { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* At the narrow tracks the check icons go, so the four names still fit. */
+@container (max-width: 440px) {
+  .update-card__checks .pc-tile,
+  .update-card__mirrors .pc-tile { padding: 8px 9px; }
+  .update-card__checks .pc-tile__label > svg { display: none; }
 }
 
-.update-card__recheck:disabled,
-.update-card__apply:disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* While it works the button keeps its size, so the row does not reflow the
-   moment it is pressed. */
-.update-card__apply.is-working { cursor: progress; opacity: 1; }
-
-.update-card__ring {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-}
-
-.update-card__ring svg { width: 22px; height: 22px; transform: rotate(-90deg); }
-
-.update-card__ring-track {
-  fill: none;
-  stroke: color-mix(in srgb, var(--on-accent) 28%, transparent);
-  stroke-width: 3;
-}
-
-.update-card__ring-fill {
-  fill: none;
-  stroke: var(--on-accent);
-  stroke-width: 3;
-  stroke-linecap: round;
-  /* The app's slow step: the ring moves in jumps of ten to thirty points as
-     each component changes stage, and easing those over the shared slow
-     duration reads as the arc travelling rather than teleporting. */
-  transition: stroke-dashoffset var(--motion-slow) var(--ease-standard);
-}
-
-.update-card__ring-value {
-  position: absolute;
-  font-size: 8.5px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.update-card__ring svg.is-spinning { animation: update-ring-spin 1.1s linear infinite; }
-
-.update-card__note {
-  margin: 0;
-  color: var(--faint);
-  font-size: 11.5px;
-  line-height: 1.55;
-}
-
-.update-card__note--warn { color: var(--warning, #9a6200); }
-.update-card__note--good { color: var(--success); }
-
-.spin { animation: update-ring-spin 1.1s linear infinite; }
-
-@keyframes update-ring-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* The ring's own rotation is the only thing here that carries meaning while
-   moving; with reduced motion it stops and the number carries it instead. */
-@media (prefers-reduced-motion: reduce) {
-  .update-card__ring svg.is-spinning,
-  .spin { animation: none; }
-  .update-card__ring-fill { transition: none; }
-}
-
-@media (max-width: 560px) {
-  .update-card__apply { margin-left: 0; width: 100%; justify-content: center; }
-  .update-card__auto { margin-left: 0; }
-  .update-card__head { flex-wrap: wrap; }
+/* On a phone the card has the width to itself and no row to match. */
+@container (max-width: 330px) {
+  .update-card__checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

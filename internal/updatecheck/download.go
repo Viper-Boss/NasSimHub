@@ -47,14 +47,30 @@ type Preferences struct {
 	AutoDownload bool `json:"auto_download"`
 }
 
-// Source is what one release mirror said on the last check.
+// Source is what one release source said on the last check.
 type Source struct {
 	// Name is the mirror's host, never the full URL: a URL can carry a token
-	// for a private mirror, and this is shown in a browser.
+	// for a private mirror, and this is shown in a browser. For a peer
+	// network it is the network's name.
 	Name    string `json:"name"`
 	State   string `json:"state"`
 	Version string `json:"version,omitempty"`
+	// Kind says what sort of source this is: an HTTPS mirror, or one of the
+	// two peer networks, where the manifest was handed over by other
+	// gateways. Empty means a mirror, which is what every source was before
+	// the peer networks existed.
+	Kind string `json:"kind,omitempty"`
+	// Peers is, for a peer network, how many gateways answered with the
+	// version reported. It is a count of answers, never of the network.
+	Peers int `json:"peers,omitempty"`
 }
+
+// Source kinds.
+const (
+	SourceKindMirror = "mirror"
+	SourceKindNKN    = "nkn"
+	SourceKindDHT    = "dht"
+)
 
 // Source states.
 const (

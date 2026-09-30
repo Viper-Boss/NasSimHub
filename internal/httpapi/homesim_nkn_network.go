@@ -160,10 +160,18 @@ type nknNetworkPeersResponse struct {
 }
 
 type nknNetworkManager struct {
-	applyMu    sync.Mutex
-	mu         sync.Mutex
-	logger     *slog.Logger
-	dir        string
+	applyMu sync.Mutex
+	mu      sync.Mutex
+	logger  *slog.Logger
+	dir     string
+	// seed is the gateway's NKN identity -- the SAME one the control client
+	// receives messages on (api.managedNKNSeed). The directory used to read
+	// HOMESIM_NKN_SEED only, which is set on one hand-built deployment and
+	// nowhere else: every stock install and every fpk failed to join, the
+	// directory listed almost nobody, and an address listed there was not one
+	// that could be messaged. Peer-to-peer release sharing finds its peers in
+	// this directory, so it has to be the address that answers.
+	seed       func() ([]byte, error)
 	stopCh     chan struct{}
 	done       chan struct{}
 	subscribed bool
@@ -216,11 +224,21 @@ func (m *nknNetworkManager) setError(message string) {
 	m.logger.Error("nkn-network: " + message)
 }
 
-// nknNetworkSelfAddress derives the instance's directory identity locally
-// (identifier + "." + pubkey hex) — no network involved. Empty when no seed
-// is configured.
-func nknNetworkSelfAddress() string {
-	seed, err := resolveNKNSeed(nknNetworkSeedEnv)
+// identitySeed is the seed the directory subscribes with: the control
+// client's own when the manager was given it, the legacy environment variable
+// otherwise (tests, and a manager built without an API).
+func (m *nknNetworkManager) identitySeed() ([]byte, error) {
+	if m.seed != nil {
+		return m.seed()
+	}
+	return resolveNKNSeed(nknNetworkSeedEnv)
+}
+
+// selfAddress derives the instance's directory identity locally
+// (identifier + "." + pubkey hex) — no network involved. Empty when there is
+// no identity yet.
+func (m *nknNetworkManager) selfAddress() string {
+	seed, err := m.identitySeed()
 	if err != nil {
 		return ""
 	}
@@ -244,7 +262,7 @@ func (m *nknNetworkManager) status() nknNetworkStatusResponse {
 	subscribed := m.subscribed
 	workerUp := m.stopCh != nil
 	m.mu.Unlock()
-	runtime.MyAddress = nknNetworkSelfAddress()
+	runtime.MyAddress = m.selfAddress()
 	switch {
 	case subscribed:
 		runtime.State = "active"
@@ -324,9 +342,9 @@ func (m *nknNetworkManager) stopWorker() {
 // device leaves the directory immediately instead of lingering up to 24h.
 func (m *nknNetworkManager) supervise(api *API, stopCh chan struct{}, done chan struct{}) {
 	defer close(done)
-	seed, err := resolveNKNSeed(nknNetworkSeedEnv)
+	seed, err := m.identitySeed()
 	if err != nil {
-		m.setError(fmt.Sprintf("identity seed unavailable: %v (set %s to join the network directory)", err, nknNetworkSeedEnv))
+		m.setError(fmt.Sprintf("identity seed unavailable: %v", err))
 		return
 	}
 	renewed := make(map[string]time.Time, len(nknNetworkWindows))

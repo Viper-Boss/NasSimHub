@@ -3,6 +3,8 @@ module github.com/human-agent65535/modemdeck
 go 1.26.5
 
 require (
+	github.com/human-agent65535/nassimhub-node/core v0.0.0
+	github.com/human-agent65535/nassimhub-node/proto v0.0.0
 	github.com/nknorg/nkn-sdk-go v1.4.8
 	github.com/nknorg/nkngomobile v0.0.0-20220615081414-671ad1afdfa9
 	github.com/nyaruka/phonenumbers/v2 v2.0.5
@@ -54,3 +56,9 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+// The Node protocol is vendored so the gateway image builds from this
+// repository alone. See third_party/nassimhub-node/README.md.
+replace github.com/human-agent65535/nassimhub-node/proto => ./third_party/nassimhub-node/proto
+
+replace github.com/human-agent65535/nassimhub-node/core => ./third_party/nassimhub-node/core

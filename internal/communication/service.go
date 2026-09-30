@@ -288,6 +288,9 @@ type Service struct {
 	messageCleanupMu      sync.Mutex
 	messageCleanupPending map[string]struct{}
 	messageCleanupRunning bool
+
+	// nodes contributes NasSimHub Node lines; nil on a gateway without them.
+	nodes NodeSource
 }
 
 func New(
@@ -453,6 +456,14 @@ func (s *Service) refreshLocked(ctx context.Context) (Status, error) {
 	refreshContext, cancel := context.WithTimeout(normalizeContext(ctx), snapshotTimeout)
 	defer cancel()
 	health, err := s.agent.Health(refreshContext)
+	if s.hasNodes() {
+		if substitute, nodesOnly := nodeOnlyHealth(err, health, s.lastSnapshotHasHostLines()); nodesOnly {
+			return s.commitSnapshotLocked(refreshContext, substitute, agentclient.Snapshot{
+				Revision:   "nodes-only",
+				ObservedAt: s.now().UTC(),
+			}, nil)
+		}
+	}
 	if err != nil {
 		return s.recordRefreshFailure("read host agent health", err)
 	}
@@ -498,6 +509,7 @@ func (s *Service) commitSnapshotLocked(
 	previousStatus := cloneStatus(s.status)
 	previousSnapshot := cloneAgentSnapshot(s.lastSnapshot)
 	s.mu.RUnlock()
+	snapshot, withNodes := s.mergeNodeSnapshot(snapshot)
 	snapshot, _ = quarantineDuplicateSubscriptionAttachments(snapshot)
 	stableLines, err := s.repository.Lines(ctx)
 	if err != nil {
@@ -524,6 +536,9 @@ func (s *Service) commitSnapshotLocked(
 	)
 	if err != nil {
 		return s.recordRefreshFailure("persist host agent snapshot", err)
+	}
+	if withNodes {
+		s.tagNodeMessages(ctx)
 	}
 	durableMessageChange := len(snapshotResult.CreatedIncomingMessages) > 0 ||
 		len(snapshotResult.HandledDeliveryReportIDs) > 0
@@ -625,6 +640,9 @@ func (s *Service) enqueueDeviceMessageCleanup(
 		state := strings.ToLower(strings.TrimSpace(message.State))
 		if state != "received" && state != "sent" {
 			continue
+		}
+		if s.nodeOwnsEndpoint(message.EndpointLineID) || s.nodeOwnsMessage(message.EndpointMessageID) {
+			continue // Node storage is never cleaned through the host agent
 		}
 		if messageID := strings.TrimSpace(message.EndpointMessageID); messageID != "" {
 			s.messageCleanupPending[messageID] = struct{}{}
@@ -1268,8 +1286,9 @@ func (s *Service) executeIncomingCallAction(
 		incomingCallActionTimeout,
 	)
 	defer cancel()
-	receipt, err := s.agent.CallAction(
+	receipt, err := s.endpointCallAction(
 		commandContext,
+		action.EndpointLineID,
 		action.EndpointCallID,
 		"reject",
 		agentclient.CallActionRequest{RequestID: action.RequestID},
@@ -1681,6 +1700,7 @@ func (s *Service) releaseAgentControlLease(ctx context.Context) error {
 
 func (s *Service) terminateEndpointCall(
 	ctx context.Context,
+	endpointLineID string,
 	endpointCallID string,
 	reason string,
 	cause error,
@@ -1694,8 +1714,9 @@ func (s *Service) terminateEndpointCall(
 		context.WithoutCancel(normalizeContext(ctx)),
 		commandTimeout,
 	)
-	receipt, commandErr := s.agent.CallAction(
+	receipt, commandErr := s.endpointCallAction(
 		commandContext,
+		endpointLineID,
 		endpointCallID,
 		"hangup",
 		agentclient.CallActionRequest{RequestID: requestID},
@@ -1720,15 +1741,22 @@ func (s *Service) terminateEndpointCall(
 func (s *Service) recordIndeterminateAcceptedCall(
 	ctx context.Context,
 	command store.HardwareCommand,
+	endpointLineID string,
 	endpointCallID string,
 	cause error,
 ) error {
 	cause = s.terminateEndpointCall(
 		ctx,
+		endpointLineID,
 		endpointCallID,
 		"indeterminate-call",
 		cause,
 	)
+	// refreshLocked reads the cached Node contribution; poll the Node first so
+	// reconciliation sees whether the hangup took. A failed poll leaves the
+	// cached (still live) call in place, which errs towards keeping the line
+	// reserved rather than allowing a second dial.
+	_ = s.refreshNodeBeforeReconcile(ctx, endpointLineID)
 	cause = s.reconcileIndeterminateStart(ctx, cause)
 	finishContext, cancel := durableContext(ctx)
 	finishErr := s.finishIndeterminateCommand(finishContext, command, cause)
@@ -1856,13 +1884,19 @@ func (s *Service) SendMessage(ctx context.Context, input SendMessageInput) (stor
 
 	commandContext, cancel := context.WithTimeout(normalizeContext(ctx), commandTimeout)
 	defer cancel()
-	receipt, err := s.agent.SendMessage(commandContext, agentclient.SendMessageRequest{
+	sendRequest := agentclient.SendMessageRequest{
 		RequestID:               requestID,
 		LineID:                  line.EndpointID,
 		Number:                  number,
 		Text:                    text,
 		DeliveryReportRequested: deliveryPolicy.DeliveryReportsEnabled,
-	})
+	}
+	var receipt agentclient.CommandReceipt
+	if s.nodeOwnsEndpoint(line.EndpointID) {
+		receipt, err = s.nodes.SendMessage(commandContext, sendRequest)
+	} else {
+		receipt, err = s.agent.SendMessage(commandContext, sendRequest)
+	}
 	if err != nil {
 		if finishErr := s.finishFailedCommand(ctx, command, err); finishErr != nil {
 			return store.Message{}, finishErr
@@ -1981,7 +2015,13 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 	}
 	s.coordinatorMu.Lock()
 	defer s.coordinatorMu.Unlock()
-	if err := s.ensureAgentControlLease(ctx); err != nil {
+	nodeLine := s.nodeOwnsEndpoint(line.EndpointID)
+	controller := "host agent"
+	if nodeLine {
+		// A Node line is dialled on the Node. The host agent's control lease
+		// arbitrates the host modem only and is not taken for it.
+		controller = "NasSimHub Node"
+	} else if err := s.ensureAgentControlLease(ctx); err != nil {
 		return store.Call{}, s.failLocalCommand(
 			ctx,
 			command,
@@ -1992,13 +2032,14 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 	}
 	commandContext, cancel := context.WithTimeout(normalizeContext(ctx), commandTimeout)
 	defer cancel()
-	receipt, err := s.agent.StartCall(commandContext, agentclient.StartCallRequest{
+	receipt, err := s.endpointStartCall(commandContext, agentclient.StartCallRequest{
 		RequestID: requestID,
 		LineID:    line.EndpointID,
 		Number:    number,
 	})
 	if err != nil {
 		if agentErrorCode(err) == "" {
+			_ = s.refreshNodeBeforeReconcile(ctx, line.EndpointID)
 			err = s.reconcileIndeterminateStart(ctx, err)
 		}
 		if finishErr := s.finishFailedCommand(ctx, command, err); finishErr != nil {
@@ -2010,26 +2051,44 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 		err = s.recordIndeterminateAcceptedCall(
 			ctx,
 			command,
+			line.EndpointID,
 			validEndpointResourceID(receipt.ResourceID),
 			err,
 		)
-		return store.Call{}, operationError(CodeUnavailable, operation, "host agent returned an invalid command receipt", err)
+		return store.Call{}, operationError(CodeUnavailable, operation, controller+" returned an invalid command receipt", err)
 	}
 	appID := stableInstanceID("call", line.EndpointID, receipt.ResourceID)
 	outcomeContext, outcomeCancel := durableContext(ctx)
 	defer outcomeCancel()
-	snapshot, err := s.agent.Snapshot(outcomeContext)
+	health := agentclient.Health{
+		APIVersion:   agentclient.APIVersion,
+		AgentVersion: status.AgentVersion,
+		Provider: agentclient.ProviderHealth{
+			Name:           status.ProviderName,
+			Available:      true,
+			BootEpoch:      status.BootEpoch,
+			RuntimeVersion: status.RuntimeVersion,
+			Capabilities:   status.Capabilities,
+		},
+	}
+	var snapshot agentclient.Snapshot
+	if nodeLine {
+		health, snapshot, err = s.observeNodeCallLocked(outcomeContext, line.EndpointID)
+	} else {
+		snapshot, err = s.agent.Snapshot(outcomeContext)
+	}
 	if err != nil {
 		err = s.recordIndeterminateAcceptedCall(
 			ctx,
 			command,
+			line.EndpointID,
 			receipt.ResourceID,
 			err,
 		)
 		return store.Call{}, operationError(
 			CodeUnavailable,
 			operation,
-			"host agent accepted the call but its state could not be observed",
+			controller+" accepted the call but its state could not be observed",
 			err,
 		)
 	}
@@ -2038,58 +2097,57 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 		snapshotErr = s.recordIndeterminateAcceptedCall(
 			ctx,
 			command,
+			line.EndpointID,
 			receipt.ResourceID,
 			snapshotErr,
 		)
 		return store.Call{}, operationError(
 			CodeUnavailable,
 			operation,
-			"host agent accepted the call but returned an incomplete snapshot",
+			controller+" accepted the call but returned an incomplete snapshot",
 			snapshotErr,
 		)
 	}
 	var observed agentclient.Call
 	found := false
-	for _, candidate := range snapshot.Calls {
-		if candidate.ID == receipt.ResourceID &&
-			candidate.LineID == line.EndpointID {
-			observed = candidate
-			found = true
-			break
+	if nodeLine {
+		observed, found = s.nodeCall(line.EndpointID, receipt.ResourceID)
+	} else {
+		for _, candidate := range snapshot.Calls {
+			if candidate.ID == receipt.ResourceID &&
+				candidate.LineID == line.EndpointID {
+				observed = candidate
+				found = true
+				break
+			}
 		}
 	}
 	phase := callPhase(observed.State)
 	if !found || phase == "unknown" || phase == "ended" || phase == "failed" {
 		stateErr := errors.New("accepted call is missing from the authoritative host-agent snapshot")
+		if nodeLine {
+			stateErr = errors.New("accepted call is missing from the authoritative NasSimHub Node state")
+		}
 		if found {
 			stateErr = fmt.Errorf("accepted call has non-active state %q", observed.State)
 		}
 		stateErr = s.recordIndeterminateAcceptedCall(
 			ctx,
 			command,
+			line.EndpointID,
 			receipt.ResourceID,
 			stateErr,
 		)
 		return store.Call{}, operationError(
 			CodeUnavailable,
 			operation,
-			"host agent accepted the call but did not report an active call state",
+			controller+" accepted the call but did not report an active call state",
 			stateErr,
 		)
 	}
 	_, err = s.commitSnapshotLocked(
 		outcomeContext,
-		agentclient.Health{
-			APIVersion:   agentclient.APIVersion,
-			AgentVersion: status.AgentVersion,
-			Provider: agentclient.ProviderHealth{
-				Name:           status.ProviderName,
-				Available:      true,
-				BootEpoch:      status.BootEpoch,
-				RuntimeVersion: status.RuntimeVersion,
-				Capabilities:   status.Capabilities,
-			},
-		},
+		health,
 		snapshot,
 		map[string]callSnapshotAnnotation{
 			receipt.ResourceID: {
@@ -2101,6 +2159,7 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 	if err != nil {
 		err = s.terminateEndpointCall(
 			ctx,
+			line.EndpointID,
 			receipt.ResourceID,
 			"persist-call",
 			err,
@@ -2116,6 +2175,7 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 	if err != nil {
 		err = s.terminateEndpointCall(
 			ctx,
+			line.EndpointID,
 			receipt.ResourceID,
 			"load-call",
 			err,
@@ -2136,6 +2196,7 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 	); err != nil {
 		err = s.terminateEndpointCall(
 			ctx,
+			line.EndpointID,
 			receipt.ResourceID,
 			"finalize-call",
 			err,
@@ -2210,7 +2271,21 @@ func (s *Service) CallAction(ctx context.Context, input CallActionInput) (store.
 		}
 		return s.completeCallCommand(ctx, command, target.AppID, operation)
 	}
-	if action == "answer" || action == "dtmf" {
+	nodeLine := s.nodeOwnsEndpoint(target.EndpointLineID)
+	if nodeLine && action == "dtmf" {
+		// Node lines carry no DTMF path yet; refuse definitely so nothing is
+		// left in flight.
+		err := &agentclient.OperationError{
+			Code:      "not_supported",
+			Operation: "dtmf",
+			Message:   "DTMF is not supported on NasSimHub Node lines",
+		}
+		if finishErr := s.finishFailedCommand(ctx, command, err); finishErr != nil {
+			return store.Call{}, finishErr
+		}
+		return store.Call{}, translateAgentError(operation, err)
+	}
+	if !nodeLine && (action == "answer" || action == "dtmf") {
 		if err := s.ensureAgentControlLease(ctx); err != nil {
 			return store.Call{}, s.failLocalCommand(
 				ctx,
@@ -2227,8 +2302,9 @@ func (s *Service) CallAction(ctx context.Context, input CallActionInput) (store.
 	var receipt agentclient.CommandReceipt
 	switch action {
 	case "answer", "reject", "hangup":
-		receipt, err = s.agent.CallAction(
+		receipt, err = s.endpointCallAction(
 			commandContext,
+			target.EndpointLineID,
 			target.EndpointCallID,
 			action,
 			agentclient.CallActionRequest{RequestID: requestID},
@@ -2243,7 +2319,11 @@ func (s *Service) CallAction(ctx context.Context, input CallActionInput) (store.
 		if action != "dtmf" && agentErrorCode(err) == "not_found" {
 			outcomeContext, outcomeCancel := durableContext(ctx)
 			defer outcomeCancel()
-			if _, refreshErr := s.refreshLocked(outcomeContext); refreshErr != nil {
+			refreshErr := s.refreshNodeBeforeReconcile(outcomeContext, target.EndpointLineID)
+			if refreshErr == nil {
+				_, refreshErr = s.refreshLocked(outcomeContext)
+			}
+			if refreshErr != nil {
 				cause := errors.Join(err, refreshErr)
 				if finishErr := s.finishIndeterminateCommand(ctx, command, cause); finishErr != nil {
 					return store.Call{}, finishErr
@@ -2289,7 +2369,11 @@ func (s *Service) CallAction(ctx context.Context, input CallActionInput) (store.
 	outcomeContext, outcomeCancel := durableContext(ctx)
 	defer outcomeCancel()
 	if action != "dtmf" {
-		if _, err := s.refreshLocked(outcomeContext); err != nil {
+		err := s.refreshNodeBeforeReconcile(outcomeContext, target.EndpointLineID)
+		if err == nil {
+			_, err = s.refreshLocked(outcomeContext)
+		}
+		if err != nil {
 			finishErr := s.repository.FinishHardwareCommand(
 				outcomeContext,
 				requestID,

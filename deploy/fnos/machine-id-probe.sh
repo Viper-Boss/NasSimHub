@@ -1,238 +1,118 @@
 #!/bin/sh
 # Can the api container derive a machine identity on THIS machine?
 #
-# Run it on the NAS. No arguments, changes nothing.
+# Run this on the fnOS NAS. It needs no arguments and changes nothing.
 #
-#   sh deploy/fnos/machine-id-probe.sh
+# WHY IT EXISTS. internal/license/machineid.go was measured on a Rockchip
+# RK3566 board, where the eMMC CID is world-readable, so the api container can
+# read it even though it runs as an unprivileged user. An x86 NAS has no eMMC
+# CID: its only deriving sources are two DMI files, and the kernel publishes
+# those mode 0400 owned by root, precisely because they identify the machine.
 #
-# WHY IT EXISTS. internal/license/machineid.go was measured on one Rockchip
-# RK3566 board. Other hardware exposes a different set of identifiers, and
-# permissions differ between boards running the same SoC family. If the api
-# container -- which runs as MODEMDECK_UID, default 10001, with cap_drop: ALL
-# -- can read no deriving source, then on this machine:
+# The api container runs as MODEMDECK_UID (10001 by default) with cap_drop:
+# ALL. If it cannot read either DMI file then CollectFingerprint finds no
+# deriving source and refuses, which means, on this machine:
 #
-#   * no machine licence can ever bind, because a certificate would name an
-#     identity the gateway cannot reproduce;
-#   * the clone detection in internal/provision is inert, so a data directory
-#     copied from another NAS is not caught.
+#   * no machine licence can ever be bound -- a certificate would be issued
+#     against an identity the gateway cannot reproduce;
+#   * the clone detection added in r110 is inert, so a data directory copied
+#     from another NAS is NOT caught.
 #
-# Both failures are silent. This is how you find out before a customer does.
+# Both failures are silent. This script is how you find out before a customer
+# does.
 #
-# ---------------------------------------------------------------------------
-# WHAT THE FIRST VERSION OF THIS SCRIPT GOT WRONG, because the same mistake is
-# easy to reintroduce and it produced a confident, wrong answer.
-#
-# It tested readability by running `su -s /bin/sh -c ... "#10001"`. `su` takes
-# a USER NAME; the "#uid" form is sudo's, not su's. So the command failed on
-# every machine, the script fell through to a root read, and reported
-# "ROOT ONLY" for every file that existed -- including files that were mode
-# 444 and perfectly readable by the runtime user. It printed the mode right
-# beside that verdict, and the two contradicted each other.
-#
-# The damage was not the wrong line. It was that a 0400 root-only DMI file and
-# a 0444 world-readable eMMC CID produced identical output, which is precisely
-# the distinction the script exists to make.
-#
-# So readability is now COMPUTED from the permission bits, which needs no
-# subprocess and cannot fail silently. A real attempt as the runtime user is
-# made as well when a mechanism for it exists, and the method used is always
-# named. A check that could not run says so; it never becomes a verdict.
-# ---------------------------------------------------------------------------
+# It reports what the RUNTIME USER can read, not what root can read. Running
+# the checks as root is what makes this look fine when it is not.
 
 set -u
 
 RUNTIME_UID="${MODEMDECK_UID:-10001}"
-RUNTIME_GID="${MODEMDECK_GID:-10001}"
-AGENT_GID="${MODEMDECK_AGENT_GID:-10002}"
-API_CONTAINER="${MODEMDECK_API_CONTAINER:-modemdeck-api}"
 
-# ---------------------------------------------------------------------------
-# Picking a way to test as the runtime user.
+printf 'machine identity probe\n'
+printf '  runtime user: uid %s\n' "$RUNTIME_UID"
+printf '  kernel:       %s\n' "$(uname -srm)"
+printf '\n'
+
+# read_as prints whether a path is readable by the runtime user.
 #
-# Preference order is faithfulness, not convenience. Running inside the api
-# container is the only method that also reproduces its mount namespace, so it
-# is tried first; the rest are host-side approximations, which is fine because
-# /sys and /proc are shared with the host.
-# ---------------------------------------------------------------------------
-ATTEMPT_METHOD="none"
-
-if command -v docker >/dev/null 2>&1 &&
-    docker exec -u "$RUNTIME_UID" "$API_CONTAINER" true >/dev/null 2>&1; then
-    ATTEMPT_METHOD="docker"
-elif command -v setpriv >/dev/null 2>&1 &&
-    setpriv --reuid="$RUNTIME_UID" --regid="$RUNTIME_GID" --clear-groups true >/dev/null 2>&1; then
-    ATTEMPT_METHOD="setpriv"
-elif command -v sudo >/dev/null 2>&1 &&
-    sudo -n -u "#$RUNTIME_UID" true >/dev/null 2>&1; then
-    ATTEMPT_METHOD="sudo"
-fi
-
-# attempt_read returns 0 if the runtime user really could read the path.
-# Returns 3 when there is no way to try, which is NOT a failure to read.
-attempt_read() {
-    case "$ATTEMPT_METHOD" in
-        docker)  docker exec -u "$RUNTIME_UID" "$API_CONTAINER" \
-                     head -c 1 "$1" >/dev/null 2>&1 ;;
-        setpriv) setpriv --reuid="$RUNTIME_UID" --regid="$RUNTIME_GID" --clear-groups \
-                     head -c 1 "$1" >/dev/null 2>&1 ;;
-        sudo)    sudo -n -u "#$RUNTIME_UID" head -c 1 "$1" >/dev/null 2>&1 ;;
-        *)       return 3 ;;
-    esac
-}
-
-# computed_read decides from the permission bits alone.
-#
-# Also walks the parents: a mode 444 file under a mode 700 directory is not
-# reachable, and checking only the file would call it readable.
-computed_read() {
-    path="$1"
-
-    parent="$(dirname "$path")"
-    while [ "$parent" != "/" ] && [ -n "$parent" ]; do
-        pbits="$(stat -c '%a %u %g' "$parent" 2>/dev/null)" || return 1
-        bits_allow "$pbits" 1 || return 1
-        next="$(dirname "$parent")"
-        [ "$next" = "$parent" ] && break
-        parent="$next"
-    done
-
-    bits="$(stat -c '%a %u %g' "$path" 2>/dev/null)" || return 1
-    bits_allow "$bits" 4
-}
-
-# bits_allow "<mode> <uid> <gid>" <wanted>  -- wanted is 4 (read) or 1 (execute).
-#
-# The group is treated as NOT ours unless it is one the api service is actually
-# given, which is the conservative reading: guessing membership would turn a
-# maybe into a yes, and a yes here means shipping.
-bits_allow() {
-    mode="$(echo "$1" | cut -d' ' -f1)"
-    owner="$(echo "$1" | cut -d' ' -f2)"
-    group="$(echo "$1" | cut -d' ' -f3)"
-    wanted="$2"
-
-    # Keep the low three digits; a setuid bit would make it four.
-    while [ "${#mode}" -gt 3 ]; do mode="${mode#?}"; done
-    while [ "${#mode}" -lt 3 ]; do mode="0${mode}"; done
-
-    o="$(echo "$mode" | cut -c1)"
-    g="$(echo "$mode" | cut -c2)"
-    w="$(echo "$mode" | cut -c3)"
-
-    if [ "$owner" = "$RUNTIME_UID" ]; then
-        digit="$o"
-    elif [ "$group" = "$RUNTIME_GID" ] || [ "$group" = "$AGENT_GID" ]; then
-        digit="$g"
-    else
-        digit="$w"
-    fi
-    [ "$((digit & wanted))" -eq "$wanted" ]
-}
-
-deriving=0
-blocked=0
-
-# check <path>. $DERIVES says whether a readable value here would actually
-# produce a machine ID, and only those are counted.
-#
-# The distinction is not cosmetic and the first version of this script did not
-# make it: it counted /proc/cpuinfo Serial as a usable source and printed
-# "CAN derive (1 usable source)" for a board whose only deriving source it had
-# just reported as unreadable. choosePrimary refuses cpu-serial as an identity
-# on purpose -- a batch-shared value would give two boards one machine ID, and
-# one customer's certificate would unlock another's gateway. Counting it here
-# produced a green light for exactly the machine that has no identity.
-check() {
+# Falls back to a root read only to say "root can, the gateway cannot", which
+# is the single most useful line this script can print: it distinguishes
+# "absent on this hardware" from "present but out of reach", and those have
+# completely different remedies.
+read_as() {
     path="$1"
     if [ ! -e "$path" ]; then
         printf '    %-46s absent\n' "$path"
-        return
+        return 1
     fi
-    bits="$(stat -c '%a %U:%G' "$path" 2>/dev/null || echo '?')"
-
-    if computed_read "$path"; then
-        verdict="READABLE"
-    else
-        verdict="ROOT ONLY"
+    mode="$(stat -c '%a %U' "$path" 2>/dev/null || echo '?')"
+    if su -s /bin/sh -c "head -c 64 '$path' >/dev/null 2>&1" "#$RUNTIME_UID" 2>/dev/null; then
+        value="$(su -s /bin/sh -c "head -c 64 '$path'" "#$RUNTIME_UID" 2>/dev/null | tr -d '\0\n')"
+        printf '    %-46s READABLE  [%s]  %s\n' "$path" "$mode" "$value"
+        return 0
     fi
-
-    # Cross-check against a real read, and believe the real one when they
-    # disagree -- the bits can be right while a mount option, SELinux or a
-    # namespace makes the actual answer different.
-    note=""
-    attempt_read "$path"
-    case "$?" in
-        0) [ "$verdict" = "ROOT ONLY" ] && note=" (bits said no, real read said YES)"
-           verdict="READABLE" ;;
-        3) note=" [from permission bits; no way to test as uid $RUNTIME_UID here]" ;;
-        *) [ "$verdict" = "READABLE" ] && note=" (bits said yes, real read said NO)"
-           verdict="ROOT ONLY" ;;
-    esac
-
-    if [ "$verdict" = "READABLE" ]; then
-        value="$(head -c 48 "$path" 2>/dev/null | tr -d '\0\n' | tr -c '[:print:]' '.')"
-        printf '    %-46s READABLE  [%s] %s%s\n' "$path" "$bits" "$value" "$note"
-        [ "$DERIVES" = "yes" ] && deriving=$((deriving + 1))
-    else
-        printf '    %-46s ROOT ONLY [%s] <- present, gateway cannot read%s\n' \
-            "$path" "$bits" "$note"
-        [ "$DERIVES" = "yes" ] && blocked=$((blocked + 1))
+    if head -c 1 "$path" >/dev/null 2>&1; then
+        printf '    %-46s ROOT ONLY [%s]  <- present, gateway cannot read\n' "$path" "$mode"
+        return 2
     fi
+    printf '    %-46s unreadable [%s]\n' "$path" "$mode"
+    return 2
 }
 
-printf 'machine identity probe\n'
-printf '  runtime user:  uid %s, gid %s (+%s)\n' "$RUNTIME_UID" "$RUNTIME_GID" "$AGENT_GID"
-printf '  kernel:        %s\n' "$(uname -srm)"
-case "$ATTEMPT_METHOD" in
-    docker)  printf '  tested via:    docker exec -u %s %s (most faithful)\n' \
-                 "$RUNTIME_UID" "$API_CONTAINER" ;;
-    setpriv) printf '  tested via:    setpriv --reuid=%s\n' "$RUNTIME_UID" ;;
-    sudo)    printf '  tested via:    sudo -u #%s\n' "$RUNTIME_UID" ;;
-    *)       printf '  tested via:    PERMISSION BITS ONLY -- no docker/setpriv/sudo\n' ;;
-esac
-printf '\n  sources that CAN derive an identity:\n'
+deriving_found=0
+blocked_found=0
 
-DERIVES=yes
-check /sys/firmware/devicetree/base/serial-number
-check /sys/devices/soc0/serial_number
-check /sys/class/dmi/id/product_uuid
-check /sys/class/dmi/id/board_serial
-# mmcblk only, and not the boot/rpmb partitions -- emmcSources in
-# internal/license/machineid.go skips those because they repeat the same CID.
-# An x86 NAS on SATA or NVMe has no mmcblk at all, which leaves it the two DMI
-# files above and nothing else.
-for cid in /sys/block/mmcblk*/device/cid; do
-    case "$cid" in *boot*|*rpmb*) continue ;; esac
-    [ -e "$cid" ] && check "$cid"
+note() {
+    case "$1" in
+        0) deriving_found=$((deriving_found + 1)) ;;
+        2) blocked_found=$((blocked_found + 1)) ;;
+    esac
+}
+
+printf '  sources that CAN derive an identity:\n'
+read_as /sys/firmware/devicetree/base/serial-number; note $?
+read_as /sys/devices/soc0/serial_number;             note $?
+read_as /sys/class/dmi/id/product_uuid;              note $?
+read_as /sys/class/dmi/id/board_serial;              note $?
+
+# eMMC CID, whichever block device enumerated it.
+for cid in /sys/block/*/device/cid; do
+    [ -e "$cid" ] || continue
+    read_as "$cid"; note $?
 done
 
-printf '\n  recorded, but NEVER used to derive an identity:\n'
-DERIVES=no
-if [ -r /proc/cpuinfo ] && grep -qs '^Serial' /proc/cpuinfo; then
-    check /proc/cpuinfo
+# The SoC serial from /proc/cpuinfo, which survives replacing the storage.
+if grep -qs '^Serial' /proc/cpuinfo; then
+    printf '    %-46s READABLE  [cpuinfo]\n' '/proc/cpuinfo Serial'
+    deriving_found=$((deriving_found + 1))
 else
     printf '    %-46s absent\n' '/proc/cpuinfo Serial'
 fi
-printf '    %-46s regenerated on reinstall\n' '/etc/machine-id'
-printf '    %-46s never derives; see choosePrimary\n' 'MAC addresses'
+
+printf '\n  recorded but NEVER used to derive an identity:\n'
+read_as /etc/machine-id >/dev/null 2>&1 && \
+    printf '    %-46s (regenerated on reinstall)\n' '/etc/machine-id'
+printf '    %-46s (never derives; see choosePrimary)\n' 'MAC addresses'
 
 printf '\n'
-if [ "$deriving" -gt 0 ]; then
-    printf 'RESULT: this machine CAN derive an identity (%d readable source(s)).\n' "$deriving"
-    [ "$blocked" -gt 0 ] && printf '        %d further source(s) exist but are out of reach.\n' "$blocked"
+if [ "$deriving_found" -gt 0 ]; then
+    printf 'RESULT: this machine CAN derive an identity (%d usable source(s)).\n' "$deriving_found"
+    printf '        Machine licences bind, and clone detection works.\n'
     exit 0
 fi
 
 printf 'RESULT: this machine CANNOT derive an identity.\n'
-if [ "$blocked" -gt 0 ]; then
-    printf '        %d source(s) are present but unreadable by uid %s.\n' "$blocked" "$RUNTIME_UID"
-    printf '        A PERMISSION problem: the identity is there, out of reach.\n'
-    printf '        Fix: have the privileged hardware container read it and pass\n'
-    printf '        the fingerprint over the agent socket.\n'
+if [ "$blocked_found" -gt 0 ]; then
+    printf '        %d source(s) exist but are root-only, so the api container\n' "$blocked_found"
+    printf '        cannot read them. This is a PERMISSION problem, not a\n'
+    printf '        hardware one -- the identity is there, out of reach.\n'
 else
     printf '        No burned-in identifier is present at all.\n'
-    printf '        A HARDWARE problem: nothing to reach. Machine licences\n'
-    printf '        cannot be bound on this platform by any means.\n'
 fi
-printf '\n        Send this output back before shipping to this platform.\n'
+printf '\n'
+printf '        Consequences, both silent:\n'
+printf '          * machine licences cannot bind on this hardware;\n'
+printf '          * a data directory copied from another NAS is NOT detected.\n'
+printf '\n'
+printf '        Send this output back before shipping to this platform.\n'
 exit 1

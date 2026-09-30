@@ -1,0 +1,12 @@
+# NasSimHub UFI003 stick: USB NCM link to the NAS.
+#
+# The stick's gadget identifies itself as idVendor 1d6b / idProduct 0104 with
+# manufacturer "NasSimHub" (overlay/usr/local/libexec/nassimhub-usb on the
+# stick). Only that interface is touched: the QDC507 modem on this NAS is also
+# a USB network device and must keep its own configuration.
+#
+# NetworkManager is told to leave the interface alone, otherwise it would run
+# DHCP on it (the stick deliberately runs no DHCP server) and flush the static
+# address set below.
+ACTION!="remove", SUBSYSTEM=="net", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0104", ATTRS{manufacturer}=="NasSimHub", ENV{NM_UNMANAGED}="1"
+ACTION=="add", SUBSYSTEM=="net", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0104", ATTRS{manufacturer}=="NasSimHub", TAG+="systemd", ENV{SYSTEMD_WANTS}+="nassimhub-usb-link@$name.service"

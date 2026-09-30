@@ -1,19 +1,20 @@
-// The two dashboard cards whose backend is not built yet.
+// The dashboard cards that were drawn before their backend existed.
 //
-// The operator asked for these two cards to be drawn now, against a design the
-// backend will be written to. That is a reasonable way round, and it comes with
-// one rule that the readers here enforce: a card with no backend behind it says
-// so, field by field, and never shows a value it does not have.
+// The operator asked for these cards to be drawn first, against a design the
+// backend was then written to. That came with one rule that the readers here
+// enforce, and it still holds now the endpoints exist, because a gateway older
+// than them answers nothing: a card with no backend behind it says so, field
+// by field, and never shows a value it does not have.
 //
 // In particular it never shows ZERO. "0 SMS today" and "no SMS figures yet" are
 // different statements, and the first one is a claim about the gateway's day
 // that nothing has measured. Every field is therefore optional, and the cards
 // render an absent field as "not wired yet" rather than as a number.
 //
-// Both readers answer `null` for the whole payload when the endpoint is not
-// there, which is the state today: any failure -- 404, 501, a parse error, a
-// gateway that has never heard of the path -- means the same thing to the card,
-// so they are not distinguished.
+// Every reader answers `null` for the whole payload when the endpoint is not
+// there -- which is the state on a gateway older than it: any failure -- 404,
+// 501, a parse error, a gateway that has never heard of the path -- means the
+// same thing to the card, so they are not distinguished.
 
 import { API_ROOT, get } from './client'
 
@@ -41,27 +42,37 @@ export interface SecurityRow {
 /**
  * GET /api/v1/security/posture
  *
- * The shape the card is drawn against. Every member is optional; a member the
- * backend omits renders as "not wired yet".
+ * Every member is optional; a member the backend omits renders as "not wired
+ * yet". What the gateway serves (internal/httpapi/security_posture.go) is a
+ * description of the VIEWER'S OWN CONNECTION as the gateway's nginx
+ * negotiated it, plus two facts about the gateway itself -- for a browser on
+ * the HTTPS port, something like:
  *
  * ```json
  * {
- *   "transport":   { "state": "ok",      "value": "TLS 1.3" },
- *   "post_quantum":{ "state": "ok",      "value": "PQ Active",  "detail": "X25519MLKEM768" },
- *   "pinning":     { "state": "ok",      "value": "Public-Key Pinning" },
- *   "identity":    { "state": "ok",      "value": "Ed25519 + Pairing" },
- *   "replay":      { "state": "ok",      "value": "Enabled" },
- *   "packet_auth": { "state": "ok",      "value": "HMAC-SHA256" },
- *   "ota":         { "state": "ok",      "value": "Dual Signature" },
+ *   "transport":    { "state": "ok",  "value": "TLS 1.3" },
+ *   "post_quantum": { "state": "ok",  "value": "ML-KEM", "detail": "X25519MLKEM768" },
+ *   "packet_auth":  { "state": "ok",  "value": "AES-128-GCM", "detail": "TLS_AES_128_GCM_SHA256" },
+ *   "replay":       { "state": "ok" },
+ *   "identity":     { "state": "ok",  "value": "ECDSA P-256", "detail": "<certificate fingerprint>" },
+ *   "pinning":      { "state": "off" },
+ *   "ota":          { "state": "ok",  "value": "Ed25519", "detail": "b813a48a" },
  *   "events": {
  *     "window_hours": 24,
- *     "anomalous_logins": 0,
+ *     "anomalous_logins": 2,
  *     "key_state": "ok",
- *     "replay_blocked": 0,
  *     "downgrade_guard": true
  *   }
  * }
  * ```
+ *
+ * A state with no value (replay "ok", pinning "off") is worded by the card
+ * from the state. Through Cloudflare the rows about the handshake are
+ * "unknown", because the browser's TLS ends at Cloudflare. `anomalous_logins`
+ * is failed password logins, over `window_hours` -- less than 24 for a day
+ * after a restart, because the count lives in memory. `replay_blocked` is
+ * never sent: nothing counts rejected replays. The gateway-wide events go to
+ * administrators only.
  */
 export interface SecurityEvents {
   window_hours?: number
@@ -144,6 +155,10 @@ export async function getSecurityPosture(): Promise<SecurityPosture | null> {
 
 /**
  * GET /api/v1/stats/communication
+ *
+ * Served by internal/httpapi/communication_stats.go, from the gateway's whole
+ * message and call record, scoped to the lines the caller may open. Its zeros
+ * are real counts.
  *
  * This one cannot be computed in the browser, and that is why it is here rather
  * than derived from the workspace stores: the call list is PAGINATED and the
@@ -258,13 +273,21 @@ export async function getCommunicationStats(): Promise<CommunicationStats | null
  *   the public egress IP and ISP   GET /api/v1/vowifi-diagnostics -> egress
  *   the inbound call filter policy GET /api/v1/settings/homesim/call-filter
  *
+ * WHAT THE GATEWAY SERVES HERE TODAY is `guard` alone -- the anti-fraud
+ * guard's budgets, today's use of them, whether it is lifted, and the day
+ * (internal/httpapi/call_guard.go, moduleSecurity). `risk`, `integrity` and
+ * `trust` are left out of the response because nothing computes them, and the
+ * card reads their absence as "not wired". The example below is the full
+ * shape, not today's payload.
+ *
  * ```json
  * {
  *   "risk":  { "state": "ok", "value": "低", "detail": "无异常行为" },
  *   "guard": {
  *     "call_limit": 5, "call_used": 2,
  *     "message_limit": 3, "message_used": 1,
- *     "unlocked": false, "date": "2026-09-21"
+ *     "unlocked": false, "date": "2026-09-21",
+ *     "resets_at": "2026-09-22T00:00:00+08:00"
  *   },
  *   "integrity": {
  *     "module":    { "state": "ok",      "value": "正常" },
@@ -296,6 +319,12 @@ export interface FraudGuardState {
   unlocked?: boolean
   /** The local date the counters belong to; they reset when it changes. */
   date?: string
+  /**
+   * When the counters next go back to zero, as an RFC 3339 instant. Reported
+   * by the gateway because the rollover is ITS local midnight, which on a
+   * container with no time zone set is UTC -- not the reader's midnight.
+   */
+  resets_at?: string
 }
 
 export interface ModuleTrust {
@@ -339,7 +368,11 @@ export async function getModuleSecurity(): Promise<ModuleSecurity | null> {
           message_limit: readCount(guard.message_limit),
           message_used: readCount(guard.message_used),
           unlocked: typeof guard.unlocked === 'boolean' ? guard.unlocked : undefined,
-          date: typeof guard.date === 'string' && guard.date ? guard.date : undefined
+          date: typeof guard.date === 'string' && guard.date ? guard.date : undefined,
+          resets_at:
+            typeof guard.resets_at === 'string' && !Number.isNaN(Date.parse(guard.resets_at))
+              ? guard.resets_at
+              : undefined
         }
       : undefined,
     integrity: integrity

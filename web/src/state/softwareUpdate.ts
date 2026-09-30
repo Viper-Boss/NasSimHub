@@ -218,18 +218,88 @@ const downloadProgress = computed(() => {
   return Math.round((done / parts.length) * 100)
 })
 
-/** The release mirrors, as the last check found them. */
+const SOURCE_KINDS = new Set(['mirror', 'nkn', 'dht'])
+
+/**
+ * Every release source, as the last check found them: the HTTPS mirrors and
+ * the two peer networks. A kind this page does not know is dropped rather
+ * than shown as a mirror, and a peer count that is not a count is dropped.
+ */
 const releaseSources = computed<UpdateSource[]>(() => {
   const list = updateCheck.value?.sources
   if (!Array.isArray(list)) return []
-  return list.filter(
-    (entry): entry is UpdateSource =>
-      !!entry &&
-      typeof entry === 'object' &&
-      typeof entry.name === 'string' &&
-      SOURCE_STATES.has(entry.state)
-  )
+  return list
+    .filter(
+      (entry): entry is UpdateSource =>
+        !!entry &&
+        typeof entry === 'object' &&
+        typeof entry.name === 'string' &&
+        SOURCE_STATES.has(entry.state) &&
+        (entry.kind === undefined || SOURCE_KINDS.has(entry.kind))
+    )
+    .map(entry => ({
+      ...entry,
+      kind: entry.kind ?? 'mirror',
+      peers:
+        typeof entry.peers === 'number' && Number.isInteger(entry.peers) && entry.peers > 0
+          ? entry.peers
+          : undefined
+    }))
 })
+
+/**
+ * Whether this gateway hands releases on to other gateways. Undefined until
+ * read, and on a gateway too old to have the setting -- the card then shows no
+ * switch rather than one that does nothing.
+ */
+const releaseSharing = ref<{ enabled: boolean; revision: number } | undefined>()
+const savingSharing = ref(false)
+
+export async function loadReleaseSharing(): Promise<void> {
+  if (fixtureMode) {
+    releaseSharing.value ??= { enabled: true, revision: 1 }
+    return
+  }
+  try {
+    const raw = (await get(`${API_ROOT}/updates/sharing`)) as Record<string, unknown> | null
+    if (raw && typeof raw.enabled === 'boolean' && typeof raw.revision === 'number') {
+      releaseSharing.value = { enabled: raw.enabled, revision: raw.revision }
+    }
+  } catch {
+    releaseSharing.value = undefined
+  }
+}
+
+/**
+ * Switch sharing on or off. Moved at once and put back if the save fails, like
+ * the auto-download switch beside it.
+ */
+export async function setReleaseSharing(enabled: boolean): Promise<void> {
+  const current = releaseSharing.value
+  if (savingSharing.value || !current) return
+  savingSharing.value = true
+  releaseSharing.value = { ...current, enabled }
+  try {
+    if (fixtureMode) {
+      releaseSharing.value = { enabled, revision: current.revision + 1 }
+    } else {
+      const saved = (await writeJSON(
+        `${API_ROOT}/updates/sharing`,
+        'PUT',
+        { enabled, expected_revision: current.revision },
+        200
+      )) as { enabled?: unknown; revision?: unknown }
+      if (typeof saved?.enabled === 'boolean' && typeof saved?.revision === 'number') {
+        releaseSharing.value = { enabled: saved.enabled, revision: saved.revision }
+      }
+    }
+  } catch {
+    releaseSharing.value = current
+    showError(preferenceFailedMessage)
+  } finally {
+    savingSharing.value = false
+  }
+}
 
 /**
  * Mirrors that returned a verifying manifest for the version on offer, out of
@@ -351,7 +421,35 @@ async function fetchUpdateCheck(refresh: boolean): Promise<UpdateCheck> {
     ...parseUpdateCheck(raw),
     download: source.download as UpdateCheck['download'],
     auto_download: source.auto_download as UpdateCheck['auto_download'],
-    sources: source.sources as UpdateCheck['sources']
+    sources: source.sources as UpdateCheck['sources'],
+    signing_key: readSigningKey(source.signing_key),
+    last_operation: readFinishedOperation(source.last_operation)
+  }
+}
+
+/** Eight hex digits or nothing: anything else is not a fingerprint. */
+function readSigningKey(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[0-9a-f]{8}$/.test(value) ? value : undefined
+}
+
+/**
+ * The last finished install, or nothing. Only the fields the card shows are
+ * kept, and a "running" one is refused: it would be the install in progress,
+ * which is tracked through `operation` and must not appear as history.
+ */
+function readFinishedOperation(value: unknown): UpdateOperation | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const source = value as Record<string, unknown>
+  const state = source.state
+  if (state !== 'succeeded' && state !== 'failed') return undefined
+  if (typeof source.id !== 'string' || typeof source.target_version !== 'string') return undefined
+  return {
+    id: source.id,
+    state,
+    target_version: source.target_version,
+    started_at: typeof source.started_at === 'string' ? source.started_at : '',
+    finished_at: typeof source.finished_at === 'string' ? source.finished_at : undefined,
+    error_code: typeof source.error_code === 'string' ? source.error_code : undefined
   }
 }
 
@@ -541,6 +639,8 @@ export function useSoftwareUpdate() {
     savingPreference,
     releaseSources,
     sourceAgreement,
-    signatureVerified
+    signatureVerified,
+    releaseSharing,
+    savingSharing
   }
 }

@@ -329,6 +329,21 @@ func migrateSchema(ctx context.Context, database *sql.DB) error {
 			return err
 		}
 	}
+	// Nodes must be scoped before the legacy block below. That block calls
+	// schemaMatchesSupportedMigration, which treats a missing expected column as
+	// "this database is not one we know how to upgrade" and then skips the legacy
+	// upgrade without returning an error - so running this later would not fail
+	// here, it would fail at ValidateSchema with no indication of why.
+	migratedNodes, err := migrateNasSimHubNodeSchema(ctx, database, actual)
+	if err != nil {
+		return err
+	}
+	if migratedNodes {
+		actual, err = readSchemaShape(ctx, database)
+		if err != nil {
+			return err
+		}
+	}
 	if schemaContains(expected, actual) {
 		return nil
 	}

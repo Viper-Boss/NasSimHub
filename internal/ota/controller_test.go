@@ -284,3 +284,29 @@ func TestAnImageWithNoKnownDigestIsPlannedAsChanged(t *testing.T) {
 		}
 	}
 }
+
+// The last FINISHED install is reported separately from the operation being
+// tracked. A running one is not reported there: it is the tracked operation,
+// and the dashboard would otherwise show it as "last updated" mid-install.
+func TestTheLastFinishedInstallIsReportedApart(t *testing.T) {
+	runtime := &fakeRuntime{}
+	controller := newTestController(t, runtime, testManifest(testDigest("d")), testDigest("e"))
+	store := controller.operations.(*memoryOperationStore)
+
+	if result := controller.Check(context.Background()); result.LastOperation != nil {
+		t.Fatalf("no install ever ran, yet last operation = %+v", result.LastOperation)
+	}
+
+	store.operation = &updatecheck.Operation{ID: "op-1", State: updatecheck.OperationRunning, TargetVersion: "v2.0.0"}
+	if result := controller.Check(context.Background()); result.LastOperation != nil {
+		t.Fatal("a running install was reported as the last finished one")
+	}
+
+	finished := time.Date(2026, 7, 30, 8, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	store.operation = &updatecheck.Operation{ID: "op-1", State: updatecheck.OperationSucceeded, TargetVersion: "v1.9.2", FinishedAt: finished}
+	result := controller.Check(context.Background())
+	if result.LastOperation == nil || result.LastOperation.TargetVersion != "v1.9.2" ||
+		result.LastOperation.State != updatecheck.OperationSucceeded {
+		t.Fatalf("last operation = %+v", result.LastOperation)
+	}
+}

@@ -2,6 +2,7 @@ package agentclient
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/url"
 	"time"
@@ -96,4 +97,37 @@ func (client *Client) DialDHT(ctx context.Context, addresses []string) (int, err
 		return 0, err
 	}
 	return result.Dialled, nil
+}
+
+// SetDHTRelease sets the signed release manifest the agent shares with its DHT
+// peers. Nil stops sharing. Only a document the caller verified belongs here.
+func (client *Client) SetDHTRelease(ctx context.Context, signed []byte) error {
+	request := struct {
+		SignedBase64 string `json:"signed_base64"`
+	}{SignedBase64: base64.StdEncoding.EncodeToString(signed)}
+	return client.doJSON(ctx, http.MethodPut, "/v1/dht/release", request, http.StatusNoContent, nil)
+}
+
+// FetchDHTReleases asks the agent's connected DHT peers for their signed
+// release manifests. The documents are UNVERIFIED -- they are whatever the
+// peers sent -- and the caller must verify each before it means anything.
+func (client *Client) FetchDHTReleases(ctx context.Context) ([][]byte, error) {
+	var payload struct {
+		Releases []struct {
+			Peer         string `json:"peer"`
+			SignedBase64 string `json:"signed_base64"`
+		} `json:"releases"`
+	}
+	if err := client.doJSON(ctx, http.MethodPost, "/v1/dht/release/fetch", nil, http.StatusOK, &payload); err != nil {
+		return nil, err
+	}
+	documents := make([][]byte, 0, len(payload.Releases))
+	for _, release := range payload.Releases {
+		decoded, err := base64.StdEncoding.DecodeString(release.SignedBase64)
+		if err != nil || len(decoded) == 0 {
+			continue
+		}
+		documents = append(documents, decoded)
+	}
+	return documents, nil
 }

@@ -212,6 +212,11 @@ func run(
 		_ = db.Close()
 		return fmt.Errorf("configure call events: %w", err)
 	}
+	nodes, err := startNasSimHubNodes(ctx, logger, dataDirectory, repository, communications, version)
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
 	var applePushRuntime *applepush.Runtime
 	applePushConfig, applePushConfigured, err := applepush.LoadConfigFromEnvironment()
 	if err != nil {
@@ -263,13 +268,21 @@ func run(
 		_ = db.Close()
 		return fmt.Errorf("create host media opener: %w", err)
 	}
+	var endpointOpener callmedia.MediaEndpointOpener = mediaOpener
+	if nodes != nil {
+		endpointOpener, err = agentmedia.NewNodeMux(mediaOpener, nodes.fleet, repository)
+		if err != nil {
+			_ = db.Close()
+			return fmt.Errorf("create Node media opener: %w", err)
+		}
+	}
 	mediaUDPPort, err := parseMediaUDPPort(os.Getenv("MODEMDECK_CALL_MEDIA_UDP_PORT"))
 	if err != nil {
 		_ = db.Close()
 		return err
 	}
 	mediaCore, err := callmedia.New(callmedia.Options{
-		EndpointOpener: mediaOpener,
+		EndpointOpener: endpointOpener,
 		PublicIPs:      parseCommaSeparatedList(os.Getenv("MODEMDECK_CALL_MEDIA_PUBLIC_IPS")),
 		UDPPort:        mediaUDPPort,
 		OnOwnerStateChange: func(callID string, connected bool) {
@@ -379,10 +392,14 @@ func run(
 		logger.Warn("ignoring release channel entries that are not http(s) URLs",
 			"component", "updates", "dropped", droppedChannelURLs)
 	}
-	var updateChecker httpapi.UpdateChecker = releasechannel.New(releasechannel.Options{
+	localChannel := releasechannel.New(releasechannel.Options{
 		URLs:           channelURLs,
 		CurrentVersion: func() string { return version },
 	})
+	var updateChecker httpapi.UpdateChecker = localChannel
+	// Releases heard over NKN and the DHT go to whichever channel answers the
+	// checks: this process's own, or the updater's when there is one.
+	var releaseRelay httpapi.ReleaseRelay = channelRelay{channel: localChannel}
 	var updateManager httpapi.UpdateManager
 	if updaterURL := strings.TrimSpace(os.Getenv("MODEMDECK_UPDATER_URL")); updaterURL != "" {
 		tokenFile := strings.TrimSpace(os.Getenv("MODEMDECK_UPDATER_TOKEN_FILE"))
@@ -398,6 +415,7 @@ func run(
 		} else {
 			updateChecker = client
 			updateManager = client
+			releaseRelay = client
 		}
 	}
 	api, err := httpapi.New(repository, httpapi.Options{
@@ -443,6 +461,7 @@ func run(
 			activate:   cloudflareOriginActivator,
 		},
 		MobilePairing:      cloudflareGateway,
+		NasSimHubNodes:     nodes.service(),
 		IOSCallTests:       applePushRuntime,
 		RTCConfiguration:   turnProvider,
 		Authenticator:      authenticator,
@@ -453,6 +472,7 @@ func run(
 		RuntimeEvents:      runtimeEvents,
 		UpdateChecker:      updateChecker,
 		UpdateManager:      updateManager,
+		ReleaseRelay:       releaseRelay,
 		ApplicationVersion: version,
 		SettingsSecrets:    settingsSecrets,
 		// The issuer's PUBLIC key. Certificates are verified against it and
@@ -498,6 +518,11 @@ func run(
 		}()
 		<-applePushReady
 	}
+	nodesDone := make(chan struct{})
+	go func() {
+		defer close(nodesDone)
+		nodes.run(signals, communications, logger)
+	}()
 	syncDone := make(chan struct{})
 	go func() {
 		defer close(syncDone)
@@ -595,6 +620,7 @@ func run(
 		}
 	}
 	<-syncDone
+	<-nodesDone
 	if applePushDone != nil {
 		<-applePushDone
 	}

@@ -1,11 +1,14 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCallGuardDistinctNumberLimit(t *testing.T) {
@@ -152,5 +155,97 @@ func TestTheDialPadUnlockLiftsCallsAndMessagesTogether(t *testing.T) {
 			"the message guard was not lifted; the operator unlocked on the dial pad " +
 				"and would still be blocked from texting a new number",
 		)
+	}
+}
+
+// The dashboard's security card reads the guard through this. It must report
+// the real count, never the numbers themselves, and nothing it cannot back.
+func TestModuleSecurityReportsTheGuardAndNothingElse(t *testing.T) {
+	api, _, _ := licensedAPI(t)
+	calls, ok := api.callGuardStore()
+	if !ok {
+		t.Fatal("the dial guard is unavailable")
+	}
+	messages, ok := api.messageGuardStore()
+	if !ok {
+		t.Fatal("the message guard is unavailable")
+	}
+	calls.Attempt("13800000001")
+	calls.Attempt("13800000002")
+	calls.Attempt("13800000001")
+	messages.Attempt("13900000009")
+
+	read := func() map[string]any {
+		t.Helper()
+		recorder := httptest.NewRecorder()
+		api.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/security/module", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("module security answered %d: %s", recorder.Code, recorder.Body.String())
+		}
+		if strings.Contains(recorder.Body.String(), "13800000001") {
+			t.Fatal("the response lists a dialled number; it must only count them")
+		}
+		var body map[string]any
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	body := read()
+	for _, absent := range []string{"risk", "integrity", "trust"} {
+		if _, present := body[absent]; present {
+			t.Fatalf("%q is in the response, but nothing in this gateway computes it", absent)
+		}
+	}
+	guard, _ := body["guard"].(map[string]any)
+	want := map[string]float64{"call_used": 2, "call_limit": 5, "message_used": 1, "message_limit": 3}
+	for key, value := range want {
+		if guard[key] != value {
+			t.Fatalf("%s = %v, want %v (guard %v)", key, guard[key], value, guard)
+		}
+	}
+	if guard["unlocked"] != false || guard["date"] == "" {
+		t.Fatalf("guard = %v", guard)
+	}
+	// The reset is the next LOCAL midnight -- the same boundary the guard's
+	// own date comparison uses -- reported as an absolute instant.
+	resetsAt, err := time.Parse(time.RFC3339, fmt.Sprint(guard["resets_at"]))
+	if err != nil {
+		t.Fatalf("resets_at = %v: %v", guard["resets_at"], err)
+	}
+	if until := time.Until(resetsAt); until <= 0 || until > 24*time.Hour {
+		t.Fatalf("resets_at %v is not within the next day", resetsAt)
+	}
+	if local := resetsAt.In(time.Local); local.Hour() != 0 || local.Minute() != 0 {
+		t.Fatalf("resets_at %v is not a local midnight", local)
+	}
+
+	calls.Unlock()
+	if read()["guard"].(map[string]any)["unlocked"] != true {
+		t.Fatal("a lifted guard was not reported as lifted")
+	}
+
+	post := httptest.NewRecorder()
+	api.ServeHTTP(post, httptest.NewRequest(http.MethodPost, "/api/v1/security/module", nil))
+	if post.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST answered %d", post.Code)
+	}
+}
+
+func TestTheGuardRollsOverAtTheNextLocalMidnight(t *testing.T) {
+	zone := time.FixedZone("CST", 8*3600)
+	for _, now := range []time.Time{
+		time.Date(2026, 9, 24, 16, 40, 0, 0, zone),
+		time.Date(2026, 9, 30, 23, 59, 59, 0, zone),
+		time.Date(2026, 12, 31, 0, 0, 0, 0, zone),
+	} {
+		next := nextGuardRollover(now)
+		if next.Hour() != 0 || next.Minute() != 0 || !next.After(now) || next.Sub(now) > 24*time.Hour {
+			t.Fatalf("after %v the guard rolls over at %v", now, next)
+		}
+		if next.Format("2006-01-02") == now.Format("2006-01-02") {
+			t.Fatalf("after %v the rollover %v is the same day", now, next)
+		}
 	}
 }

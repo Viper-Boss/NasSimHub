@@ -44,12 +44,14 @@ import SensitiveValue from './SensitiveValue.vue'
 // them together is what makes "same object, seven times" enforceable rather
 // than merely intended.
 //
-// Two of the three have NO BACKEND YET. The operator asked for the interface
-// first, against the design their backend will be written to, and that is the
-// one thing these cards have to be careful about: a card with nothing behind it
-// says so, per field, and never shows a figure it does not have. It never shows
-// zero either -- "0 SMS today" is a claim about the gateway's day that nothing
-// has measured, and it is a different statement from "no SMS figures yet". So
+// Two of the three were drawn BEFORE THEIR BACKEND EXISTED, at the operator's
+// request, against the design it was then written to. It exists now
+// (internal/httpapi/security_posture.go, communication_stats.go), but a
+// gateway older than it still answers nothing, and that is the one thing these
+// cards have to be careful about: a card with nothing behind it says so, per
+// field, and never shows a figure it does not have. It never shows zero either
+// -- "0 SMS today" is a claim about the gateway's day that nothing has
+// measured, and it is a different statement from "no SMS figures yet". So
 // every absent field renders as the pending label, no pill is ever tinted for a
 // value that did not come from the endpoint, and each card carries a footnote
 // saying the endpoint is not in place while that is true.
@@ -147,6 +149,28 @@ function postureTone(row: SecurityRow | undefined): string {
   if (row.state === 'ok') return 'is-ok'
   if (row.state === 'warn') return 'is-warn'
   return ''
+}
+
+/**
+ * The pill's words. The gateway sends a value only where there is a name to
+ * give -- "TLS 1.3", "ML-KEM", "Ed25519" -- and otherwise just the state, so
+ * the words come from the state. They have to: "pinning: off" arrives with no
+ * value, and falling back to "on" for every row is how a card that has never
+ * pinned anything would come to say it does.
+ */
+function pillText(row: SecurityRow): string {
+  if (row.value) return row.value
+  switch (row.state) {
+    case 'ok': return t('dashboard.secOn')
+    case 'off': return t('dashboard.secOff')
+    default: return t('dashboard.secUnknown')
+  }
+}
+
+/** The pill's tooltip: the gateway's own detail, or why it cannot say. */
+function pillTitle(row: SecurityRow): string | undefined {
+  if (row.detail) return row.detail
+  return row.state === 'unknown' ? t('dashboard.secUnknownNote') : undefined
 }
 
 const events = computed(() => posture.value?.events ?? null)
@@ -332,9 +356,9 @@ const trendBars = computed(() => {
 
 <template>
   <div class="insight-cards">
-    <!-- Secure transport. Interface first: the endpoint behind it is not built
-         yet, so every row reads "not wired yet" until it answers, no pill is
-         tinted, and the footnote says why. -->
+    <!-- Secure transport: the viewer's own connection, as the gateway's nginx
+         saw it. A row the endpoint did not send reads "not wired yet", is not
+         tinted, and the footnote says why when nothing answered at all. -->
     <article class="insight-card">
       <header class="insight-card__head">
         <ShieldCheck :size="15" />
@@ -349,8 +373,8 @@ const trendBars = computed(() => {
               v-if="entry.row"
               class="insight-tag"
               :class="postureTone(entry.row)"
-              :title="entry.row.detail"
-            >{{ entry.row.value || t('dashboard.secOn') }}</span>
+              :title="pillTitle(entry.row)"
+            >{{ pillText(entry.row) }}</span>
             <span v-else class="insight-tag insight-sec__pending">{{ t('dashboard.cardPending') }}</span>
           </li>
         </ul>
@@ -409,10 +433,9 @@ const trendBars = computed(() => {
       </div>
     </article>
 
-    <!-- Communication summary. Interface first, like the security card: the
-         counts cannot be computed in the browser (the call list is paginated
-         and messages load per conversation), so a tile with no figure shows a
-         dash, never a zero. -->
+    <!-- Communication summary, counted by the gateway over its whole record:
+         the browser cannot do it (the call list is paginated and messages load
+         per conversation). A tile with no figure shows a dash, never a zero. -->
     <article class="insight-card">
       <header class="insight-card__head">
         <ChartNoAxesCombined :size="15" />
