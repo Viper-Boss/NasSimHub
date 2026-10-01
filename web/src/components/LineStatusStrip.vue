@@ -159,7 +159,7 @@ const networkLabel = computed(() => accessTechnologyLabel(line.value?.serving_ra
 const carrierName = computed(() => {
   const value = line.value
   if (!value) return ''
-  const code = value.serving_operator_code || value.operator || ''
+  const code = value.serving_operator_code || value.home_operator_code || value.operator || ''
   const name = cnOperatorNameOf(code)
   if (name) return name
   if (code && !/^\d+$/.test(code)) return code
@@ -489,7 +489,7 @@ onBeforeUnmount(() => {
           </span>
         </div>
         <div class="line-status__row line-status__row--split">
-          <span class="line-status__number">{{ facts.formatted }}</span>
+          <span class="line-status__number">{{ facts.formatted || t('calls.unknownNumber') }}</span>
           <span v-if="geoLine" class="line-status__geo" :title="geoLine">{{ geoLine }}</span>
           <span v-else-if="line.operator && !/^\d+$/.test(line.operator)" class="line-status__geo">{{ line.operator }}</span>
         </div>
@@ -544,7 +544,7 @@ onBeforeUnmount(() => {
     <div v-if="open" class="line-status-pop">
       <header class="line-status-pop__head">
         <span class="line-status-pop__title">{{ t('homesim.quota.title') }}</span>
-        <span v-if="facts.formatted" class="line-status-pop__number">{{ facts.formatted }}</span>
+        <span v-if="facts.formatted" class="line-status-pop__number">{{ facts.formatted || t('calls.unknownNumber') }}</span>
       </header>
 
       <div v-if="quotaRings.length" class="line-status-pop__quota">

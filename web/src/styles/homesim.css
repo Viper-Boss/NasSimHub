@@ -43,7 +43,7 @@ button:focus-visible, a:focus-visible {
    nav's top border and lost its label. The whole rail scrolls instead, the
    brand stays pinned, and the links are short enough to fit without scrolling
    on a 900px-tall window. */
-.app-shell .rail { overflow-y: auto; overscroll-behavior: contain; }
+.app-shell .rail { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
 .app-shell .brand-mark-wrap { position: sticky; top: 0; z-index: 2; background: var(--surface-subtle); }
 .app-shell .rail__primary { flex: 0 0 auto; min-height: auto; overflow: visible; padding: 10px 12px; gap: 4px; }
 .app-shell .rail__secondary { margin-inline: 12px; padding: 10px 0 14px; }

@@ -212,10 +212,10 @@ function isBucket(entry: CommunicationBucket | null): entry is CommunicationBuck
   return entry !== null
 }
 
-export async function getCommunicationStats(): Promise<CommunicationStats | null> {
+export async function getCommunicationStats(lineID?: string): Promise<CommunicationStats | null> {
   let payload: unknown
   try {
-    payload = await get(`${API_ROOT}/stats/communication`)
+    payload = await get(`${API_ROOT}/stats/communication${lineID ? `?line_id=${encodeURIComponent(lineID)}` : ''}`)
   } catch {
     return null
   }

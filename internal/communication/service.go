@@ -584,6 +584,8 @@ func (s *Service) commitSnapshotLocked(
 		Capabilities:   health.Provider.Capabilities,
 		Lines:          lines,
 	}
+	// Node PCM is independent of the NAS host modem's media capability.
+	includeNodeMediaCapability(&status)
 	s.mu.Lock()
 	s.status = cloneStatus(status)
 	s.lastSnapshot = snapshot
@@ -2078,6 +2080,7 @@ func (s *Service) StartCall(ctx context.Context, input StartCallInput) (store.Ca
 		snapshot, err = s.agent.Snapshot(outcomeContext)
 	}
 	if err != nil {
+		s.loggerForDiagnostics().Warn("accepted call observation failed", "component", "communication", "controller", controller, "endpoint_id", line.EndpointID, "cause", err)
 		err = s.recordIndeterminateAcceptedCall(
 			ctx,
 			command,
@@ -3404,4 +3407,12 @@ func normalizeContext(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return ctx
+}
+
+func includeNodeMediaCapability(status *Status) {
+	for _, line := range status.Lines {
+		if strings.HasPrefix(line.EndpointID, store.NasSimHubNodeEndpointPrefix) && line.Capabilities.Media {
+			status.Capabilities.Media = true
+		}
+	}
 }

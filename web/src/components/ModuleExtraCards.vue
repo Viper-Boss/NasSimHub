@@ -26,6 +26,7 @@ import type { Component } from 'vue'
 import type { Device, LineSummary, ModemPort } from '../api/types'
 import { networkCardLabels } from '../i18n/networkCardNotes'
 import './insightCard.css'
+import { formatCallDuration, cumulativeDurationLabel } from '../utils/callDuration'
 import {
   getCommunicationStats,
   getSecurityPosture,
@@ -60,7 +61,7 @@ import SensitiveValue from './SensitiveValue.vue'
 // line and device records the app already holds, and its refresh button
 // re-reads exactly those two.
 
-const props = defineProps<{ line: LineSummary; device?: Device }>()
+const props = defineProps<{ line: LineSummary; device?: Device; mode?: "all" | "device" }>()
 
 const i18n = useI18n()
 const { t } = i18n
@@ -95,9 +96,12 @@ let timer: ReturnType<typeof setInterval> | undefined
 async function loadCards(): Promise<void> {
   const [security, communication] = await Promise.all([
     getSecurityPosture(),
-    getCommunicationStats()
+    getCommunicationStats(props.line.id)
   ])
-  posture.value = security
+  posture.value = props.line.device_imei.startsWith('NSH-') ? {
+ transport: { state: 'ok', value: 'TLS 1.3' }, pinning: { state: 'ok' }, identity: { state: 'ok' },
+ post_quantum: { state: 'unknown' }, packet_auth: { state: 'unknown' }, replay: { state: 'unknown' }, ota: { state: 'unknown' }
+ } : security
   stats.value = communication
 }
 
@@ -300,11 +304,11 @@ const smsTiles = computed<StatTile[]>(() => {
 })
 
 function formatDuration(seconds: number | undefined): string {
-  if (seconds === undefined) return ''
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  if (hours > 0) return `${hours}${t('runtimeStatus.hourUnit')}${minutes}${t('runtimeStatus.minuteUnit')}`
-  return `${minutes}${t('runtimeStatus.minuteUnit')}`
+  return formatCallDuration(seconds, {
+    hour: t('runtimeStatus.hourUnit'),
+    minute: t('runtimeStatus.minuteUnit'),
+    second: t('runtimeStatus.secondUnit')
+  })
 }
 
 const callTiles = computed<StatTile[]>(() => {
@@ -313,7 +317,7 @@ const callTiles = computed<StatTile[]>(() => {
     { key: 'in', label: t('dashboard.incoming'), value: figure(calls?.incoming) },
     { key: 'out', label: t('dashboard.outgoing'), value: figure(calls?.outgoing) },
     { key: 'missed', label: t('calls.missed'), value: figure(calls?.missed) },
-    { key: 'duration', label: t('dashboard.duration'), value: formatDuration(calls?.duration_seconds) }
+    { key: 'duration', label: cumulativeDurationLabel(i18n.locale.value), value: formatDuration(calls?.duration_seconds) }
   ]
 })
 
@@ -359,7 +363,7 @@ const trendBars = computed(() => {
     <!-- Secure transport: the viewer's own connection, as the gateway's nginx
          saw it. A row the endpoint did not send reads "not wired yet", is not
          tinted, and the footnote says why when nothing answered at all. -->
-    <article class="insight-card">
+    <article v-if="props.mode !== 'device'" class="insight-card">
       <header class="insight-card__head">
         <ShieldCheck :size="15" />
         <h4>{{ t('dashboard.secTitle') }}</h4>
@@ -436,7 +440,7 @@ const trendBars = computed(() => {
     <!-- Communication summary, counted by the gateway over its whole record:
          the browser cannot do it (the call list is paginated and messages load
          per conversation). A tile with no figure shows a dash, never a zero. -->
-    <article class="insight-card">
+    <article v-if="props.mode !== 'device'" class="insight-card">
       <header class="insight-card__head">
         <ChartNoAxesCombined :size="15" />
         <h4>{{ t('dashboard.statsTitle') }}</h4>

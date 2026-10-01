@@ -64,6 +64,15 @@ up)
         log "$iface is not a NasSimHub stick; refusing to configure it"
         exit 1
     fi
+    # A rule installed after the interface appeared may not release an
+    # already-active DHCP connection. Stop that manager before assigning IP.
+    if [ "$SYSFS" = /sys ] && command -v nmcli >/dev/null 2>&1 &&
+        nmcli -t -f RUNNING general 2>/dev/null | grep -qx running; then
+        nmcli device set "$iface" managed no || {
+            log "could not release $iface from NetworkManager"
+            exit 1
+        }
+    fi
     current=$(holder)
     if [ -n "$current" ] && [ "$current" != "$iface" ]; then
         if link_up "$current"; then

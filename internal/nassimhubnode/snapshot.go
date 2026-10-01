@@ -115,9 +115,9 @@ func (f *Fleet) Snapshot() Contribution {
 		contribution.Messages = append(contribution.Messages, messages...)
 		calls := live.callContribution()
 		contribution.Calls = append(contribution.Calls, calls...)
-		fmt.Fprintf(digest, "%s|%s|%s|%s|%d|%s|%s|%t\n", line.ID, line.SIMIdentifier,
+		fmt.Fprintf(digest, "%s|%s|%s|%s|%d|%s|%s|%t|%t\n", line.ID, line.SIMIdentifier,
 			line.State, line.RegistrationState, line.SignalQuality/20, line.OperatorName,
-			firstString(line.OwnNumbers), line.Capabilities.SendMessage)
+			firstString(line.OwnNumbers), line.Capabilities.SendMessage, line.Capabilities.Dial)
 		for _, message := range messages {
 			fmt.Fprintf(digest, "%s|%s\n", message.ID, message.State)
 		}
@@ -148,10 +148,20 @@ func (l *liveNode) callContribution() []agentclient.Call {
 		if call.ID == "" || call.SIMID != simID || call.State == proto.CallTerminated {
 			continue
 		}
+		var audioFormat *agentclient.CallAudioFormat
+		audioPort := ""
+		if nodeVoiceReady(state) {
+			audioPort = "nsh:q6voice"
+			audioFormat = &agentclient.CallAudioFormat{Encoding: "pcm", Resolution: "s16le", Rate: 16000}
+		}
 		result = append(result, agentclient.Call{
 			ID: call.ID, LineID: endpoint, Number: call.Peer,
 			Direction: string(call.Direction), State: string(call.State),
 			StateReason: call.EndReason, Bearer: "volte",
+			AudioPort:       audioPort,
+			AudioFormat:     audioFormat,
+			MediaAvailable:  nodeVoiceReady(state) && call.State == proto.CallActive,
+			MediaConfigured: nodeVoiceReady(state),
 		})
 	}
 	return result
@@ -190,6 +200,12 @@ func (l *liveNode) contribution() (agentclient.Line, []agentclient.Message, bool
 	return line, messages, true
 }
 
+func nodeVoiceReady(state nodeState) bool {
+	return state.Online && !state.Revoked && state.Compatible && state.StatusKnown &&
+		state.Status.SIM.State == proto.SIMReady && state.Capabilities.VoLTE == proto.TriYes &&
+		state.Capabilities.VoiceControl && state.Capabilities.VoiceAudio
+}
+
 func projectNodeLine(deviceID, endpoint string, state nodeState) agentclient.Line {
 	status := state.Status
 	sim := status.SIM
@@ -220,7 +236,11 @@ func projectNodeLine(deviceID, endpoint string, state nodeState) agentclient.Lin
 			ModemInterface:     true,
 			SIMInterface:       true,
 			MessagingInterface: state.Capabilities.SMS,
-			SendMessage:        state.Capabilities.SMS && simReady,
+			VoiceInterface:     nodeVoiceReady(state),
+			Dial:               nodeVoiceReady(state), AnswerCall: nodeVoiceReady(state),
+			HangupCall: nodeVoiceReady(state), RejectCall: nodeVoiceReady(state),
+			Media:       nodeVoiceReady(state),
+			SendMessage: state.Capabilities.SMS && simReady,
 		},
 	}
 	if phone := strings.TrimSpace(sim.PhoneNumber); phone != "" {

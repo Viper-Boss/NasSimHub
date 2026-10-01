@@ -509,7 +509,9 @@ type liveNode struct {
 	// the decision to attempt a same-key certificate renewal.
 	pinRejected *atomic.Bool
 
-	pollMu sync.Mutex
+	pollMu       sync.Mutex
+	callMu       sync.Mutex
+	callRevision uint64
 
 	mu        sync.Mutex
 	state     nodeState
@@ -651,6 +653,7 @@ func (l *liveNode) releaseBestEffort(timeout time.Duration) bool {
 
 // Run polls every Node until ctx ends.
 func (f *Fleet) Run(ctx context.Context, interval time.Duration) {
+	go f.runCalls(ctx)
 	if interval <= 0 {
 		interval = defaultPollInterval
 	}
@@ -790,12 +793,17 @@ func (f *Fleet) pollOne(ctx context.Context, live *liveNode) {
 	}
 	// Calls are short lived. A failed read must never replay a stale active
 	// call into the gateway after the Node disconnects or the SIM changes.
+	live.callMu.Lock()
+	live.mu.Lock()
+	callRevision := live.callRevision
+	live.mu.Unlock()
 	if calls, err := client.ListCalls(pollCtx); err == nil {
 		next.Calls = calls
 		next.CallsKnown = true
 	} else if proto.CodeOf(err) != proto.ErrorNotSupported {
 		failures = append(failures, "calls: "+publicError(err))
 	}
+	live.callMu.Unlock()
 	if wifi, err := client.WiFi(pollCtx); err == nil {
 		next.WiFi = wifi
 		f.learnWiFiEndpoint(live, wifi)
@@ -804,7 +812,13 @@ func (f *Fleet) pollOne(ctx context.Context, live *liveNode) {
 	if len(failures) > 0 {
 		next.LastError = strings.Join(failures, "; ")
 	}
-	live.setState(next)
+	live.mu.Lock()
+	if live.callRevision != callRevision && live.state.Status.SIM.ICCID == next.Status.SIM.ICCID {
+		next.Calls = live.state.Calls
+		next.CallsKnown = live.state.CallsKnown
+	}
+	live.state = next
+	live.mu.Unlock()
 	f.persistObservation(ctx, live, next)
 }
 

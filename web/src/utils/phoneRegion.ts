@@ -64,6 +64,9 @@ const CN_PLMN_NAMES: Record<string, string> = {
 }
 
 export function cnOperatorNameOf(code: string): string {
+  const aliases: Record<string,string> = { 'CHN-CT': '中国电信', 'CHN-CU': '中国联通', 'CHN-CM': '中国移动' }
+  const alias = aliases[String(code || '').trim().toUpperCase()]
+  if (alias) return alias
   const key = String(code || '').replace(/\D/g, '')
   return CN_PLMN_NAMES[key] || ''
 }

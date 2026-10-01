@@ -288,10 +288,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="node-inventory">
+  <main class="node-inventory-page">
+    <header class="node-inventory-page__header"><h1>{{ copy.title }}</h1></header>
+    <div class="node-inventory-page__scroll">
+    <div class="node-inventory">
     <div class="node-inventory__heading">
       <div>
-        <h1>{{ copy.title }}</h1>
         <p>{{ copy.subtitle }}</p>
       </div>
       <button type="button" :disabled="loading" @click="refresh()">{{ loading ? copy.loading : copy.refresh }}</button>
@@ -409,11 +411,17 @@ onBeforeUnmount(() => {
         </div>
       </article>
     </div>
+    </div>
+    </div>
   </main>
 </template>
 
 <style scoped>
-.node-inventory { width: min(1100px, 100%); margin: 0 auto; padding: 24px; box-sizing: border-box; }
+.node-inventory-page { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; flex-direction: column; background: var(--background); }
+.node-inventory-page__header { display: flex; min-height: 64px; flex: 0 0 64px; align-items: center; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.node-inventory-page__header h1 { margin: 0; font-size: 21px; }
+.node-inventory-page__scroll { min-height: 0; flex: 1; overflow-y: auto; }
+.node-inventory { width: min(1400px, 100%); margin: 0 auto; padding: 22px 24px 34px; box-sizing: border-box; }
 .node-inventory__heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 h1 { margin: 0 0 8px; font-size: 28px; }
 h2 { margin: 0; font-size: 18px; }
@@ -421,27 +429,27 @@ h3 { margin: 0 0 8px; font-size: 16px; }
 p { margin: 0; }
 button { border: 0; border-radius: 9px; padding: 10px 16px; background: #155f81; color: #fff; cursor: pointer; font: inherit; }
 button:disabled { opacity: .55; cursor: default; }
-.node-inventory__secondary { background: #e4ebef; color: #1d2b34; }
+.node-inventory__secondary { background: var(--surface-hover); color: var(--text); }
 .node-inventory__danger { background: #9b342b; }
-.node-inventory__notice, .node-inventory__empty { margin-top: 20px; padding: 16px; border-radius: 10px; background: #edf4f7; line-height: 1.6; }
+.node-inventory__notice, .node-inventory__empty { margin-top: 20px; padding: 16px; border-radius: 10px; background: var(--surface-subtle); color: var(--text); line-height: 1.6; }
 .node-inventory__success { margin-top: 12px; padding: 12px 16px; border-radius: 10px; background: #e6f4ea; color: #1d5a2e; }
 .node-inventory__error { margin-top: 12px; color: #9b342b; }
-.node-inventory__discovery { margin-top: 20px; padding: 20px; border: 1px solid #d8e2e8; border-radius: 14px; background: #fff; }
+.node-inventory__discovery { margin-top: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); }
 .node-inventory__discovery > p { margin-top: 12px; }
 .node-inventory__candidates { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
-.node-inventory__candidate { border: 1px solid #d8e2e8; border-radius: 12px; padding: 16px; }
+.node-inventory__candidate { border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .node-inventory__blocked { margin-top: 12px; color: #7a5a12; }
-.node-inventory__confirm { margin-top: 14px; padding: 16px; border-radius: 10px; background: #f6f9fb; display: grid; gap: 10px; }
+.node-inventory__confirm { margin-top: 14px; padding: 16px; border-radius: 10px; background: var(--surface-subtle); display: grid; gap: 10px; }
 .node-inventory__confirm label { display: grid; gap: 6px; }
-.node-inventory__confirm input { padding: 9px 11px; border: 1px solid #c5d2da; border-radius: 8px; font: inherit; max-width: 320px; }
-.node-inventory__hint { color: #647482; font-size: 13px; }
+.node-inventory__confirm input { padding: 9px 11px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; max-width: 320px; }
+.node-inventory__hint { color: var(--muted); font-size: 13px; }
 .node-inventory__actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .node-inventory__actions .node-inventory__hint { margin-right: auto; }
 .node-inventory__id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; }
 .node-inventory__id--large { font-size: 22px; letter-spacing: .04em; }
 .node-inventory__fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 .node-inventory__list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 20px; }
-.node-inventory__card { border: 1px solid #d8e2e8; border-radius: 14px; background: #fff; padding: 20px; }
+.node-inventory__card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); padding: 20px; }
 .node-inventory__card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .node-inventory__badge { border-radius: 999px; padding: 3px 10px; font-size: 13px; white-space: nowrap; }
 .node-inventory__badge.is-ok { background: #e6f4ea; color: #1d5a2e; }
@@ -450,6 +458,6 @@ button:disabled { opacity: .55; cursor: default; }
 .node-inventory__bars { letter-spacing: 1px; color: #155f81; }
 dl { display: grid; gap: 10px; margin: 0; }
 dl div { display: flex; justify-content: space-between; gap: 14px; }
-dt { color: #647482; flex-shrink: 0; }
+dt { color: var(--muted); flex-shrink: 0; }
 dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 </style>

@@ -4,6 +4,7 @@ import "time"
 
 // SystemResources is optional, authenticated device telemetry. Older agents omit it.
 type SystemResources struct {
+	Metrics         map[string]any    `json:"metrics,omitempty"`
 	ObservedAt      time.Time         `json:"observed_at"`
 	CPUPercent      *float64          `json:"cpu_percent"`
 	MemoryTotal     uint64            `json:"memory_total_bytes"`

@@ -16,9 +16,9 @@ import {
   acquireSystemMetrics,
   modemInterface,
   releaseSystemMetrics,
-  systemMetricsState,
   type SystemMetricsSample
 } from '../state/systemMetrics'
+import { useDeviceMetrics } from '../composables/useDeviceMetrics'
 import { repairModule, restartModem } from '../state/deviceConfiguration'
 import { requestConfirmation } from '../state/confirmation'
 import type { LineSummary } from '../api/types'
@@ -38,8 +38,10 @@ import type { LineSummary } from '../api/types'
 // reports as its own. Nothing is drawn when a path is off: the card says which
 // one, rather than showing an empty list that reads as "nobody is there".
 
-const props = defineProps<{ line: LineSummary }>()
+const props = defineProps<{ line: LineSummary; showNetwork?: boolean }>()
 
+const deviceMetrics = useDeviceMetrics(() => props.line.device_imei)
+const isNode = computed(() => props.line.device_imei.startsWith('NSH-'))
 const i18n = useI18n()
 const { t } = i18n
 const router = useRouter()
@@ -141,11 +143,11 @@ function shortHost(value: string): string {
   return shortId(host)
 }
 
-const snapshot = computed(() => systemMetricsState.metrics)
+const snapshot = computed(() => deviceMetrics.value.metrics)
 const cellular = computed(() => snapshot.value?.cellular ?? null)
 
 const latestSample = computed<SystemMetricsSample | null>(() => {
-  const history = systemMetricsState.history
+  const history = deviceMetrics.value.history
   return history.length ? history[history.length - 1]! : null
 })
 
@@ -342,7 +344,7 @@ const signalMeters = computed<SignalMeter[]>(() => {
       fill: fillRatio(cell.sinr, -10, 30),
       hint: t('dashboard.signalSinrHint')
     }
-  ]
+  ].filter(meter => typeof meter.value === 'number' && Number.isFinite(meter.value))
 })
 
 function gradeLabel(value: SignalGrade): string {
@@ -355,7 +357,7 @@ const RATE_CHART_WIDTH = 268
 const RATE_CHART_HEIGHT = 42
 
 function ratePath(pick: (sample: SystemMetricsSample) => number): string {
-  const samples = systemMetricsState.history.slice(-40)
+  const samples = deviceMetrics.value.history.slice(-40)
   if (samples.length < 2) return ''
   const peak = Math.max(1, ...samples.map(pick))
   const step = RATE_CHART_WIDTH / (samples.length - 1)
@@ -370,7 +372,7 @@ function ratePath(pick: (sample: SystemMetricsSample) => number): string {
 
 const rxPath = computed(() => ratePath(sample => sample.rxRate))
 const txPath = computed(() => ratePath(sample => sample.txRate ?? 0))
-const hasRateHistory = computed(() => systemMetricsState.history.length >= 2)
+const hasRateHistory = computed(() => deviceMetrics.value.history.length >= 2)
 
 // Serving-cell identifiers. The signal strength itself is shown as meters
 // above; repeating the same numbers as a flat list is what made this card and
@@ -379,11 +381,11 @@ const radioFacts = computed<RadioFact[]>(() => {
   const cell = cellular.value
   if (!cell) return []
   const facts: RadioFact[] = [
-    { label: t('dashboard.radioBand'), value: `${cell.band} · ${cell.frequency_mhz} MHz` },
-    { label: t('dashboard.signalBandwidth'), value: `↓${cell.downlink_bandwidth_mhz} · ↑${cell.uplink_bandwidth_mhz} MHz` },
-    { label: 'RSSI', value: `${cell.rssi} dBm` },
-    { label: 'PCI', value: String(cell.pci) },
-    { label: 'EARFCN', value: String(cell.earfcn) }
+    { label: t('dashboard.radioBand'), value: cell.band ? `${cell.band}${cell.frequency_mhz ? ` · ${cell.frequency_mhz} MHz` : ''}` : '—' },
+    { label: t('dashboard.signalBandwidth'), value: cell.downlink_bandwidth_mhz == null ? '—' : `↓${cell.downlink_bandwidth_mhz} · ↑${cell.uplink_bandwidth_mhz} MHz` },
+    { label: 'RSSI', value: cell.rssi == null ? '—' : `${cell.rssi} dBm` },
+    { label: 'PCI', value: cell.pci == null ? '—' : String(cell.pci) },
+    { label: 'EARFCN', value: cell.earfcn == null ? '—' : String(cell.earfcn) }
   ]
   if (cell.cell_id_hex) facts.push({ label: 'Cell ID', value: cell.cell_id_hex })
   if (cell.tac_hex) facts.push({ label: 'TAC', value: cell.tac_hex })
@@ -397,7 +399,7 @@ const radioFacts = computed<RadioFact[]>(() => {
     <article class="insight-card">
       <header class="insight-card__head">
         <Usb :size="15" />
-        <h4>{{ t('dashboard.netCard') }}</h4>
+        <h4>{{ t('dashboard.netCard') }} · NAS USB</h4>
       </header>
       <div v-if="netInterface" class="insight-card__body">
         <div class="insight-net__iface">
@@ -437,7 +439,7 @@ const radioFacts = computed<RadioFact[]>(() => {
     <article class="insight-card">
       <header class="insight-card__head">
         <Activity :size="15" />
-        <h4>{{ t('dashboard.sysRunCard') }}</h4>
+        <h4>{{ t('dashboard.sysRunCard') }} · {{ line.model }}</h4>
       </header>
       <div class="insight-card__body">
         <div class="insight-run__uptime">
@@ -461,12 +463,12 @@ const radioFacts = computed<RadioFact[]>(() => {
         <p v-if="snapshot" class="insight-run__procs">
           {{ t('dashboard.processes', { count: snapshot.process_count }) }}
           ·
-          {{ t('dashboard.threads', { count: snapshot.thread_count }) }}
+          {{ t('dashboard.threads', { count: snapshot.thread_count ?? '—' }) }}
           <template v-if="snapshot.cpu_current_mhz > 0">
             · {{ Math.round(snapshot.cpu_current_mhz) }} MHz
           </template>
         </p>
-        <div class="insight-run__actions">
+        <div v-if="!isNode" class="insight-run__actions">
           <button
             class="secondary-button insight-run__repair"
             type="button"
@@ -506,7 +508,7 @@ const radioFacts = computed<RadioFact[]>(() => {
     <article class="insight-card">
       <header class="insight-card__head">
         <Signal :size="15" />
-        <h4>{{ t('dashboard.cellCard') }}</h4>
+        <h4>{{ t('dashboard.cellCard') }} · {{ line.model }}</h4>
       </header>
       <div v-if="radioFacts.length" class="insight-card__body">
         <div class="insight-signal">
@@ -547,7 +549,7 @@ const radioFacts = computed<RadioFact[]>(() => {
          Every figure here is measured: the seed list is the probe's own result
          with its own round-trip times, and the two identities are what this
          gateway reports as its own. A path that is off says so. -->
-    <article class="insight-card">
+    <article v-if="props.showNetwork !== false" class="insight-card">
       <header class="insight-card__head">
         <Network :size="15" />
         <h4>{{ t('dashboard.nodesTitle') }}</h4>

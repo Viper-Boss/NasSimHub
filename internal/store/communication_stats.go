@@ -42,6 +42,12 @@ type CommunicationHour struct {
 // clock; a message a few minutes "from the future" arrived just now.
 const futureTolerance = time.Hour
 
+type communicationLineScopeKey struct{}
+
+func (s *Store) CommunicationStatsForLine(ctx context.Context, now time.Time, hours int, lineID string) (CommunicationStats, error) {
+	return s.CommunicationStats(context.WithValue(ctx, communicationLineScopeKey{}, strings.TrimSpace(lineID)), now, hours)
+}
+
 // CommunicationStats counts messages and calls over the `hours` ending at
 // `now`.
 //
@@ -117,6 +123,10 @@ func (s *Store) countMessages(
 			COALESCE(CAST(created_at AS TEXT), '') >= ?
 		)`
 	arguments := []any{earliest, earliest}
+	if lineID, _ := ctx.Value(communicationLineScopeKey{}).(string); lineID != "" {
+		statement += " AND line_id = ?"
+		arguments = append(arguments, lineID)
+	}
 	if condition, values, scoped := principalLineScope(ctx, "line_id"); scoped {
 		statement += " AND " + condition
 		arguments = append(arguments, values...)
@@ -181,6 +191,10 @@ func (s *Store) countCalls(
 		FROM call_history
 		WHERE COALESCE(CAST(created_at AS TEXT), '') >= ?`
 	arguments := []any{earliest}
+	if lineID, _ := ctx.Value(communicationLineScopeKey{}).(string); lineID != "" {
+		statement += " AND line_id = ?"
+		arguments = append(arguments, lineID)
+	}
 	if condition, values, scoped := principalLineScope(ctx, "line_id"); scoped {
 		statement += " AND " + condition
 		arguments = append(arguments, values...)

@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useDeviceMetrics } from '../composables/useDeviceMetrics'
 import type { SystemMetricsSnapshot } from '../api/client'
 import {
   acquireSystemMetrics,
-  releaseSystemMetrics,
-  systemMetricsState
+  releaseSystemMetrics
 } from '../state/systemMetrics'
 
+const props = defineProps<{ deviceId?: string }>()
 const { t } = useI18n()
+const deviceMetrics = useDeviceMetrics(() => props.deviceId)
 
 onMounted(() => { acquireSystemMetrics() })
 onBeforeUnmount(() => { releaseSystemMetrics() })
 
-const current = computed<SystemMetricsSnapshot | null>(() => systemMetricsState.metrics)
-const history = computed(() => systemMetricsState.history)
+const current = computed<SystemMetricsSnapshot | null>(() => deviceMetrics.value.metrics)
+const history = computed(() => deviceMetrics.value.history)
 
 function levelOf(percent: number): string {
   if (percent >= 90) return 'is-danger'
@@ -37,7 +39,7 @@ const channelDown = computed(() => (
 // Single source of truth for "the banner is already explaining the state", so
 // the no-snapshot fallback below cannot repeat the same sentence underneath it.
 const channelBannerVisible = computed(() => (
-  channelDown.value || channelStale.value || !systemMetricsState.available
+  channelDown.value || channelStale.value || !deviceMetrics.value.available
 ))
 
 const CHART_W = 300
@@ -129,7 +131,8 @@ function formatBytes(bytes: number): string {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
 }
 
-function formatRate(bytesPerSecond: number): string {
+function formatRate(bytesPerSecond: number | null): string {
+  if (bytesPerSecond == null) return '—'
   if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`
   if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`
   return `${Math.round(bytesPerSecond)} B/s`
@@ -152,8 +155,8 @@ function latestOf(key: 'modemTemp' | 'cpuTemp' | 'rxRate' | 'txRate'): number | 
 }
 
 const cpuTempValue = computed(() => latestOf('cpuTemp'))
-const rxRateValue = computed(() => latestOf('rxRate') ?? 0)
-const txRateValue = computed(() => latestOf('txRate') ?? 0)
+const rxRateValue = computed(() => latestOf('rxRate'))
+const txRateValue = computed(() => latestOf('txRate'))
 const cpuTempLevel = computed(() => tempLevelOf(cpuTempValue.value))
 // The modem temperature is still collected and kept in the history samples
 // (see state/systemMetrics.ts, 'modemTemp'), but this strip has no tile for it
@@ -272,7 +275,7 @@ const flashUsedBytes = computed(() => {
     ? t('dashboard.metricsChannelDown')
     : channelStale
       ? t('dashboard.metricsChannelStale')
-      : (systemMetricsState.error || t('dashboard.metricsUnavailable')) }}</p>
+      : (deviceMetrics.error || t('dashboard.metricsUnavailable')) }}</p>
   <div v-if="current" class="tm">
 
     <article class="tm-box">

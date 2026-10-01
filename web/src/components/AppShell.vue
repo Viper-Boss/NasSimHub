@@ -341,6 +341,7 @@ const mobileBackTitle = computed(() => {
 const mobilePageTitle = computed(() => {
   if (route.name === 'dashboard') return t('dashboard.mobileOverview')
   if (route.name === 'settings') return mobileSettingsSection.value || t('shell.settings')
+  if (route.name === 'sim-nodes') return simNodesTitle.value
   if (route.name === 'nmobile') return t('homesim.nmobile.title')
   if (route.name === 'sponsor') return t('homesim.sponsor.title')
   return primaryNav.value.find(item => item.name === route.name)?.label || ''

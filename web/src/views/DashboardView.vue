@@ -57,6 +57,7 @@ import StatePanel from '../components/StatePanel.vue'
 import SwipeActionRow from '../components/SwipeActionRow.vue'
 import TrafficSummary from '../components/TrafficSummary.vue'
 import SystemMetricsStrip from '../components/SystemMetricsStrip.vue'
+import { nodeDashboardCopy } from '../i18n/nodeResources'
 import { acquireSystemMetrics, releaseSystemMetrics } from '../state/systemMetrics'
 import LoadingSkeletonBoundary from '../components/skeletons/LoadingSkeletonBoundary.vue'
 import SectionSkeleton from '../components/skeletons/SectionSkeleton.vue'
@@ -97,7 +98,6 @@ import {
   deleteMessageThreads,
   devicesResource,
   displayPhoneNumber,
-  displayModuleLines,
   lineCanPlaceVoiceCall,
   lineForKey,
   lineKey,
@@ -134,7 +134,8 @@ import { lineTagFallback, lineTagLine } from '../utils/lineIdentity'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const deviceGroupCopy = computed(() => nodeDashboardCopy(locale.value))
 onMounted(() => { acquireSystemMetrics() })
 onBeforeUnmount(() => { releaseSystemMetrics() })
 const composingMessage = ref(false)
@@ -143,7 +144,7 @@ const messageComposeRecipientName = ref('')
 const messageComposeLineKey = ref('')
 
 const lines = computed(() => bootstrapResource.data?.lines || [])
-const moduleLines = computed(() => displayModuleLines(lines.value, devicesResource.data))
+const moduleLines = computed(() => presentModuleLines(lines.value, devicesResource.data))
 const presentModules = computed(() =>
   presentModuleLines(lines.value, devicesResource.data)
 )
@@ -1212,7 +1213,6 @@ onBeforeUnmount(() => {
                 <ChevronRight :size="15" />
               </RouterLink>
             </header>
-            <SystemMetricsStrip />
             <LoadingSkeletonBoundary
               :loading="bootstrapResource.status === 'loading' || bootstrapResource.status === 'idle'"
             >
@@ -1242,54 +1242,36 @@ onBeforeUnmount(() => {
                 <Inbox :size="17" />
                 {{ t('dashboard.noLines') }}
               </div>
-              <!-- Two grids, not one, and the split is the fix for a ragged
-                   dashboard rather than a reorganisation for its own sake.
-                   Cards in a grid row can either size to their content, which
-                   leaves the bottoms ragged, or stretch to the tallest in the
-                   row, which leaves a void under the short ones. Neither is
-                   acceptable while a 300px modem card and a 560px network card
-                   can land side by side. Separating them by height class means
-                   every row holds cards of one kind, so stretching costs
-                   nothing and the bottoms line up. -->
               <template v-else>
-                <div class="dashboard-module-grid">
-                  <template v-for="line in moduleLines" :key="lineKey(line)">
-                    <ModuleCard
-                      :line="line"
-                      :device="deviceFor(line)"
-                      :runtime="networkRuntime(line)"
-                      :selectable="!line.module_only"
-                      :default-line="lineKey(line) === defaultLineID"
-                      @select="openLineSettings(line)"
-                    />
-                    <ModuleInsightCards
-                      v-if="line === moduleLines[0]"
-                      :line="line"
-                    />
-                    <ModuleExtraCards
-                      v-if="line === moduleLines[0]"
-                      :line="line"
-                      :device="deviceFor(line)"
-                    />
-                  </template>
-                </div>
+                <section v-for="line in moduleLines.filter(item => !item.device_imei.startsWith('NSH-'))" :key="lineKey(line)" class="dashboard-device-group">
+                  <header class="dashboard-device-group__head"><h3>{{ line.model === 'QDC507' ? deviceGroupCopy.dji : line.model || deviceGroupCopy.modem }}</h3><span>····{{ line.device_imei.slice(-4) }}</span></header>
+                  <SystemMetricsStrip v-if="moduleLines.filter(item => !item.device_imei.startsWith('NSH-')).length === 1" />
+                  <div class="dashboard-module-grid">
+                    <ModuleCard :line="line" :device="deviceFor(line)" :runtime="networkRuntime(line)" :selectable="!line.module_only" :default-line="lineKey(line) === defaultLineID" @select="openLineSettings(line)" />
+                    <ModuleInsightCards v-if="moduleLines.filter(item => !item.device_imei.startsWith('NSH-')).length === 1" :line="line" :show-network="true" />
+                    <ModuleExtraCards :line="line" :device="deviceFor(line)" mode="all" />
+                  </div>
+                </section>
+                <section v-for="line in moduleLines.filter(item => item.device_imei.startsWith('NSH-'))" :key="lineKey(line)" class="dashboard-device-group dashboard-device-group--node">
+                  <header class="dashboard-device-group__head"><h3>NasSimHub · {{ line.model || 'UFI003' }}</h3><span>{{ line.device_imei }}</span></header>
+                  <SystemMetricsStrip :device-id="line.device_imei" />
+                  <div class="dashboard-module-grid">
+                    <ModuleCard :line="line" :device="deviceFor(line)" :runtime="networkRuntime(line)" :default-line="lineKey(line) === defaultLineID" @select="openLineSettings(line)" />
+                    <ModuleInsightCards :line="line" :show-network="true" />
+                    <ModuleExtraCards :line="line" :device="deviceFor(line)" mode="all" />
+                  </div>
+                </section>
+              </template>
+              <section class="dashboard-device-group dashboard-device-group--global">
+                <header class="dashboard-device-group__head"><h3>{{ deviceGroupCopy.global }}</h3><span>NasSimHub</span></header>
                 <div class="dashboard-module-grid dashboard-module-grid--tall">
                   <NetworkGlobeCard />
                   <DHTMeshCard />
                   <WireGuardTrafficCard v-if="wireGuardUnlockState.unlocked" />
-                  <!-- Security and updates sit in the TALL row beside the two
-                       network drawings rather than in full-width rows of their
-                       own. Four tracks fit across at the widths this dashboard
-                       is used at, and the network cards only ever fill two of
-                       them, so the row used to end in two card-shaped holes.
-                       Both wear the drawings' chrome and are laid out to fit
-                       within their height, in flow and with nothing scrolling
-                       inside -- so a wheel over them scrolls the page, as it
-                       does over every other card. -->
                   <ModuleSecurityCard />
                   <SoftwareUpdateCard />
                 </div>
-              </template>
+              </section>
             </LoadingSkeletonBoundary>
           </section>
             </div>
@@ -1323,6 +1305,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.dashboard-device-group { margin-top: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: color-mix(in srgb, var(--surface-subtle) 50%, transparent); }
+.dashboard-device-group__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.dashboard-device-group__head h3 { margin: 0; font-size: 17px; color: var(--text); }
+.dashboard-device-group__head > span { color: var(--muted); font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }
+
+.dashboard-device-group--node { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); }
+@media(max-width: 860px) { .dashboard-device-group { padding: 14px; } }
+.dashboard-metrics-source { margin: 0; color: var(--muted); font-size: 12px; }
 .dashboard-workspace {
   grid-template-columns: minmax(300px, 344px) minmax(0, 1fr);
 }

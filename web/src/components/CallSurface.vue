@@ -41,6 +41,7 @@ import {
   contactForNumber,
   displayPhoneNumber,
   lineForKey,
+  lineLabel,
   lineSupports
 } from '../state/workspace'
 import { knownCallBearerLabel } from '../callBearer'
@@ -344,7 +345,7 @@ onBeforeUnmount(() => {
             <LineTag
               v-if="line"
               :line="line"
-              :fallback="session.line_id"
+              :fallback="lineLabel(line)"
             />
             <small v-else>{{ session.line_id }}</small>
             <small v-if="bearerLabel" class="call-surface__bearer">{{ bearerLabel }}</small>

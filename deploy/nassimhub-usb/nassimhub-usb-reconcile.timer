@@ -1,0 +1,9 @@
+[Unit]
+Description=Periodically reconcile genuine NasSimHub USB interfaces
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+AccuracySec=2s
+Unit=nassimhub-usb-reconcile.service
+[Install]
+WantedBy=timers.target

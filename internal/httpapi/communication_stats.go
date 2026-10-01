@@ -62,6 +62,16 @@ func (api *API) communicationStats(response http.ResponseWriter, request *http.R
 		return
 	}
 	stats, err := source.CommunicationStats(request.Context(), time.Now(), communicationStatsWindow)
+	if lineID := request.URL.Query().Get("line_id"); lineID != "" {
+		scoped, ok := api.repository.(interface {
+			CommunicationStatsForLine(context.Context, time.Time, int, string) (store.CommunicationStats, error)
+		})
+		if !ok {
+			writeError(response, http.StatusServiceUnavailable, "stats_unavailable", "Per-line statistics are unavailable", "")
+			return
+		}
+		stats, err = scoped.CommunicationStatsForLine(request.Context(), time.Now(), communicationStatsWindow, lineID)
+	}
 	if err != nil {
 		api.logger.Error("communication stats failed", "error", err)
 		writeError(response, http.StatusInternalServerError, "communication_stats_failed", "Communication statistics could not be read", "")

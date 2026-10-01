@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+# Recover a missed udev activation after USB reset or NAS startup.
+for path in /sys/class/net/*; do
+ [ -e "$path/device" ] || continue
+ usb=$(readlink -f "$path/device/..")
+ [ "$(cat "$usb/idVendor" 2>/dev/null)" = 1d6b ] || continue
+ [ "$(cat "$usb/idProduct" 2>/dev/null)" = 0104 ] || continue
+ [ "$(cat "$usb/manufacturer" 2>/dev/null)" = NasSimHub ] || continue
+ iface=$(basename "$path")
+ unit="nassimhub-usb-link@$iface.service"
+ if ! systemctl is-active --quiet "$unit"; then
+  systemctl start "$unit"
+ elif ! ip -o -4 addr show | grep -q 'inet 10\.55\.0\.1/29 '; then
+  systemctl restart "$unit"
+ fi
+ done

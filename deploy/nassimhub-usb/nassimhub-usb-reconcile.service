@@ -1,0 +1,7 @@
+[Unit]
+Description=Restore NasSimHub USB links missed during device reset
+After=systemd-udevd.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/nassimhub-usb-reconcile
+TimeoutStartSec=20

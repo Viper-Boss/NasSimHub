@@ -39,7 +39,11 @@ install)
     install -m 0755 "$here/nassimhub-usb-link" "$script"
     install -m 0644 "$here/90-nassimhub-usb.rules" "$rules"
     install -m 0644 "$here/nassimhub-usb-link@.service" "$unit"
+    install -m 0755 "$here/nassimhub-usb-reconcile" /usr/local/libexec/nassimhub-usb-reconcile
+    install -m 0644 "$here/nassimhub-usb-reconcile.service" /etc/systemd/system/nassimhub-usb-reconcile.service
+    install -m 0644 "$here/nassimhub-usb-reconcile.timer" /etc/systemd/system/nassimhub-usb-reconcile.timer
     systemctl daemon-reload
+    systemctl enable --now nassimhub-usb-reconcile.timer
     udevadm control --reload
     # Apply to a stick that is already plugged in.
     udevadm trigger --action=add --subsystem-match=net
@@ -65,6 +69,9 @@ uninstall)
     for iface in $(stick_interfaces); do
         systemctl stop "nassimhub-usb-link@$iface.service" || true
     done
+    systemctl disable --now nassimhub-usb-reconcile.timer || true
+    systemctl stop nassimhub-usb-reconcile.service || true
+    rm -f /usr/local/libexec/nassimhub-usb-reconcile /etc/systemd/system/nassimhub-usb-reconcile.service /etc/systemd/system/nassimhub-usb-reconcile.timer
     rm -f "$rules" "$unit" "$script"
     systemctl daemon-reload
     udevadm control --reload

@@ -104,22 +104,13 @@ func (f *Fleet) RefreshEndpoint(ctx context.Context, endpointLineID string) erro
 	if !ok {
 		return errors.New("not a NasSimHub Node line")
 	}
-	view, err := f.Refresh(ctx, deviceID)
-	if err != nil {
-		return err
+	live := f.lookup(deviceID)
+	if live == nil {
+		return ErrUnknownNode
 	}
-	if !view.Online {
-		msg := "node is offline"
-		if view.LastError != "" {
-			msg += ": " + view.LastError
-		}
-		return errors.New(msg)
-	}
-	return nil
+	return f.refreshCalls(ctx, live)
 }
 
-// callableNode resolves the Node for a line and refuses, definitely, when it
-// cannot take a call command at all.
 func (f *Fleet) callableNode(endpointLineID, operation string) (*liveNode, error) {
 	deviceID, ok := deviceFromEndpoint(endpointLineID)
 	if !ok {
