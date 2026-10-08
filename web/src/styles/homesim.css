@@ -411,3 +411,16 @@ body .call-button--dismiss:hover:not(:disabled) { background: var(--surface-sele
   .app-shell .workspace-master-detail { column-gap: 0; }
   .app-shell .workspace-master-detail > .detail-pane { min-width: 0; max-width: 100%; }
 }
+
+/* Keep both network indicators and the line chip readable on notebooks. */
+@media (min-width: 861px) and (max-width: 1479px) {
+  .app-shell .shell-header { gap: 10px; padding-inline: 16px; }
+  .app-shell .shell-header__loc { gap: 8px; flex-shrink: 0; }
+  .app-shell .shell-location { gap: 8px; }
+  .app-shell .shell-header .global-search { min-width: 140px; }
+  .app-shell .shell-header__right { gap: 6px; }
+  .app-shell .shell-header__controls { gap: 4px; }
+}
+@media (min-width: 861px) and (max-width: 1100px) {
+  .app-shell .shell-header .global-search { min-width: 100px; }
+}

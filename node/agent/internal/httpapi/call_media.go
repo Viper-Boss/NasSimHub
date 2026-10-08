@@ -83,11 +83,23 @@ func (h *handler) getCallMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.logs.Infof("voice_media", "authenticated media stream opened for %s", id)
-	if err := voicemedia.Serve(r.Context(), connection, buffered.Reader, id, h.callMedia); err != nil {
+	mediaContext, stopMedia := context.WithCancel(r.Context())
+	defer stopMedia()
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		keepCallMediaActive(mediaContext, id, time.Second, h.modem.ListCalls, func() {
+			stopMedia()
+			_ = connection.Close()
+		})
+	}()
+	if err := voicemedia.Serve(mediaContext, connection, buffered.Reader, id, h.callMedia); err != nil {
 		h.logs.Warnf("voice_media", "media stream ended for %s: %v", id, err)
 	} else {
 		h.logs.Infof("voice_media", "media stream closed for %s", id)
 	}
+	stopMedia()
+	<-watchDone
 	// Experimental hardware media owns the call until its connection closes.
 	// Cleanup must survive a cancelled request or unplugged USB link.
 	cleanup, cancel := context.WithTimeout(context.Background(), 8*time.Second)

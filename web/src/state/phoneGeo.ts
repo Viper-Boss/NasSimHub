@@ -4,7 +4,7 @@
 import { reactive } from 'vue'
 import { fetchHomeSIMPhoneGeo } from '../api/client'
 
-export type PhoneGeoRecord = { province: string; carrier: string }
+export type PhoneGeoRecord = { province: string; city?: string; carrier: string }
 
 const cache = reactive(new Map<string, PhoneGeoRecord>())
 const pending = new Set<string>()
@@ -21,7 +21,7 @@ export async function requestPhoneGeo(number: string): Promise<PhoneGeoRecord | 
   try {
     const geo = await fetchHomeSIMPhoneGeo(number)
     if (geo && geo.province) {
-      cache.set(number, { province: geo.province, carrier: geo.carrier })
+      cache.set(number, { province: geo.province, city: geo.city, carrier: geo.carrier })
     }
     return cache.get(number)
   } finally {

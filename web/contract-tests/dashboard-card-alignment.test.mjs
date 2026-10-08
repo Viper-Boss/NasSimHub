@@ -36,6 +36,10 @@ const strip = await readFile(
   new URL('../src/components/SystemMetricsStrip.vue', import.meta.url),
   'utf8'
 )
+const deviceCardGrid = await readFile(
+  new URL('../src/components/DeviceCardGrid.vue', import.meta.url),
+  'utf8'
+)
 const tokens = await readFile(new URL('../src/style.css', import.meta.url), 'utf8')
 
 test('tall network cards live in their own grid, away from the short ones', () => {
@@ -52,10 +56,19 @@ test('tall network cards live in their own grid, away from the short ones', () =
   )
   assert.doesNotMatch(shortGrid, /<NetworkGlobeCard/)
   assert.doesNotMatch(shortGrid, /<DHTMeshCard/)
-  // The modem and insight cards stay where they are, together, because they
-  // are the same height class.
-  assert.match(shortGrid, /<ModuleCard/)
-  assert.match(shortGrid, /<ModuleInsightCards/)
+  // The modem and insight cards stay together, because they are the same
+  // height class: one grid per device, which is the root of the card field
+  // every device group shares.
+  assert.match(deviceCardGrid, /^<template>\s*<div class="dashboard-module-grid">/m)
+  assert.match(deviceCardGrid, /<ModuleCard/)
+  assert.match(deviceCardGrid, /<ModuleInsightCards/)
+  assert.doesNotMatch(deviceCardGrid, /<NetworkGlobeCard|<DHTMeshCard/)
+  // Nodes and clients keeps its original ninth-card position in each device
+  // field; the NAS services section has only its original tall cards.
+  assert.doesNotMatch(dashboard, /<ModuleInsightCards scope="network"/)
+  const insightTemplate = insightCards.slice(insightCards.indexOf('<template>'), insightCards.lastIndexOf('<style'))
+  assert.equal((insightTemplate.match(/<article class="insight-card">/g) ?? []).length, 4)
+  assert.ok(insightTemplate.indexOf('dashboard.cellCard') < insightTemplate.indexOf('dashboard.nodesTitle'))
 })
 
 test('cards in a row stretch to a shared height', () => {

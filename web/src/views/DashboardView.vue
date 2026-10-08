@@ -31,9 +31,7 @@ import BaseAvatar from '../components/BaseAvatar.vue'
 import CallHistoryListItem from '../components/CallHistoryListItem.vue'
 import ContactEditor from '../components/ContactEditor.vue'
 import MessageThreadListItem from '../components/MessageThreadListItem.vue'
-import ModuleCard from '../components/ModuleCard.vue'
-import ModuleInsightCards from '../components/ModuleInsightCards.vue'
-import ModuleExtraCards from '../components/ModuleExtraCards.vue'
+import DeviceCardGrid from '../components/DeviceCardGrid.vue'
 import NetworkGlobeCard from '../components/NetworkGlobeCard.vue'
 import DHTMeshCard from '../components/DHTMeshCard.vue'
 import WireGuardTrafficCard from '../components/WireGuardTrafficCard.vue'
@@ -57,8 +55,19 @@ import StatePanel from '../components/StatePanel.vue'
 import SwipeActionRow from '../components/SwipeActionRow.vue'
 import TrafficSummary from '../components/TrafficSummary.vue'
 import SystemMetricsStrip from '../components/SystemMetricsStrip.vue'
-import { nodeDashboardCopy } from '../i18n/nodeResources'
-import { acquireSystemMetrics, releaseSystemMetrics } from '../state/systemMetrics'
+import { deviceGroupLabels } from '../i18n/deviceGroupLabels'
+import {
+  dashboardDevices,
+  deviceSource,
+  type DashboardDevice
+} from '../state/dashboardDevices'
+import { acquireNodeFleet, nodeFleetState, releaseNodeFleet } from '../state/nodeFleet'
+import { sessionState } from '../state/session'
+import {
+  acquireSystemMetrics,
+  releaseSystemMetrics,
+  systemMetricsState
+} from '../state/systemMetrics'
 import LoadingSkeletonBoundary from '../components/skeletons/LoadingSkeletonBoundary.vue'
 import SectionSkeleton from '../components/skeletons/SectionSkeleton.vue'
 import WorkspaceDetailSkeleton from '../components/skeletons/WorkspaceDetailSkeleton.vue'
@@ -135,7 +144,7 @@ import { lineTagFallback, lineTagLine } from '../utils/lineIdentity'
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
-const deviceGroupCopy = computed(() => nodeDashboardCopy(locale.value))
+const deviceGroupCopy = computed(() => deviceGroupLabels(String(locale.value)))
 onMounted(() => { acquireSystemMetrics() })
 onBeforeUnmount(() => { releaseSystemMetrics() })
 const composingMessage = ref(false)
@@ -148,6 +157,62 @@ const moduleLines = computed(() => presentModuleLines(lines.value, devicesResour
 const presentModules = computed(() =>
   presentModuleLines(lines.value, devicesResource.data)
 )
+// ---------------------------------------------------------------------------
+// One card group per device that is here now
+// ---------------------------------------------------------------------------
+//
+// The node list is administrators-only, so only an administrator's dashboard
+// reads it; everyone else is shown a Node by the line it contributes, with the
+// figures they may not read marked as such.
+const isAdmin = computed(() => sessionState.role === 'admin')
+
+const dashboardDeviceList = computed(() =>
+  dashboardDevices({
+    lines: moduleLines.value,
+    admin: isAdmin.value,
+    fleetStatus: nodeFleetState.status,
+    nodes: nodeFleetState.nodes
+  })
+)
+
+function deviceGroupTitle(device: DashboardDevice): string {
+  const copy = deviceGroupCopy.value
+  if (device.kind === 'node') return copy.nodeTitle(device.line.model || copy.unknown)
+  return device.line.model === 'QDC507' ? copy.hostDji : device.line.model || copy.hostModem
+}
+
+function deviceGroupTag(device: DashboardDevice): string {
+  if (device.kind === 'node') {
+    const name = device.node?.display_name || ''
+    return name && name !== device.nodeID ? `${name} · ${device.nodeID}` : device.nodeID
+  }
+  // The last four digits are enough to tell two modules apart; the full IMEI
+  // stays behind the reveal control on the module card.
+  return device.line.device_imei ? `····${device.line.device_imei.slice(-4)}` : ''
+}
+
+/**
+ * Each group with the ONE metrics object all of its cards read. Built here,
+ * once per device, so the strip and the card field of a group cannot be handed
+ * different devices' figures -- and so no card has a way to go and fetch its
+ * own.
+ */
+const deviceGroups = computed(() => {
+  const hostCount = dashboardDeviceList.value.filter(device => device.kind === 'host').length
+  return dashboardDeviceList.value.map(device => ({
+    device,
+    title: deviceGroupTitle(device),
+    tag: deviceGroupTag(device),
+    source: deviceSource(device, {
+      admin: isAdmin.value,
+      hostCount,
+      host: systemMetricsState,
+      fleetStatus: nodeFleetState.status,
+      sources: nodeFleetState.sources
+    })
+  }))
+})
+
 const contactLines = computed(() => lines.value.filter(line => Boolean(lineKey(line))))
 const defaultLineID = computed(
   () => bootstrapResource.data?.line_settings.default_line_id || ''
@@ -708,6 +773,21 @@ function loadDashboard(): void {
 
 watch(activities, items => selection.reconcile(items))
 
+// ONE poll of the node list feeds every Node group. It runs only while the
+// overview (the pane the groups are in) is what the detail pane shows, and
+// stops -- cancelling the request in flight -- when that changes or the page
+// goes away.
+let nodeFleetHeld = false
+function holdNodeFleet(wanted: boolean): void {
+  if (wanted === nodeFleetHeld) return
+  nodeFleetHeld = wanted
+  if (wanted) acquireNodeFleet()
+  else releaseNodeFleet()
+}
+watch(() => isAdmin.value && overviewSelected.value, holdNodeFleet)
+onMounted(() => { holdNodeFleet(isAdmin.value && overviewSelected.value) })
+onBeforeUnmount(() => { holdNodeFleet(false) })
+
 onMounted(() => {
   window.addEventListener('keydown', onSelectionKeydown)
   loadDashboard()
@@ -1238,32 +1318,41 @@ onBeforeUnmount(() => {
                 {{ t('common.retry') }}
               </button>
               </div>
-              <div v-else-if="moduleLines.length === 0" class="dashboard-section-state">
+              <div v-else-if="deviceGroups.length === 0" class="dashboard-section-state">
                 <Inbox :size="17" />
                 {{ t('dashboard.noLines') }}
               </div>
               <template v-else>
-                <section v-for="line in moduleLines.filter(item => !item.device_imei.startsWith('NSH-'))" :key="lineKey(line)" class="dashboard-device-group">
-                  <header class="dashboard-device-group__head"><h3>{{ line.model === 'QDC507' ? deviceGroupCopy.dji : line.model || deviceGroupCopy.modem }}</h3><span>····{{ line.device_imei.slice(-4) }}</span></header>
-                  <SystemMetricsStrip v-if="moduleLines.filter(item => !item.device_imei.startsWith('NSH-')).length === 1" />
-                  <div class="dashboard-module-grid">
-                    <ModuleCard :line="line" :device="deviceFor(line)" :runtime="networkRuntime(line)" :selectable="!line.module_only" :default-line="lineKey(line) === defaultLineID" @select="openLineSettings(line)" />
-                    <ModuleInsightCards v-if="moduleLines.filter(item => !item.device_imei.startsWith('NSH-')).length === 1" :line="line" :show-network="true" />
-                    <ModuleExtraCards :line="line" :device="deviceFor(line)" mode="all" />
-                  </div>
-                </section>
-                <section v-for="line in moduleLines.filter(item => item.device_imei.startsWith('NSH-'))" :key="lineKey(line)" class="dashboard-device-group dashboard-device-group--node">
-                  <header class="dashboard-device-group__head"><h3>NasSimHub · {{ line.model || 'UFI003' }}</h3><span>{{ line.device_imei }}</span></header>
-                  <SystemMetricsStrip :device-id="line.device_imei" />
-                  <div class="dashboard-module-grid">
-                    <ModuleCard :line="line" :device="deviceFor(line)" :runtime="networkRuntime(line)" :default-line="lineKey(line) === defaultLineID" @select="openLineSettings(line)" />
-                    <ModuleInsightCards :line="line" :show-network="true" />
-                    <ModuleExtraCards :line="line" :device="deviceFor(line)" mode="all" />
-                  </div>
+                <!-- ONE template for every device: a modem on the NAS and a
+                     NasSimHub Node are drawn by the same two components, each
+                     handed that device's own line and metrics. A device that
+                     goes away leaves the list, and its whole group with it. -->
+                <section
+                  v-for="group in deviceGroups"
+                  :key="group.device.key"
+                  class="dashboard-device-group"
+                  :class="{ 'dashboard-device-group--node': group.device.kind === 'node' }"
+                >
+                  <header class="dashboard-device-group__head">
+                    <h3>{{ group.title }}</h3>
+                    <span>{{ group.tag }}</span>
+                  </header>
+                  <SystemMetricsStrip :source="group.source" />
+                  <DeviceCardGrid
+                    :device="group.device"
+                    :source="group.source"
+                    :record="deviceFor(group.device.line)"
+                    :runtime="networkRuntime(group.device.line)"
+                    :default-line="lineKey(group.device.line) === defaultLineID"
+                    :admin="isAdmin"
+                    @select="openLineSettings(group.device.line)"
+                  />
                 </section>
               </template>
+              <!-- What belongs to the NAS rather than to any one device, drawn
+                   once whatever the number of devices above. -->
               <section class="dashboard-device-group dashboard-device-group--global">
-                <header class="dashboard-device-group__head"><h3>{{ deviceGroupCopy.global }}</h3><span>NasSimHub</span></header>
+                <header class="dashboard-device-group__head"><h3>{{ deviceGroupCopy.globalTitle }}</h3><span>{{ deviceGroupCopy.globalTag }}</span></header>
                 <div class="dashboard-module-grid dashboard-module-grid--tall">
                   <NetworkGlobeCard />
                   <DHTMeshCard />

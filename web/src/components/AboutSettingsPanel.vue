@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   AlertCircle,
@@ -34,6 +34,12 @@ import {
 import { releaseNoteRemainder, releaseNoteSummary } from '../utils/releaseNotes'
 import SettingsLoadBoundary from './settings/SettingsLoadBoundary.vue'
 import SettingsModuleCard from './settings/SettingsModuleCard.vue'
+
+// The Nodes' own software is updated per device, from a panel that asks the
+// device. Its entry sits here with the gateway's update because this is where
+// an administrator looks for "what is out of date"; it is loaded on its own so
+// a visit that only reads the version does not fetch it with the page.
+const NodeAgentUpdatesCard = defineAsyncComponent(() => import('./NodeAgentUpdatesCard.vue'))
 
 const { t } = useI18n()
 const repositoryURL = 'https://github.com/human-agent65535/ModemDeck'
@@ -329,6 +335,8 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </SettingsModuleCard>
+
+    <NodeAgentUpdatesCard />
 
     <SettingsModuleCard
       class="about-card about-legal"

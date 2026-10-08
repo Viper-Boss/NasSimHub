@@ -270,10 +270,17 @@ test('device identifiers are masked consistently and automatically re-mask', () 
   assert.match(devicePanelSource, /SensitiveValue[\s\S]*label="IMSI"/)
   assert.match(
     moduleCardSource,
-    /SensitiveValue[\s\S]*:value="equipmentIdentifier"[\s\S]*label="IMEI"/
+    /SensitiveValue[\s\S]*:value="equipmentIdentifier"[\s\S]*:label="identifierLabel"/
+  )
+  // The label is "IMEI" for a modem. A NasSimHub Node's line carries the
+  // Node's device ID in that field, which is masked the same way but is not
+  // an IMEI and is not called one.
+  assert.match(
+    moduleCardSource,
+    /equipmentIdentifier\.value\.startsWith\('NSH-'\)\s*\? deviceGroupLabels\(String\(locale\.value\)\)\.deviceId\s*: 'IMEI'/
   )
   assert.doesNotMatch(moduleCardSource, /simIdentifier|>ICCID</)
-  assert.match(moduleCardSource, /<dt>IMEI<\/dt>/)
+  assert.match(moduleCardSource, /<dt>\{\{ identifierLabel \}\}<\/dt>/)
   assert.match(moduleCardSource, /class="module-card__select-action"/)
   assert.match(moduleCardSource, /<div[\s\S]*class="module-card__main"/)
   assert.doesNotMatch(moduleCardSource, /<button\s+class="module-card__main"/)

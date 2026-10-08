@@ -71,7 +71,7 @@ const (
 	// releaseMessageLimit refuses an NKN message too big to be a release
 	// query or answer before it is decoded: a manifest at its size limit,
 	// base64-encoded, plus the envelope.
-	releaseMessageLimit = release.MaxManifestBytes*4/3 + 1024
+	releaseMessageLimit = release.MaxDualManifestBytes*4/3 + 1024
 	releaseSharingFile  = "release-sharing.json"
 )
 
@@ -365,7 +365,7 @@ func bestRelease(documents [][]byte, publicKey string) ([]byte, int) {
 		count    int
 	)
 	for _, signed := range documents {
-		candidate, err := release.VerifyJSON(bytes.NewReader(signed), publicKey)
+		candidate, err := release.VerifyPublished(signed, publicKey)
 		if err != nil {
 			continue
 		}
@@ -519,7 +519,7 @@ func (peers *releasePeers) admit(from string) bool {
 
 func (peers *releasePeers) deliver(from string, message releaseMessage) {
 	signed, err := base64.StdEncoding.DecodeString(message.SignedBase64)
-	if err != nil || len(signed) == 0 || len(signed) > release.MaxManifestBytes {
+	if err != nil || len(signed) == 0 || len(signed) > release.MaxPublishedBytes() {
 		return
 	}
 	peers.mu.Lock()

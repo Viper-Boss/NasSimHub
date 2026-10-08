@@ -9,6 +9,16 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/auth"
 )
 
+// Use the same authoritative message as the conversation body. Retain the
+// cached preview only when its message no longer exists in this thread.
+const threadLastContentSQL = `COALESCE((
+ SELECT preview_message.content FROM sms AS preview_message
+ WHERE preview_message.id = sc.last_sms_id
+   AND preview_message.line_id = sc.line_id
+   AND preview_message.peer = sc.peer
+ LIMIT 1
+), sc.last_content)`
+
 const contactIDForNumberSQL = `COALESCE((
 	SELECT contacts.id
 	FROM contact_phones
@@ -71,7 +81,7 @@ func (s *Store) MessageThreads(ctx context.Context, query ThreadQuery) ([]Messag
 			` + fmt.Sprintf(contactNameForNumberSQL, "sc.peer", contactOwner) + `,
 			sc.last_sms_id,
 			sc.last_timestamp,
-			sc.last_content,
+			` + threadLastContentSQL + `,
 			sc.last_type,
 			` + unreadExpression + `,
 			` + markedUnreadExpression + `,
@@ -88,7 +98,7 @@ func (s *Store) MessageThreads(ctx context.Context, query ThreadQuery) ([]Messag
 		pattern := searchPattern(query.Search)
 		searchCondition := `(
 			LOWER(COALESCE(sc.peer, '')) LIKE ? ESCAPE '\' OR
-			LOWER(COALESCE(sc.last_content, '')) LIKE ? ESCAPE '\' OR
+			LOWER(COALESCE(` + threadLastContentSQL + `, '')) LIKE ? ESCAPE '\' OR
 			EXISTS (
 				SELECT 1 FROM contact_phones
 				JOIN contacts ON contacts.id = contact_phones.contact_id

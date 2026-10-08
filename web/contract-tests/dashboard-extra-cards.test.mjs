@@ -12,6 +12,10 @@ const api = await readFile(
   new URL('../src/api/dashboardCards.ts', import.meta.url),
   'utf8'
 )
+const deviceCardGrid = await readFile(
+  new URL('../src/components/DeviceCardGrid.vue', import.meta.url),
+  'utf8'
+)
 const dashboard = await readFile(
   new URL('../src/views/DashboardView.vue', import.meta.url),
   'utf8'
@@ -41,10 +45,10 @@ function cardTemplate(marker) {
 }
 
 test('the cards are rendered into the dashboard row beside the others', () => {
-  const shortGrid = dashboard.slice(
-    dashboard.indexOf('<div class="dashboard-module-grid">'),
-    dashboard.indexOf('dashboard-module-grid--tall')
-  )
+  // The row is the card field every device group shares; the dashboard draws
+  // one per device and hands it that device.
+  const shortGrid = deviceCardGrid.slice(deviceCardGrid.indexOf('<div class="dashboard-module-grid">'))
+  assert.match(dashboard, /<DeviceCardGrid[\s/>]/, 'the dashboard no longer draws the card field')
   // The tag has to END here. Without the boundary, renaming the component to
   // ModuleExtraCardsX still matches the prefix and the test passes on a
   // dashboard that renders nothing -- which is exactly what happened when this
@@ -53,8 +57,9 @@ test('the cards are rendered into the dashboard row beside the others', () => {
   assert.match(shortGrid, /<ModuleInsightCards[\s/>]/, 'the other four cards left the module grid')
   // The module card is what the module card reads from, so both props have to
   // be handed over; a card that invents its own source is the failure here.
-  assert.match(shortGrid, /<ModuleExtraCards[\s/>][\s\S]{0,160}:line="line"/)
-  assert.match(shortGrid, /<ModuleExtraCards[\s/>][\s\S]{0,160}:device="deviceFor\(line\)"/)
+  assert.match(shortGrid, /<ModuleExtraCards[\s/>][\s\S]{0,160}:line="device\.line"/)
+  assert.match(shortGrid, /<ModuleExtraCards[\s/>][\s\S]{0,160}:device="record"/)
+  assert.match(dashboard, /<DeviceCardGrid[\s/>][\s\S]{0,260}:record="deviceFor\(group\.device\.line\)"/)
 })
 
 test('a card with no backend never shows a figure it does not have', () => {

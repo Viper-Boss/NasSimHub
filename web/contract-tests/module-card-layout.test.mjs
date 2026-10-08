@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-const [dashboard, devicePanel, moduleCard] = await Promise.all([
+const [dashboard, deviceCardGrid, devicePanel, moduleCard] = await Promise.all([
   readFile(new URL('../src/views/DashboardView.vue', import.meta.url), 'utf8'),
+  readFile(new URL('../src/components/DeviceCardGrid.vue', import.meta.url), 'utf8'),
   readFile(
     new URL('../src/components/DeviceConfigurationPanel.vue', import.meta.url),
     'utf8'
@@ -66,7 +67,7 @@ test('module cards expose one fixed information skeleton in both views', () => {
     "t('lines.signal')",
     "t('device.accessTechnology')",
     "t('lines.model')",
-    '<dt>IMEI</dt>'
+    '<dt>{{ identifierLabel }}</dt>'
   ]
   const positions = labels.map(label => moduleCard.indexOf(label))
 
@@ -93,7 +94,7 @@ test('module cards expose one fixed information skeleton in both views', () => {
   assert.match(moduleCard, /import SensitiveValue from '\.\/SensitiveValue\.vue'/)
   assert.match(
     moduleCard,
-    /<SensitiveValue[\s\S]*:value="equipmentIdentifier"[\s\S]*label="IMEI"/
+    /<SensitiveValue[\s\S]*:value="equipmentIdentifier"[\s\S]*:label="identifierLabel"/
   )
   assert.match(moduleCard, /props\.line\.device_imei \|\| props\.device\?\.imei/)
   assert.doesNotMatch(moduleCard, /currentBand|servingBand|serving_radio/)
@@ -115,12 +116,19 @@ test('module cards stretch their body while keeping every footer fixed to the bo
 })
 
 test('dashboard module cards retain their canonical data projection', () => {
+  // The module card is placed by the one card field every device shares
+  // (DeviceCardGrid.vue), which the dashboard hands a device's own line, its
+  // device record and whether it is the default line.
   const dashboardUse =
-    dashboard.match(/<ModuleCard[\s\S]*?\/>/)?.[0] || ''
+    deviceCardGrid.match(/<ModuleCard[\s\S]*?\/>/)?.[0] || ''
 
-  assert.match(dashboardUse, /:line="line"/)
-  assert.match(dashboardUse, /:device="deviceFor\(line\)"/)
-  assert.match(dashboardUse, /:default-line="lineKey\(line\) === defaultLineID"/)
+  assert.match(dashboardUse, /:line="device\.line"/)
+  assert.match(dashboardUse, /:device="record"/)
+  assert.match(dashboardUse, /:default-line="defaultLine"/)
+  const gridUse = dashboard.match(/<DeviceCardGrid[\s\S]*?\/>/)?.[0] || ''
+  assert.match(gridUse, /:device="group\.device"/)
+  assert.match(gridUse, /:record="deviceFor\(group\.device\.line\)"/)
+  assert.match(gridUse, /:default-line="lineKey\(group\.device\.line\) === defaultLineID"/)
   assert.doesNotMatch(dashboardUse, /compact/)
   assert.doesNotMatch(dashboardUse, /:selected=|\sactions(?:\s|>)/)
 })

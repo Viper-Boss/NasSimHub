@@ -15,6 +15,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Device, LineSummary, NetworkLineStatus } from '../api/types'
 import type { SystemMetricsCellular } from '../api/client'
+import { deviceGroupLabels } from '../i18n/deviceGroupLabels'
 import { lineIsOccupied } from '../state/call'
 import { lineHasCallControl, lineKey, lineLabel } from '../state/workspace'
 import {
@@ -27,7 +28,7 @@ import SensitiveValue from './SensitiveValue.vue'
 import SignalBars from './SignalBars.vue'
 import { trafficLineState } from './trafficLineState'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const props = withDefaults(
   defineProps<{
     line: LineSummary
@@ -101,6 +102,13 @@ const model = computed(
 )
 const equipmentIdentifier = computed(
   () => props.line.device_imei || props.device?.imei || ''
+)
+// A NasSimHub Node's line carries the Node's device ID where a modem's IMEI
+// goes. It is not an IMEI, so it is not labelled as one.
+const identifierLabel = computed(() =>
+  equipmentIdentifier.value.startsWith('NSH-')
+    ? deviceGroupLabels(String(locale.value)).deviceId
+    : 'IMEI'
 )
 const networkFacts = computed(() =>
   operatorFacts(
@@ -271,12 +279,12 @@ const radioRows = computed(() => {
           <dd>{{ model }}</dd>
         </div>
         <div class="module-card__imei-fact is-code">
-          <dt>IMEI</dt>
+          <dt>{{ identifierLabel }}</dt>
           <dd>
             <SensitiveValue
               class="module-card__sensitive"
               :value="equipmentIdentifier"
-              label="IMEI"
+              :label="identifierLabel"
             />
           </dd>
         </div>

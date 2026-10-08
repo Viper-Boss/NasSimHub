@@ -4,6 +4,12 @@ import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
 import { Phone } from '@lucide/vue'
 import { bootstrapResource } from '../state/workspace'
+import {
+  lineSelectionState,
+  offlineLineRecord,
+  selectLine,
+  selectedLineRecord
+} from '../state/lineSelection'
 import { requestPhoneGeo } from '../state/phoneGeo'
 import { accessTechnologyLabel, cnOperatorNameOf, ownNumberFacts } from '../utils/phoneRegion'
 import { voiceStatus, chineseLineState } from '../utils/voiceStatus'
@@ -15,15 +21,23 @@ import { gateway } from '../api/client'
 import { getNKNNetworkNodes, getNKNNetworkPeers, getNKNNetworkStatus, getVowifiDiagnostics } from '../api/client'
 import type { NKNNetworkNodes, NKNNetworkPeers, NKNNetworkStatus, VowifiDiagnosticsSnapshot, VowifiPathProbe } from '../api/client'
 import { getDHTSettings, type DHTStatus } from '../api/client'
-import { dhtUnlockState } from '../state/dhtUnlock'
+import { unlockDHT } from '../state/dhtUnlock'
 const LineSelector = defineAsyncComponent(() => import('./LineSelector.vue'))
 
 const { t } = useI18n()
 const root = ref<HTMLElement | null>(null)
 const open = ref(false)
-const selectedLineID = ref('')
-const viewedLineID = computed({ get: () => line.value?.id || '', set: value => { selectedLineID.value = value } })
+// The line this strip shows is THE selected line (state/lineSelection.ts), the
+// same one the dialer and the message composer start from. It used to be a
+// ref of this component's own, which fell back to "the first line that is
+// registered" whenever its line dropped out -- so unplugging a stick quietly
+// turned the strip into a readout of the other modem.
+const viewedLineID = computed({ get: () => lineSelectionState.selectedLineID, set: value => { selectLine(value) } })
 const lines = computed(() => bootstrapResource.data?.lines || [])
+// The selected line's stable record when its device is offline. It is listed
+// in the selector as selected and unavailable, and the strip is drawn from it
+// with nothing that would pass for a live reading.
+const offlineLine = computed(() => offlineLineRecord(lineSelectionState.selectedLineID))
 
 const BUILD_ID = import.meta.env.VITE_MODEMDECK_BUILD_ID
 const version = typeof BUILD_ID === 'string' && BUILD_ID.trim() ? `v${BUILD_ID.trim().replace(/^v/, '')}` : ''
@@ -76,7 +90,6 @@ const dhtStateLabel = computed(() => {
 })
 
 async function refreshDhtStatus(): Promise<void> {
-  if (!dhtUnlockState.unlocked) return
   try {
     dhtStatus.value = (await getDHTSettings()).status
   } catch {
@@ -126,34 +139,35 @@ async function copyNknAddress(): Promise<void> {
 }
 // ---------------------------------------------------------------------------
 
-const line = computed(() => {
-  return lines.value.find(item => item.id === selectedLineID.value) || lines.value.find(item => isRegisteredNetwork(item)) || lines.value[0]
-})
+// The selected line, live or -- when its device is offline -- its stable
+// record. Never another line in its place.
+const line = computed(() => selectedLineRecord())
 
 const facts = computed(() => ownNumberFacts(line.value?.phone_number || '', line.value?.operator))
 
-const remoteGeo = ref<{ province: string; carrier: string } | undefined>()
+const remoteGeo = ref<{ province: string; city?: string; carrier: string } | undefined>()
 
 watch(
   () => line.value?.phone_number || '',
   number => {
     remoteGeo.value = undefined
-    if (number) void requestPhoneGeo(number).then(geo => { if (number === line.value?.phone_number) remoteGeo.value = geo })
+    if (number) void requestPhoneGeo(number).then(geo => { if (number === line.value?.phone_number) remoteGeo.value = geo }).catch(() => { /* Lookup failure does not affect radio or calls. */ })
   },
   { immediate: true }
 )
 
 const geoLine = computed(() => {
   if (remoteGeo.value) {
-    const parts = [remoteGeo.value.province, remoteGeo.value.carrier].filter(Boolean)
-    if (parts.length) return parts.join(' · ')
+    const region = [...new Set([remoteGeo.value.province, remoteGeo.value.city].filter(Boolean))].join('')
+    if (region) return region
   }
   // Keep readable region/carrier labels; hide raw PLMN identifiers.
-  const parts = [facts.value.region, facts.value.carrier].filter(Boolean)
-  return parts.join(' · ')
+  return ''
 })
 
-const networkLabel = computed(() => accessTechnologyLabel(line.value?.serving_radio?.access_technology))
+// An offline line's record carries the radio facts of its last session. None
+// of them is current, so none of them is drawn.
+const networkLabel = computed(() => offlineLine.value ? '' : accessTechnologyLabel(line.value?.serving_radio?.access_technology))
 
 // Prefer the mapped carrier name over a raw PLMN identifier.
 const carrierName = computed(() => {
@@ -181,6 +195,9 @@ const vowifiHint = computed(() => t(vowifiOn.value ? 'homesim.strip.vowifiActive
 let deviceRequest = 0
 
 watch(() => line.value?.id, () => { void refreshDataState() }, { immediate: true })
+// The same line going offline or coming back keeps its ID, so it needs its own
+// trigger: the switches go back to unknown, or are read from the device again.
+watch(() => Boolean(offlineLine.value), () => { void refreshDataState() })
 
 async function refreshDataState(): Promise<void> {
   const request = ++deviceRequest
@@ -190,7 +207,8 @@ async function refreshDataState(): Promise<void> {
   vowifiWritable.value = null
   flightOn.value = null
   flightWritable.value = null
-  if (!value?.id) {
+  // Nothing is asked of a device that is offline; every switch stays unknown.
+  if (!value?.id || offlineLine.value) {
     dataOn.value = null
     return
   }
@@ -332,7 +350,7 @@ const vowifiDiagRows = computed(() => {
   return rows
 })
 
-const registered = computed(() => Boolean(line.value && isRegisteredNetwork(line.value)))
+const registered = computed(() => Boolean(line.value && !offlineLine.value && isRegisteredNetwork(line.value)))
 
 const volte = computed(() => voiceStatus({ registered: registered.value, network: networkLabel.value,
   activeBearer: callState.sessions.find(session => session.line_id === line.value?.id && session.phase === 'active')?.bearer
@@ -354,7 +372,7 @@ const QUOTA_RING = 2 * Math.PI * 5.5
 const RING_DISC = 2 * Math.PI * 24
 const quotaRings = computed(() => {
   const quota = line.value?.quota
-  if (!quota) return []
+  if (!quota || offlineLine.value) return []
   const mk = (label: string, left: number, total: number, color: string, unit: string) => {
     const pct = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0
     return {
@@ -408,7 +426,7 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" class="line-status-wrap">
     <template v-if="line">
-    <LineSelector v-if="lines.length > 1" v-model="viewedLineID" :lines="lines" compact />
+    <LineSelector v-if="lines.length > 1 || (offlineLine && lines.length > 0)" v-model="viewedLineID" :lines="lines" :offline-line="offlineLine" compact />
     <div
       class="line-status"
       :class="{ 'is-open': open }"
@@ -463,7 +481,8 @@ onBeforeUnmount(() => {
               <path d="M7.8 8.6 4.6 4.4h6.4Z" fill="currentColor" />
             </svg>
           </span>
-          <span v-if="!registered" class="line-status__state">{{ chineseLineState(line.state) }}</span>
+          <span v-if="offlineLine" class="line-status__state" :title="t('lines.deviceOfflineNoSwitch')">{{ t('lines.deviceOffline') }}</span>
+          <span v-else-if="!registered" class="line-status__state">{{ chineseLineState(line.state) }}</span>
           <span
             v-for="ring in quotaRings"
             :key="ring.label"
@@ -526,14 +545,14 @@ onBeforeUnmount(() => {
       <span class="nkn-badge__state">{{ nknStateLabel }}</span>
     </button>
 
-    <!-- DHT: the second control path, hidden until asked for by name -->
+    <!-- Runtime status is visible in every browser; only advanced controls need a reveal. -->
     <RouterLink
-      v-if="dhtUnlockState.unlocked"
       class="nkn-badge is-dht"
       :class="dhtDotClass"
       :to="{ name: 'settings', params: { section: 'dht' } }"
-      :title="dhtStateLabel"
-      :aria-label="dhtStateLabel"
+      :title="`DHT · ${dhtStateLabel}`"
+      :aria-label="`DHT · ${dhtStateLabel}`"
+      @click="unlockDHT"
     >
       <span class="nkn-badge__dot" aria-hidden="true" />
       <span>DHT</span>
@@ -1357,6 +1376,11 @@ onBeforeUnmount(() => {
   font-size: 10.5px;
   color: var(--muted);
   text-align: center;
+}
+
+@media (min-width: 861px) and (max-width: 1479px) {
+  .nkn-badge { padding-inline: 8px; margin-left: 6px; }
+  .nkn-badge__state { display: none; }
 }
 
 @media (max-width: 1479px) {

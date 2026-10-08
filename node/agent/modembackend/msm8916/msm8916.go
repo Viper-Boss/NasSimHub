@@ -35,9 +35,12 @@ type Options struct {
 	Now func() time.Time
 	// ReadOnly enables ModemManager status queries. It never starts, enables,
 	// resets or configures the modem; unavailable services remain offline.
-	ReadOnly        bool
-	SMSWrite        bool
-	VoiceWrite      bool
+	ReadOnly   bool
+	SMSWrite   bool
+	VoiceWrite bool
+	// VoiceDTMF is enabled only after the installed modem profile passes DTMF acceptance.
+	VoiceDTMF       bool
+	DTMFCommand     func(context.Context, string, string) error
 	VoiceAudioReady func(context.Context) bool
 	SMSStateDir     string
 	SMSBus          SMSBus
@@ -109,6 +112,7 @@ func (b *Backend) Capabilities(ctx context.Context) (proto.Capabilities, error) 
 		MobileData:       false,
 		VoiceControl:     voiceReady,
 		VoiceAudio:       voiceReady,
+		DTMF:             voiceReady && b.options.VoiceDTMF,
 		VoLTE:            volte,
 		WiFiProvisioning: false,
 		Logs:             true,

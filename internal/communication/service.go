@@ -253,6 +253,8 @@ type Service struct {
 	repository              Repository
 	events                  messageevents.Publisher
 	bark                    *barkpush.Notifier
+	otpGateMu               sync.RWMutex
+	otpForwardGate          func(context.Context, store.Message) bool
 	callEvents              callevents.Publisher
 	runtime                 runtimeevents.Publisher
 	random                  io.Reader
@@ -892,6 +894,9 @@ func (s *Service) publishIncomingMessages(messages []store.Message, observedAt t
 		return
 	}
 	for _, message := range messages {
+		if !s.allowOTPForward(message) {
+			continue
+		}
 		messageID := strconv.FormatInt(message.ID, 10)
 		s.events.Publish(messageevents.IncomingSMS{
 			MessageID: messageID,
@@ -905,9 +910,7 @@ func (s *Service) publishIncomingMessages(messages []store.Message, observedAt t
 			Timestamp:  message.Timestamp,
 			ObservedAt: observedAt,
 		})
-	}
-	if s.bark != nil {
-		for _, message := range messages {
+		if s.bark != nil {
 			notify := message
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -2275,19 +2278,6 @@ func (s *Service) CallAction(ctx context.Context, input CallActionInput) (store.
 		return s.completeCallCommand(ctx, command, target.AppID, operation)
 	}
 	nodeLine := s.nodeOwnsEndpoint(target.EndpointLineID)
-	if nodeLine && action == "dtmf" {
-		// Node lines carry no DTMF path yet; refuse definitely so nothing is
-		// left in flight.
-		err := &agentclient.OperationError{
-			Code:      "not_supported",
-			Operation: "dtmf",
-			Message:   "DTMF is not supported on NasSimHub Node lines",
-		}
-		if finishErr := s.finishFailedCommand(ctx, command, err); finishErr != nil {
-			return store.Call{}, finishErr
-		}
-		return store.Call{}, translateAgentError(operation, err)
-	}
 	if !nodeLine && (action == "answer" || action == "dtmf") {
 		if err := s.ensureAgentControlLease(ctx); err != nil {
 			return store.Call{}, s.failLocalCommand(
@@ -2313,7 +2303,7 @@ func (s *Service) CallAction(ctx context.Context, input CallActionInput) (store.
 			agentclient.CallActionRequest{RequestID: requestID},
 		)
 	case "dtmf":
-		receipt, err = s.agent.SendDTMF(commandContext, target.EndpointCallID, agentclient.DTMFRequest{
+		receipt, err = s.endpointDTMF(commandContext, target.EndpointLineID, target.EndpointCallID, agentclient.DTMFRequest{
 			RequestID: requestID,
 			Digits:    digits,
 		})

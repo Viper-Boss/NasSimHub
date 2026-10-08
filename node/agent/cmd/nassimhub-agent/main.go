@@ -2,10 +2,11 @@
 //
 // It is a single static binary with no runtime dependencies beyond the Go
 // standard library: no database, no Python, no container, no Redis, no SIP
-// stack. Everything that needs a database, a login, a web UI or durable history
-// lives on the NAS; the agent's job is to be the honest, low-cost edge of that
+// stack. Long-term messaging history and NAS services
+// live on the NAS; the agent's job is to be the honest, low-cost edge of that
 // system on hardware with 256 MB of RAM and a rootfs that has already been
-// filled to 100% once.
+// filled to 100% once. The embedded local console manages this device independently
+// of NAS pairing and needs no separate web server.
 //
 // Concretely the agent owns: device identity, pairing, device and network
 // status, SIM and modem state, SMS and call commands, Wi-Fi provisioning,
@@ -38,6 +39,7 @@ import (
 	netmock "github.com/human-agent65535/nassimhub-node/agent/netbackend/mock"
 	"github.com/human-agent65535/nassimhub-node/agent/netbackend/networkmanager"
 	"github.com/human-agent65535/nassimhub-node/agent/nodeserver"
+	"github.com/human-agent65535/nassimhub-node/agent/ota"
 	"github.com/human-agent65535/nassimhub-node/proto"
 )
 
@@ -67,22 +69,24 @@ func run(arguments []string) error {
 
 	flags := flag.NewFlagSet("nassimhub-agent", flag.ContinueOnError)
 	var (
-		configPath = flags.String("config", defaultConfigPath, "configuration file; missing is not an error")
-		stateDir   = flags.String("state-dir", settings.StateDir, "directory holding device identity and pairing state")
-		logDir     = flags.String("log-dir", settings.LogDir, "directory for the rotating diagnostic log; empty keeps logs in memory only")
-		listen     = flags.String("listen", settings.Listen, "comma-separated listen addresses; the same protocol is served on each")
-		backend    = flags.String("modem-backend", settings.ModemBackend, "modem backend: msm8916 or mock")
-		platform   = flags.String("platform", settings.Platform, "hardware platform recorded in the device identity")
-		model      = flags.String("model", settings.Model, "hardware model label")
-		scenario   = flags.String("mock-scenario", settings.MockScenario, "mock backend scenario: mobile, unicom or telecom")
-		qmiDevice  = flags.String("qmi-device", settings.QMIDevice, "QMI device node, recorded for the future hardware backend")
-		audioCard  = flags.String("audio-card", settings.AudioCard, "ALSA card, recorded for the future hardware backend")
-		voiceMedia = flags.Bool("voice-media", settings.VoiceMedia, "enable experimental UFI003 voice control and PCM media")
-		plaintext  = flags.Bool("plaintext", settings.Plaintext, "serve the node protocol without TLS; for local development only")
-		announce   = flags.Bool("announce", settings.Announce, "answer DNS-SD browse queries so the NAS can find this device")
-		provision  = flags.Bool("provisioning", settings.Provisioning, "serve the first-boot Wi-Fi provisioning API while the device is in its setup AP")
-		checkOnly  = flags.Bool("check-config", false, "validate the configuration and exit without starting")
-		showVer    = flags.Bool("version", false, "print the version and exit")
+		configPath  = flags.String("config", defaultConfigPath, "configuration file; missing is not an error")
+		stateDir    = flags.String("state-dir", settings.StateDir, "directory holding device identity and pairing state")
+		logDir      = flags.String("log-dir", settings.LogDir, "directory for the rotating diagnostic log; empty keeps logs in memory only")
+		listen      = flags.String("listen", settings.Listen, "comma-separated listen addresses; the same protocol is served on each")
+		backend     = flags.String("modem-backend", settings.ModemBackend, "modem backend: msm8916 or mock")
+		platform    = flags.String("platform", settings.Platform, "hardware platform recorded in the device identity")
+		model       = flags.String("model", settings.Model, "hardware model label")
+		scenario    = flags.String("mock-scenario", settings.MockScenario, "mock backend scenario: mobile, unicom or telecom")
+		qmiDevice   = flags.String("qmi-device", settings.QMIDevice, "QMI device node, recorded for the future hardware backend")
+		audioCard   = flags.String("audio-card", settings.AudioCard, "ALSA card, recorded for the future hardware backend")
+		voiceMedia  = flags.Bool("voice-media", settings.VoiceMedia, "enable experimental UFI003 voice control and PCM media")
+		plaintext   = flags.Bool("plaintext", settings.Plaintext, "serve the node protocol without TLS; for local development only")
+		announce    = flags.Bool("announce", settings.Announce, "answer DNS-SD browse queries so the NAS can find this device")
+		adminListen = flags.String("admin-listen", settings.AdminListen, "independent management HTTPS listener")
+		localAdmin  = flags.Bool("local-admin", settings.LocalAdmin, "serve the independent device management console over HTTPS")
+		provision   = flags.Bool("provisioning", settings.Provisioning, "serve the first-boot Wi-Fi provisioning API while the device is in its setup AP")
+		checkOnly   = flags.Bool("check-config", false, "validate the configuration and exit without starting")
+		showVer     = flags.Bool("version", false, "print the version and exit")
 	)
 	if err := flags.Parse(arguments); err != nil {
 		return err
@@ -107,6 +111,8 @@ func run(arguments []string) error {
 	settings.Plaintext = *plaintext
 	settings.Announce = *announce
 	settings.Provisioning = *provision
+	settings.LocalAdmin = *localAdmin
+	settings.AdminListen = *adminListen
 	if err := config.Validate(settings); err != nil {
 		return err
 	}
@@ -117,8 +123,65 @@ func run(arguments []string) error {
 
 	resolvedPlatform := proto.Platform(settings.Platform)
 
+	// Which agent runs. Every start begins in the agent from the system image;
+	// if a verified release is installed, this call replaces the process with
+	// it and does not return. See agent/ota/boot.go.
+	//
+	// It comes after -version and -check-config on purpose: a staged binary is
+	// validated by running it with -version, and that must answer and exit
+	// without looking at what is installed.
+	//
+	// The post-quantum provider is registered first: this call verifies the
+	// stored release, dual signature included. (ota.Launch registers it too;
+	// nodeserver.New, further down, is too late for this.)
+	proto.EnableStandardPQ()
+	launched, err := ota.Launch(ota.LaunchOptions{
+		StateDir:        settings.StateDir,
+		Version:         version,
+		KeyFile:         settings.OTAKeys,
+		Platform:        resolvedPlatform,
+		Channel:         proto.OTAChannel(settings.UpdateChannel),
+		SignaturePolicy: updateSignaturePolicy(settings),
+		Arguments:       arguments,
+		// Only the configured switch. A build without a release version
+		// ("dev", or anything that does not parse) is refused by Launch
+		// itself, which reports that as its own reason.
+		Disabled: !settings.Updates,
+		Logf: func(format string, arguments ...any) {
+			fmt.Fprintf(os.Stderr, "nassimhub-agent: update: "+format+"\n", arguments...)
+		},
+	})
+	if err != nil {
+		return err
+	}
+	// Applying or undoing an update ends with this process exiting cleanly so
+	// the supervisor starts it again; the start-up code above then picks the
+	// agent that should run.
+	restartRequested := make(chan string, 1)
+	updater, err := ota.NewUpdater(ota.UpdaterOptions{
+		Decision: launched.Decision,
+		StateDir: settings.StateDir,
+		Keys:     launched.Keys,
+		Restart: func(reason string) {
+			select {
+			case restartRequested <- reason:
+			default:
+			}
+		},
+		Logf: func(format string, arguments ...any) {
+			fmt.Fprintf(os.Stderr, "nassimhub-agent: update: "+format+"\n", arguments...)
+		},
+	})
+	if err != nil {
+		return err
+	}
+	defer updater.Close()
+
 	modem, err := buildModem(settings.ModemBackend, settings.MockScenario,
 		settings.QMIDevice, settings.AudioCard, settings.VoiceMedia)
+	if device, ok := modem.(*msm8916.Backend); ok {
+		device.ConfigureDTMF(settings.VoiceDTMF, settings.StateDir)
+	}
 	if err != nil {
 		return err
 	}
@@ -133,7 +196,22 @@ func run(arguments []string) error {
 	listeners := splitAddresses(settings.Listen)
 	network := buildNetwork
 	if *backend == "msm8916" {
-		network = func(string) netbackend.Backend { return networkmanager.New(networkmanager.Options{}) }
+		// The setup access point only makes sense with the setup page that is
+		// served through it, so turning provisioning off turns it off too.
+		accessPoint := settings.ProvisioningAP
+		if !settings.Provisioning {
+			accessPoint = networkmanager.ProvisioningAPOff
+		}
+		network = func(deviceID string) netbackend.Backend {
+			return networkmanager.New(networkmanager.Options{
+				StateDir:       settings.StateDir,
+				DeviceID:       deviceID,
+				ProvisioningAP: accessPoint,
+				Logf: func(format string, arguments ...any) {
+					fmt.Fprintf(os.Stderr, "nassimhub-agent: wifi: "+format+"\n", arguments...)
+				},
+			})
+		}
 	}
 	// The Wi-Fi backend is built once and shared: the provisioning API and the
 	// node protocol must be driving the same radio, or a join completed through
@@ -159,17 +237,22 @@ func run(arguments []string) error {
 		BuildDate:            buildDate,
 		SessionTTL:           settings.SessionTTL,
 		EnableTLS:            !settings.Plaintext,
+		EnableLocalAdmin:     settings.LocalAdmin && !settings.Plaintext,
+		AdminListen:          settings.AdminListen,
 		CertificateAddresses: localAddresses(),
 		// Security and transport come from the configuration file rather than
 		// from flags: they are properties of a deployment, and a device whose
 		// post-quantum policy depended on how someone typed a command line
 		// would be a device nobody could reason about after the fact.
-		SecurityLevel: proto.SecurityLevel(settings.SecurityLevel),
-		PQProfile:     proto.PQProfile(settings.PQProfile),
-		PQPolicy:      proto.PQPolicy(settings.PQPolicy),
-		TransportMode: proto.TransportMode(settings.TransportMode),
-		KCPProfile:    settings.KCPProfile,
-		KCPFEC:        settings.KCPFEC,
+		SecurityLevel:     proto.SecurityLevel(settings.SecurityLevel),
+		PQIdentityPolicy:  proto.PQIdentityPolicy(settings.PQIdentityPolicy),
+		DisablePQIdentity: !settings.PQIdentity,
+		Updates:           updater,
+		PQProfile:         proto.PQProfile(settings.PQProfile),
+		PQPolicy:          proto.PQPolicy(settings.PQPolicy),
+		TransportMode:     proto.TransportMode(settings.TransportMode),
+		KCPProfile:        settings.KCPProfile,
+		KCPFEC:            settings.KCPFEC,
 	})
 	if err != nil {
 		return err
@@ -180,6 +263,19 @@ func run(arguments []string) error {
 
 	background, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
+	go updater.Supervise(background)
+	if status := updater.Status(); status.Supported {
+		server.Logs.Infof("ota", "updates available: %d release key(s), %d post-quantum; running %s",
+			status.Keys.Classical, status.Keys.PostQuantum, runningDescription(status))
+	} else {
+		server.Logs.Infof("ota", "updates unavailable: %s", status.UnsupportedReason)
+	}
+
+	// A backend that has to watch the radio itself - to offer the setup access
+	// point, to notice a lost network - is run for as long as the agent serves.
+	if supervised, ok := sharedFactory(server.Identity.DeviceID).(netbackend.Supervised); ok {
+		go supervised.Run(background)
+	}
 
 	if settings.Provisioning {
 		// The provisioning API is deliberately not part of the node protocol.
@@ -221,18 +317,55 @@ func run(arguments []string) error {
 	fmt.Printf("  device id : %s\n", server.Identity.DeviceID)
 	fmt.Printf("  platform  : %s (%s)\n", server.Identity.Platform, server.Identity.Model)
 	fmt.Printf("  pairing   : %s\n", server.Pairing.State())
+	if identity := server.PQIdentity.Identity(); identity.Present() {
+		fmt.Printf("  pq identity: %s\n", identity.Algorithm)
+	} else {
+		fmt.Printf("  pq identity: none (%s)\n", server.PQIdentity.Status())
+	}
 	fmt.Printf("  backend   : %s\n", modem.Name())
+	if status := updater.Status(); status.ActiveRelease != "" {
+		fmt.Printf("  release   : %s (system agent %s)\n", status.ActiveRelease, status.FactoryVersion)
+	}
+	if address := server.AdminAddress(); address != "" {
+		fmt.Printf("  management: https://%s/\n", address)
+	}
 	for _, address := range server.Addresses() {
 		fmt.Printf("  listening : %s://%s/v1/node\n", server.Scheme(), address)
 	}
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-	<-signals
+	select {
+	case <-signals:
+	case reason := <-restartRequested:
+		// A clean exit; systemd restarts the service (Restart=always).
+		server.Logs.Warnf("ota", "restarting: %s", reason)
+		fmt.Fprintf(os.Stderr, "nassimhub-agent: restarting: %s\n", reason)
+	}
 
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return server.Stop(shutdown)
+}
+
+// updateSignaturePolicy is the stricter of the configured update signature
+// policy and the one the security level demands. A level can only raise it.
+func updateSignaturePolicy(settings config.Config) proto.OTASignaturePolicy {
+	configured := proto.OTASignaturePolicy(settings.OTASignaturePolicy)
+	if proto.OTARequirementFor(proto.SecurityLevel(settings.SecurityLevel)) == proto.OTASignatureRequired {
+		return proto.OTASignatureRequired
+	}
+	if configured == "" {
+		return proto.OTASignaturePreferred
+	}
+	return configured
+}
+
+func runningDescription(status proto.OTADeviceStatus) string {
+	if status.ActiveRelease == "" {
+		return "the system agent " + status.CurrentVersion
+	}
+	return "release " + status.ActiveRelease + " (" + status.CurrentVersion + "), system agent " + status.FactoryVersion
 }
 
 func buildModem(name, scenarioName, qmiDevice, audioCard string, voiceMedia bool) (modembackend.Backend, error) {

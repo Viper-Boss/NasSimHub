@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/human-agent65535/modemdeck/internal/diagnostics"
 	"github.com/human-agent65535/modemdeck/internal/messageevents"
 )
 
@@ -275,7 +276,11 @@ func (api *API) homeSIMForwarderTest(response http.ResponseWriter, request *http
 	ctx, cancel := context.WithTimeout(request.Context(), timeout)
 	defer cancel()
 	if err := api.deliverForwarderMessage(ctx, api.homeSIMOutboundTransport(request), payload, "NAS猫窝测试推送", "短信转发通道工作正常。"); err != nil {
-		writeError(response, 502, "forward_failed", "Test message failed: "+err.Error(), "")
+		// The transport error quotes the request URL, and for several
+		// channels the URL carries the credential -- including one the
+		// operator never typed here, resolved from a server environment
+		// variable. Same scrubbing as the log gets.
+		writeError(response, 502, "forward_failed", "Test message failed: "+diagnostics.ScrubSecrets(err.Error()), "")
 		return
 	}
 	writeJSON(response, 200, map[string]any{"sent": true})

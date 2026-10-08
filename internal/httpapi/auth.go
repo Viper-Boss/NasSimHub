@@ -423,6 +423,22 @@ func (api *API) accountPassword(response http.ResponseWriter, request *http.Requ
 }
 
 func (api *API) authorizeAPI(response http.ResponseWriter, request *http.Request) bool {
+	// A cloned data directory carries the previous installation's session
+	// rows and paired-phone credentials along with its password. login()
+	// refuses the inherited password; refusing only that left whoever
+	// prepared the image able to keep using a cookie or bearer token they
+	// already held, on every gateway the image was copied to. Nothing behind
+	// this gate is needed to repair a clone: the session probe, /provision
+	// and /provision/reset are all routed before it.
+	//
+	// Checked before either credential is read, for the same reason login()
+	// does it first: no difference between a valid and an invalid inherited
+	// credential is observable.
+	if api.cloned() {
+		writeError(response, http.StatusConflict, "provision_required",
+			"这份数据来自另一台设备，会话已停用。请在界面上执行重置后重新初始化。", "")
+		return false
+	}
 	if len(request.Header.Values("Authorization")) > 0 {
 		return api.authorizeMobileAPI(response, request)
 	}

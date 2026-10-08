@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
 )
 
+// Guarded for the same reason as fakeDHTService: the tunnel restore calls
+// ApplyWireGuard from its own goroutine while a test polls for the result.
 type fakeWireGuardService struct {
+	mu       sync.Mutex
 	applied  []agentclient.WireGuardConfig
 	reads    int
 	status   agentclient.WireGuardStatus
@@ -20,6 +24,8 @@ func (f *fakeWireGuardService) ApplyWireGuard(
 	_ context.Context,
 	config agentclient.WireGuardConfig,
 ) (agentclient.WireGuardStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.applied = append(f.applied, config)
 	if f.failWith != nil {
 		return agentclient.WireGuardStatus{}, f.failWith
@@ -32,11 +38,25 @@ func (f *fakeWireGuardService) WireGuardStatusFor(
 	_ string,
 	_ bool,
 ) (agentclient.WireGuardStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.reads++
 	if f.failWith != nil {
 		return agentclient.WireGuardStatus{}, f.failWith
 	}
 	return f.status, nil
+}
+
+func (f *fakeWireGuardService) appliedConfigs() []agentclient.WireGuardConfig {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]agentclient.WireGuardConfig(nil), f.applied...)
+}
+
+func (f *fakeWireGuardService) readCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.reads
 }
 
 func newWireGuardAPI(t *testing.T, service WireGuardService) *API {
@@ -61,11 +81,11 @@ func TestWireGuardStatusReadDoesNotApply(t *testing.T) {
 
 	status := api.wireGuardRuntimeStatus(context.Background(), wireGuardSettings{Enabled: true, Revision: 3}, false)
 
-	if len(service.applied) != 0 {
-		t.Fatalf("a status read applied configuration %d times", len(service.applied))
+	if len(service.appliedConfigs()) != 0 {
+		t.Fatalf("a status read applied configuration %d times", len(service.appliedConfigs()))
 	}
-	if service.reads != 1 {
-		t.Fatalf("reads = %d; want 1", service.reads)
+	if service.readCount() != 1 {
+		t.Fatalf("reads = %d; want 1", service.readCount())
 	}
 	if status.State != "up" {
 		t.Fatalf("state = %q", status.State)
@@ -89,10 +109,10 @@ func TestWireGuardSaveAppliesSettingsToTheAgent(t *testing.T) {
 	}
 	api.wireGuardRuntimeStatus(context.Background(), settings, true)
 
-	if len(service.applied) != 1 {
-		t.Fatalf("applied %d times; want 1", len(service.applied))
+	if len(service.appliedConfigs()) != 1 {
+		t.Fatalf("applied %d times; want 1", len(service.appliedConfigs()))
 	}
-	applied := service.applied[0]
+	applied := service.appliedConfigs()[0]
 	if applied.Address != "10.77.0.1/24" || applied.ListenPort != 51820 || !applied.Enabled {
 		t.Fatalf("configuration was not forwarded: %+v", applied)
 	}

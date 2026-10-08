@@ -1,24 +1,51 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useDeviceMetrics } from '../composables/useDeviceMetrics'
-import type { SystemMetricsSnapshot } from '../api/client'
-import {
-  acquireSystemMetrics,
-  releaseSystemMetrics
-} from '../state/systemMetrics'
+import type { DeviceCellular, DeviceMetrics, DeviceMetricsSource } from '../api/nodeFleet'
+import { deviceGroupLabels } from '../i18n/deviceGroupLabels'
 
-const props = defineProps<{ deviceId?: string }>()
-const { t } = useI18n()
-const deviceMetrics = useDeviceMetrics(() => props.deviceId)
+// The four metric tiles of ONE device.
+//
+// `source` is that device's own metrics object and the only thing read here:
+// the host module's snapshot, or one Node's resources. The strip used to pick
+// its own source from a device ID and poll for it; it is handed the object
+// now, so it cannot reach another device's figures, and the route is polled
+// once for every group (state/nodeFleet.ts) rather than once per strip.
+//
+// A reading the device did not send is drawn as "unknown", never as 0 and
+// never as a neighbour's value. A reading of 0 is drawn as 0.
+const props = defineProps<{ source: DeviceMetricsSource }>()
+const { t, locale } = useI18n()
+const labels = computed(() => deviceGroupLabels(String(locale.value)))
 
-onMounted(() => { acquireSystemMetrics() })
-onBeforeUnmount(() => { releaseSystemMetrics() })
+const current = computed<DeviceMetrics | null>(() => props.source.metrics)
+const history = computed(() => props.source.history)
+/** Why there are no tiles to fill, in the reader's words; '' when there are. */
+const gapText = computed(() => {
+  if (current.value || !props.source.gap) return ''
+  return props.source.error || labels.value.gaps[props.source.gap]
+})
+/**
+ * What an empty tile says first. "Not provided by this device" is kept for the
+ * cases where that is the fact; a read that is still under way, or failed, is
+ * not the device withholding anything and is worded as what it is.
+ */
+const absentHeading = computed(() => {
+  if (props.source.gap === 'loading') return labels.value.gaps.loading
+  if (props.source.gap === 'unavailable' || props.source.gap === '') return t('dashboard.metricsUnavailable')
+  return labels.value.notProvided
+})
+/** The four tiles' titles, for the layout a device without metrics keeps. */
+const absentTiles = computed(() => [
+  t('dashboard.metricsCpu'),
+  t('dashboard.metricsMemory'),
+  t('dashboard.metricsFlash'),
+  t('dashboard.metricsCellular')
+])
 
-const current = computed<SystemMetricsSnapshot | null>(() => deviceMetrics.value.metrics)
-const history = computed(() => deviceMetrics.value.history)
-
-function levelOf(percent: number): string {
+/** The tone of a percentage. An unknown one has none: green is a claim. */
+function levelOf(percent: number | null): string {
+  if (percent === null) return ''
   if (percent >= 90) return 'is-danger'
   if (percent >= 70) return 'is-warn'
   return 'is-ok'
@@ -39,7 +66,7 @@ const channelDown = computed(() => (
 // Single source of truth for "the banner is already explaining the state", so
 // the no-snapshot fallback below cannot repeat the same sentence underneath it.
 const channelBannerVisible = computed(() => (
-  channelDown.value || channelStale.value || !deviceMetrics.value.available
+  channelDown.value || channelStale.value || !props.source.available
 ))
 
 const CHART_W = 300
@@ -111,16 +138,21 @@ const txArea = computed(() => {
   return line ? `${line} ${CHART_W},${CHART_H} 0,${CHART_H}` : ''
 })
 
-function formatTemp(value: number | null): string {
-  return value === null || value === undefined ? '—' : `${value.toFixed(1)}°C`
+// Every formatter answers the "unknown" word for a reading that is absent and
+// formats a zero like any other number. That distinction used to be made the
+// other way round here (0 bytes drew a dash), which is right only for a
+// snapshot whose absent fields were coerced to 0 -- hostDeviceMetrics() now
+// undoes that coercion once, so these can be honest for every device.
+function formatTemp(value: number | null | undefined): string {
+  return value === null || value === undefined ? labels.value.unknown : `${value.toFixed(1)}°C`
 }
 
-function formatPercent(value: number | null): string {
-  return value === null || value === undefined ? '—' : `${Math.round(value)}%`
+function formatPercent(value: number | null | undefined): string {
+  return value === null || value === undefined ? labels.value.unknown : `${Math.round(value)}%`
 }
 
-function formatBytes(bytes: number): string {
-  if (!bytes) return '—'
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return labels.value.unknown
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let value = bytes
   let unit = 0
@@ -128,11 +160,11 @@ function formatBytes(bytes: number): string {
     value /= 1024
     unit += 1
   }
-  return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
+  return `${unit === 0 || value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
 }
 
-function formatRate(bytesPerSecond: number | null): string {
-  if (bytesPerSecond == null) return '—'
+function formatRate(bytesPerSecond: number | null | undefined): string {
+  if (bytesPerSecond === null || bytesPerSecond === undefined) return labels.value.unknown
   if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`
   if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`
   return `${Math.round(bytesPerSecond)} B/s`
@@ -183,21 +215,30 @@ const loadAvg1 = computed(() => windowAverageUtilization(60_000))
 const loadAvg5 = computed(() => windowAverageUtilization(300_000))
 const loadAvg15 = computed(() => windowAverageUtilization(900_000))
 
-const rateMaxYLabel = computed(() => formatRate(rateMax.value))
-const rateMidYLabel = computed(() => formatRate(rateMax.value / 2))
+// The axis is labelled only when there is a rate to scale it by. Without one
+// the scale is a placeholder, and "1 B/s" at the top of an empty chart reads
+// as a measurement of an idle link.
+const hasRates = computed(() =>
+  history.value.some(sample => typeof sample.rxRate === 'number' || typeof sample.txRate === 'number')
+)
+const rateMaxYLabel = computed(() => (hasRates.value ? formatRate(rateMax.value) : ''))
+const rateMidYLabel = computed(() => (hasRates.value ? formatRate(rateMax.value / 2) : ''))
 
 const cpuMeta = computed(() => {
   const snapshot = current.value
   if (!snapshot) return ''
   const parts: string[] = []
   if (snapshot.cpu_model_name) parts.push(snapshot.cpu_model_name.replace(/\s+/g, ' '))
-  if (snapshot.cores) parts.push(`${snapshot.cores} ${t('dashboard.metricsCoresUnit')}`)
-  if (snapshot.process_count) parts.push(`${snapshot.process_count} ${t('dashboard.metricsProcesses')}`)
-  if (snapshot.thread_count) parts.push(`${snapshot.thread_count} ${t('dashboard.metricsThreadsUnit')}`)
+  if (snapshot.cores !== null) parts.push(`${snapshot.cores} ${t('dashboard.metricsCoresUnit')}`)
+  if (snapshot.process_count !== null) parts.push(`${snapshot.process_count} ${t('dashboard.metricsProcesses')}`)
+  if (snapshot.thread_count !== null) parts.push(`${snapshot.thread_count} ${t('dashboard.metricsThreadsUnit')}`)
   return parts.join(' | ')
 })
 
-const memMeta = computed(() => formatBytes(current.value?.memory_total_bytes ?? 0))
+const memMeta = computed(() => {
+  const total = current.value?.memory_total_bytes
+  return total === null || total === undefined ? '' : formatBytes(total)
+})
 
 const flashMeta = computed(() => {
   const snapshot = current.value
@@ -209,8 +250,10 @@ const flashMeta = computed(() => {
 
 const cellular = computed(() => current.value?.cellular ?? null)
 
-function bandLabel(cell: NonNullable<SystemMetricsSnapshot['cellular']> | null): string {
-  if (!cell || !cell.band) return '—'
+function bandLabel(cell: DeviceCellular | null): string {
+  if (!cell || !cell.band) return labels.value.unknown
+  // A Node names the band itself ("B3"); the host module sends the number.
+  if (/^[A-Za-z]/.test(cell.band)) return cell.band
   const rat = (cell.rat || '').toUpperCase()
   if (rat.startsWith('NR')) return `n${cell.band}`
   return `B${cell.band}`
@@ -218,40 +261,46 @@ function bandLabel(cell: NonNullable<SystemMetricsSnapshot['cellular']> | null):
 
 const cellularMeta = computed(() => {
   const cell = cellular.value
-  if (!cell) return t('dashboard.metricsUnavailable')
+  if (!cell) return labels.value.unknown
   const parts: string[] = []
   if (cell.plmn) parts.push(cell.plmn)
   const rat = (cell.rat || '').toUpperCase()
   if (rat) parts.push(rat)
-  const band = bandLabel(cell)
-  if (band !== '—') parts.push(band)
-  if (typeof cell.rsrp === 'number' && cell.rsrp !== 0) parts.push(`${cell.rsrp} dBm`)
-  return parts.join(' · ') || t('dashboard.metricsUnavailable')
+  if (cell.band) parts.push(bandLabel(cell))
+  if (cell.rsrp !== null) parts.push(`${cell.rsrp} dBm`)
+  return parts.join(' · ') || labels.value.unknown
 })
 
 const sinrValue = computed(() => {
   const value = cellular.value?.sinr
-  return typeof value === 'number' && value !== 0 ? `${value.toFixed(1)} dB` : '—'
+  return typeof value === 'number' ? `${value.toFixed(1)} dB` : labels.value.unknown
 })
 
+/** Used memory, or null when either half of the pair is unknown. */
 const usedBytes = computed(() => {
   const snapshot = current.value
-  if (!snapshot || !snapshot.memory_total_bytes) return 0
+  if (!snapshot || snapshot.memory_total_bytes === null || snapshot.memory_available_bytes === null) {
+    return null
+  }
   return Math.max(0, snapshot.memory_total_bytes - snapshot.memory_available_bytes)
 })
 
 const memSegments = computed(() => {
   const snapshot = current.value
-  if (!snapshot || !snapshot.memory_total_bytes) return null
-  const total = snapshot.memory_total_bytes
   const used = usedBytes.value
-  const cached = Math.min(snapshot.memory_cached_bytes ?? 0, used)
-  const buffers = Math.min(snapshot.memory_buffers_bytes ?? 0, used - cached)
+  if (!snapshot || snapshot.memory_total_bytes === null || used === null) return null
+  const total = snapshot.memory_total_bytes
+  // Cached and buffers are separate readings and either may be missing. A
+  // missing one takes no width in the bar and reads "unknown" in the legend;
+  // it is not drawn as an empty segment, which would say "none".
+  const cached = snapshot.memory_cached_bytes === null ? null : Math.min(snapshot.memory_cached_bytes, used)
+  const buffers =
+    snapshot.memory_buffers_bytes === null ? null : Math.min(snapshot.memory_buffers_bytes, used - (cached ?? 0))
   const free = Math.max(0, total - used)
   return {
     usedPct: (used / total) * 100,
-    cachedPct: (cached / total) * 100,
-    buffersPct: (buffers / total) * 100,
+    cachedPct: ((cached ?? 0) / total) * 100,
+    buffersPct: ((buffers ?? 0) / total) * 100,
     freePct: (free / total) * 100,
     used, cached, buffers, free
   }
@@ -259,7 +308,7 @@ const memSegments = computed(() => {
 
 const flashUsedBytes = computed(() => {
   const snapshot = current.value
-  if (!snapshot || !snapshot.flash_total_bytes) return 0
+  if (!snapshot || snapshot.flash_total_bytes === null || snapshot.flash_free_bytes === null) return null
   return Math.max(0, snapshot.flash_total_bytes - snapshot.flash_free_bytes)
 })
 </script>
@@ -269,13 +318,14 @@ const flashUsedBytes = computed(() => {
        module channel must not collapse the dashboard layout. Values freeze at
        the last good sample and the banner explains why they stopped moving. -->
   <p
-    v-if="channelBannerVisible"
+    v-if="current && channelBannerVisible"
     class="tm__channel tm__channel--stale"
+    role="status"
   >{{ channelDown
     ? t('dashboard.metricsChannelDown')
     : channelStale
       ? t('dashboard.metricsChannelStale')
-      : (deviceMetrics.error || t('dashboard.metricsUnavailable')) }}</p>
+      : (source.error || labels.metricsFrozen) }}</p>
   <div v-if="current" class="tm">
 
     <article class="tm-box">
@@ -308,7 +358,7 @@ const flashUsedBytes = computed(() => {
       <div class="tm-stats">
         <div class="tm-stat tm-stat--blue">
           <span class="tm-stat__label">{{ t('dashboard.metricsUtilized') }}</span>
-          <b class="tm-stat__value" :class="levelOf(cpuValue ?? 0)">{{ formatPercent(cpuValue) }}</b>
+          <b class="tm-stat__value" :class="levelOf(cpuValue)">{{ formatPercent(cpuValue) }}</b>
         </div>
         <div class="tm-stat tm-stat--orange">
           <span class="tm-stat__label">{{ t('dashboard.metricsCpuTemp') }}</span>
@@ -359,7 +409,7 @@ const flashUsedBytes = computed(() => {
       <div class="tm-stats">
         <div class="tm-stat tm-stat--blue">
           <span class="tm-stat__label">{{ t('dashboard.metricsUtilized') }}</span>
-          <b class="tm-stat__value" :class="levelOf(memValue ?? 0)">{{ formatPercent(memValue) }}</b>
+          <b class="tm-stat__value" :class="levelOf(memValue)">{{ formatPercent(memValue) }}</b>
         </div>
         <div class="tm-stat tm-stat--purple">
           <span class="tm-stat__label">{{ t('dashboard.metricsCapacity') }}</span>
@@ -390,12 +440,12 @@ const flashUsedBytes = computed(() => {
             :stroke-dasharray="`${(Math.min(100, Math.max(0, flashValue ?? 0)) / 100) * 251.33} 251.33`"
           />
         </svg>
-        <span class="tm-ring__label" :class="levelOf(flashValue ?? 0)">{{ formatPercent(flashValue) }}</span>
+        <span class="tm-ring__label" :class="levelOf(flashValue)">{{ formatPercent(flashValue) }}</span>
       </div>
       <div class="tm-stats">
         <div class="tm-stat tm-stat--blue">
           <span class="tm-stat__label">{{ t('dashboard.metricsUtilized') }}</span>
-          <b class="tm-stat__value" :class="levelOf(flashValue ?? 0)">{{ formatPercent(flashValue) }}</b>
+          <b class="tm-stat__value" :class="levelOf(flashValue)">{{ formatPercent(flashValue) }}</b>
         </div>
         <div class="tm-stat tm-stat--purple">
           <span class="tm-stat__label">{{ t('dashboard.metricsCapacity') }}</span>
@@ -418,7 +468,7 @@ const flashUsedBytes = computed(() => {
         <span class="tm-box__meta">{{ cellularMeta }}</span>
       </header>
       <div class="tm-chart">
-        <div class="tm-chart__y"><span>{{ rateMaxYLabel }}</span><span>{{ rateMidYLabel }}</span><span>0</span></div>
+        <div class="tm-chart__y"><span>{{ rateMaxYLabel }}</span><span>{{ rateMidYLabel }}</span><span>{{ hasRates ? '0' : '' }}</span></div>
         <div class="tm-chart__plot">
           <div class="tm-chart__grid"><i v-for="n in 4" :key="n" /></div>
           <svg class="tm-chart__svg" :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none">
@@ -463,10 +513,21 @@ const flashUsedBytes = computed(() => {
       </div>
     </article>
   </div>
-  <!-- With no snapshot to show, the banner above is already saying why. Only
-       add a line here when there is no banner, otherwise the same sentence is
-       printed twice, stacked. -->
-  <p v-else-if="!channelBannerVisible" class="tm__loading">{{ t('dashboard.metricsUnavailable') }}</p>
+  <!-- No metrics for this device: the four tiles stay, each saying so and why.
+       A group without them would be a different template from the one beside
+       it, and an empty space reads as "nothing to report" rather than "not
+       reported". -->
+  <div v-else class="tm tm--absent">
+    <article v-for="title in absentTiles" :key="title" class="tm-box tm-box--absent">
+      <header class="tm-box__head">
+        <span class="tm-box__title">{{ title }}</span>
+      </header>
+      <p class="tm-box__absent">
+        <strong>{{ absentHeading }}</strong>
+        <span v-if="gapText && gapText !== absentHeading">{{ gapText }}</span>
+      </p>
+    </article>
+  </div>
 </template>
 
 <style scoped>
@@ -480,10 +541,23 @@ const flashUsedBytes = computed(() => {
   margin-bottom: 12px;
 }
 
-.tm__loading {
-  margin: 0 0 12px;
-  font-size: 12px;
+.tm-box__absent {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: center;
+  gap: 6px;
+  min-height: 96px;
+  margin: 0;
   color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.tm-box__absent strong {
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .tm__channel {

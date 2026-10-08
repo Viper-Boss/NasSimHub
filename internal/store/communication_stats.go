@@ -44,6 +44,19 @@ const futureTolerance = time.Hour
 
 type communicationLineScopeKey struct{}
 
+type communicationNodeScopeKey struct{}
+
+// CommunicationStatsForNode counts only what went through one NasSimHub Node.
+// Rows carry the Node they belong to, so two devices never share a figure and
+// a device's count does not include the NAS's own modem.
+func (s *Store) CommunicationStatsForNode(ctx context.Context, now time.Time, hours int, nodeID string) (CommunicationStats, error) {
+	nodeID = strings.TrimSpace(nodeID)
+	if nodeID == "" {
+		return CommunicationStats{}, fmt.Errorf("communication stats: a node is required")
+	}
+	return s.CommunicationStats(context.WithValue(ctx, communicationNodeScopeKey{}, nodeID), now, hours)
+}
+
 func (s *Store) CommunicationStatsForLine(ctx context.Context, now time.Time, hours int, lineID string) (CommunicationStats, error) {
 	return s.CommunicationStats(context.WithValue(ctx, communicationLineScopeKey{}, strings.TrimSpace(lineID)), now, hours)
 }
@@ -127,6 +140,10 @@ func (s *Store) countMessages(
 		statement += " AND line_id = ?"
 		arguments = append(arguments, lineID)
 	}
+	if nodeID, _ := ctx.Value(communicationNodeScopeKey{}).(string); nodeID != "" {
+		statement += " AND node_id = ?"
+		arguments = append(arguments, nodeID)
+	}
 	if condition, values, scoped := principalLineScope(ctx, "line_id"); scoped {
 		statement += " AND " + condition
 		arguments = append(arguments, values...)
@@ -194,6 +211,10 @@ func (s *Store) countCalls(
 	if lineID, _ := ctx.Value(communicationLineScopeKey{}).(string); lineID != "" {
 		statement += " AND line_id = ?"
 		arguments = append(arguments, lineID)
+	}
+	if nodeID, _ := ctx.Value(communicationNodeScopeKey{}).(string); nodeID != "" {
+		statement += " AND node_id = ?"
+		arguments = append(arguments, nodeID)
 	}
 	if condition, values, scoped := principalLineScope(ctx, "line_id"); scoped {
 		statement += " AND " + condition

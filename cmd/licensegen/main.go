@@ -56,6 +56,8 @@ func main() {
 		err = features()
 	case "release-sign":
 		err = releaseSign(os.Args[2:])
+	case "release-pq-keygen":
+		err = releasePQKeygen(os.Args[2:])
 	case "report-request":
 		err = reportRequest(os.Args[2:])
 	case "-h", "--help", "help":
@@ -83,6 +85,10 @@ func usage() {
            -api sha256:... -web sha256:... -hardware sha256:...
            -updater sha256:... [-out release.signed.json]
                                             sign a release manifest
+           [-pq-key <file> -pq-out release.signed.pq.json]
+                                            also write the dual-signed
+                                            (Ed25519 + ML-DSA-87) manifest
+  release-pq-keygen -out <file>             create the ML-DSA-87 release key
   report-request -key <file> -machine <id>  sign a client-report request
 
 The key file holds the private key. Keep it off any machine a customer can

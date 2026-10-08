@@ -312,10 +312,14 @@ test('desktop shell has one permanent dialer and dashboard renders each attached
     dashboard,
     /const moduleLines = computed\(\(\) => presentModuleLines\(lines\.value, devicesResource\.data\)\)/
   )
-  assert.match(dashboard, /v-for="line in moduleLines\.filter/)
+  // One group per device that is present, all drawn by one loop; the list is
+  // built from the present module lines and the gateway's node list
+  // (dashboard-device-groups.test.mjs holds the behaviour).
+  assert.match(dashboard, /dashboardDevices\(\{\s*lines: moduleLines\.value,/)
+  assert.match(dashboard, /v-for="group in deviceGroups"/)
   assert.match(dashboard, /dashboard-device-group--node/)
   assert.match(dashboard, /dashboard-device-group--global/)
-  assert.match(dashboard, /<SystemMetricsStrip :device-id="line.device_imei"/)
+  assert.match(dashboard, /<SystemMetricsStrip :source="group\.source"/)
   assert.doesNotMatch(dashboard, /moduleLines(?:\.value)?\.slice/)
   assert.match(dialer, /<LineSelector/)
   assert.match(dialer, /:lines="lines"/)

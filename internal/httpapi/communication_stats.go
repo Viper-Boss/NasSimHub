@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/human-agent65535/modemdeck/internal/store"
@@ -71,6 +72,21 @@ func (api *API) communicationStats(response http.ResponseWriter, request *http.R
 			return
 		}
 		stats, err = scoped.CommunicationStatsForLine(request.Context(), time.Now(), communicationStatsWindow, lineID)
+	}
+	if nodeID := strings.TrimSpace(request.URL.Query().Get("node_id")); nodeID != "" {
+		// One device's own figures. Administrators only: a member's view is
+		// scoped by line, and a Node is not a line.
+		if !api.requireAdmin(response, request) {
+			return
+		}
+		scoped, ok := api.repository.(interface {
+			CommunicationStatsForNode(context.Context, time.Time, int, string) (store.CommunicationStats, error)
+		})
+		if !ok {
+			writeError(response, http.StatusServiceUnavailable, "stats_unavailable", "Per-device statistics are unavailable", "")
+			return
+		}
+		stats, err = scoped.CommunicationStatsForNode(request.Context(), time.Now(), communicationStatsWindow, nodeID)
 	}
 	if err != nil {
 		api.logger.Error("communication stats failed", "error", err)

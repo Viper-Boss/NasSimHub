@@ -49,10 +49,19 @@ export function formatDateTime(value: string): string {
   }).format(date)
 }
 
+/**
+ * A length in SECONDS as the lists show it: "32 sec" below a minute, then
+ * m:ss, then h:mm:ss. The hour is carried so a long recording does not read
+ * as "1439:59", and seconds are never dropped or relabelled as minutes.
+ */
 export function formatDuration(seconds: number): string {
   const safe = Math.max(0, Math.floor(seconds))
-  const minutes = Math.floor(safe / 60)
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
   const remainder = safe % 60
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+  }
   return minutes > 0
     ? `${minutes}:${String(remainder).padStart(2, '0')}`
     : translate('common.durationSeconds', { count: remainder })

@@ -549,8 +549,28 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.postOnly(response, request, api.nassimhubPair)
 	case "/api/v1/nodes/unpair":
 		api.postOnly(response, request, api.nassimhubUnpair)
+	case "/api/v1/nodes/admin":
+		api.postOnly(response, request, api.nassimhubLocalManagement)
 	case "/api/v1/nodes/refresh":
 		api.postOnly(response, request, api.nassimhubRefresh)
+	case "/api/v1/nodes/pq-pin/reset":
+		api.postOnly(response, request, api.nassimhubResetPQPin)
+	case "/api/v1/nodes/updates":
+		api.getOnly(response, request, api.nassimhubNodeUpdates)
+	case "/api/v1/nodes/updates/manifest":
+		api.postOnly(response, request, api.nassimhubNodeUpdateManifest)
+	case "/api/v1/nodes/updates/artifact":
+		api.postOnly(response, request, api.nassimhubNodeUpdateArtifact)
+	case "/api/v1/nodes/updates/remove":
+		api.postOnly(response, request, api.nassimhubNodeUpdateRemove)
+	case "/api/v1/nodes/updates/push":
+		api.postOnly(response, request, api.nassimhubNodeUpdatePush)
+	case "/api/v1/nodes/updates/apply":
+		api.postOnly(response, request, api.nassimhubNodeUpdateApply)
+	case "/api/v1/nodes/updates/confirm":
+		api.postOnly(response, request, api.nassimhubNodeUpdateConfirm)
+	case "/api/v1/nodes/updates/rollback":
+		api.postOnly(response, request, api.nassimhubNodeUpdateRollback)
 	case "/api/v1/mobile/session":
 		api.getOnly(response, request, api.mobileSession)
 	case "/api/v1/bootstrap":
@@ -661,6 +681,20 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.getOnly(response, request, api.moduleSecurity)
 	case "/api/v1/security/posture":
 		api.getOnly(response, request, api.securityPosture)
+	case "/api/v1/security/trust":
+		api.getOnly(response, request, api.securityTrust)
+	case "/api/v1/security/trust/restrict":
+		api.postOnly(response, request, api.securityTrustRestrict)
+	case "/api/v1/security/trust/quarantine":
+		api.postOnly(response, request, api.securityTrustQuarantine)
+	case "/api/v1/security/trust/restore":
+		api.postOnly(response, request, api.securityTrustRestore)
+	case "/api/v1/security/journal":
+		api.getOnly(response, request, api.securityJournal)
+	case "/api/v1/security/journal/verify":
+		api.postOnly(response, request, api.securityJournalVerify)
+	case "/api/v1/security/journal/reseal":
+		api.postOnly(response, request, api.securityJournalReseal)
 	case "/api/v1/stats/communication":
 		api.getOnly(response, request, api.communicationStats)
 	case "/api/v1/recordings":
@@ -779,6 +813,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		}
 		if imei, ok := deviceResourceIMEI(request.URL.Path); ok {
 			api.deviceResource(response, request, imei)
+			return
+		}
+		if lineID, ok := ownNumberResourceID(request.URL.EscapedPath()); ok {
+			api.ownNumberResource(response, request, lineID)
 			return
 		}
 		if lineID, ok := lineLabelResourceID(request.URL.EscapedPath()); ok {

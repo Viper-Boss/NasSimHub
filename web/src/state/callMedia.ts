@@ -1,3 +1,4 @@
+import { createRemoteTestTone } from './callTone'
 import { reactive, watch } from 'vue'
 import { fixtureCallMediaPreview, gateway } from '../api/client'
 import type { CallMediaICEConfiguration, CallSession } from '../api/types'
@@ -39,12 +40,20 @@ export const callMediaState = reactive<{
   error: string
   muted: boolean
   playbackBlocked: boolean
+  inputLevel: number
+  inputDevice: string
+  inputRunning: boolean
+  testTonePlaying: boolean
 }>({
   callID: '',
   status: 'idle',
   error: '',
   muted: false,
-  playbackBlocked: false
+  playbackBlocked: false,
+  inputLevel: 0,
+  inputDevice: '',
+  inputRunning: false,
+  testTonePlaying: false
 })
 
 let generation = 0
@@ -82,6 +91,9 @@ type MicrophonePipeline = {
   limiter: DynamicsCompressorNode
   destination: MediaStreamAudioDestinationNode
   track: MediaStreamTrack
+  meter: AnalyserNode
+  meterTimer: number
+  cancelTone?: () => void
 }
 
 let microphonePipeline: MicrophonePipeline | undefined
@@ -99,6 +111,9 @@ function clearRestartWindow(): void {
 }
 
 function stopMicrophonePipeline(pipeline: MicrophonePipeline): void {
+  pipeline.cancelTone?.()
+  window.clearInterval(pipeline.meterTimer)
+  pipeline.meter.disconnect()
   for (const track of pipeline.capture.getTracks()) track.stop()
   for (const track of pipeline.destination.stream.getTracks()) track.stop()
   pipeline.source.disconnect()
@@ -130,7 +145,21 @@ async function createMicrophonePipeline(
     const track = destination.stream.getAudioTracks()[0]
     if (!track) throw new Error(translate('runtime.microphoneTrackMissing'))
 
-    return { capture, context, source, gain, limiter, destination, track }
+    // This measures the exact signal sent to WebRTC, never a separate test stream.
+    const meter = context.createAnalyser()
+    meter.fftSize = 1024
+    limiter.connect(meter)
+    const samples = new Float32Array(meter.fftSize)
+    const meterTimer = window.setInterval(() => {
+      if (microphonePipeline?.context !== context) return
+      meter.getFloatTimeDomainData(samples)
+      let peak = 0
+      for (const sample of samples) peak = Math.max(peak, Math.abs(sample))
+      callMediaState.inputLevel = callMediaState.muted ? 0 : Math.min(100, Math.round(peak * 100))
+      callMediaState.inputRunning = context.state === 'running' && track.enabled
+      callMediaState.inputDevice = capture.getAudioTracks()[0]?.label || ''
+    }, 100)
+    return { capture, context, source, gain, limiter, destination, track, meter, meterTimer }
   } catch (error) {
     for (const track of capture.getTracks()) track.stop()
     void context.close()
@@ -180,6 +209,10 @@ function stopResources(): void {
     remoteAudio.remove()
     remoteAudio = undefined
   }
+  callMediaState.inputLevel = 0
+  callMediaState.inputRunning = false
+  callMediaState.inputDevice = ''
+  callMediaState.testTonePlaying = false
   markAudioInputInactive()
   markAudioOutputInactive()
 }
@@ -780,3 +813,23 @@ watch(
     if (peer && localStream && currentCallID) queueCallInputReplacement(deviceID)
   }
 )
+
+// An explicit, bounded diagnostic signal goes only to the remote call. It is
+// never connected to the local speakers and does not change microphone gain.
+export async function sendCallTestTone(): Promise<void> {
+  const pipeline = microphonePipeline
+  if (!pipeline || callMediaState.status !== 'active' || callMediaState.muted || callMediaState.testTonePlaying) return
+  callMediaState.testTonePlaying = true
+  try {
+    await pipeline.context.resume()
+    if (microphonePipeline !== pipeline) return
+    const tone = createRemoteTestTone(pipeline.context, pipeline.destination)
+    pipeline.cancelTone = tone.cancel
+    await tone.done
+    pipeline.cancelTone = undefined
+  } catch (error) {
+    if (microphonePipeline === pipeline) callMediaState.error = mediaError(error)
+  } finally {
+    if (microphonePipeline === pipeline) callMediaState.testTonePlaying = false
+  }
+}

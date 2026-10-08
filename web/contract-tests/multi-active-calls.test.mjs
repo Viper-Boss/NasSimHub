@@ -5,6 +5,8 @@ import test from 'node:test'
 import { gateway } from '../src/api/client.ts'
 import {
   callState,
+  acceptRuntimeActiveCalls,
+  reconcileCallHeartbeat,
   dial,
   initializeCallRuntime,
   lineIsOccupied,
@@ -14,6 +16,9 @@ import {
   shutdownCallRuntime
 } from '../src/state/call.ts'
 import { bootstrapResource } from '../src/state/workspace.ts'
+import { openDialer, resetUIState, uiState } from '../src/state/ui.ts'
+import { i18n } from '../src/i18n/index.ts'
+import { loadComponent, render, textOf } from './support/render-sfc.mjs'
 
 function call(overrides) {
   return {
@@ -254,3 +259,155 @@ test('dialer keeps reservations as line status without making them call surfaces
   assert.match(lineIdentity, /<em v-if="status">\{\{ status \}\}<\/em>/)
   assert.match(lineIdentity, /\.line-identity__copy small > em \{[\s\S]*color: var\(--danger\);/)
 })
+
+
+test('successful dial expands the call even when the same call was already visible as occupied', async () => {
+  const originalBootstrap = bootstrapResource.data
+  const originalStatus = bootstrapResource.status
+  const originalStartCall = gateway.startCall
+  const originalRenew = gateway.renewCallLease
+  const outgoing = call({ id: 'call-owned-transition', line_id: 'line-voice', direction: 'outgoing', phase: 'dialing', control_state: 'owned' })
+  let starts = 0
+  bootstrapResource.data = { capabilities: { agent_connected: true, dial: true, webrtc_audio: true }, lines: [{ id: 'line-voice', line_label: '', device_name: 'fixture stick', phone_number: '', capabilities: { dial: true, media: true } }], line_catalog: [] }
+  bootstrapResource.status = 'ready'
+  gateway.renewCallLease = async () => outgoing
+  gateway.startCall = async () => { starts++; return outgoing }
+  callState.session = { ...outgoing, control_state: 'occupied' }
+  callState.sessions = []
+  openDialer('10000', '', 'line-voice')
+  assert.equal(uiState.callMinimized, true)
+  try {
+    assert.equal(await dial('10000', 'line-voice'), true, callState.error)
+    assert.equal(starts, 1)
+    assert.equal(callState.session?.control_state, 'owned')
+    assert.equal(uiState.callMinimized, false)
+    assert.equal(uiState.dialerOpen, false)
+  } finally {
+    shutdownCallRuntime()
+    resetUIState()
+    gateway.startCall = originalStartCall
+    gateway.renewCallLease = originalRenew
+    bootstrapResource.data = originalBootstrap
+    bootstrapResource.status = originalStatus
+  }
+})
+
+
+test('pending dial shows the existing call surface before the request resolves, then returns to the draft on failure', async () => {
+  const originalBootstrap = bootstrapResource.data
+  const originalStartCall = gateway.startCall
+  const originalSnapshot = gateway.getActiveCallSnapshot
+  let rejectStart
+  let starts = 0
+  const voiceLine = { id: 'line-voice-pending', line_label: '', device_name: 'fixture stick', phone_number: '', capabilities: { dial: true, media: true } }
+  shutdownCallRuntime()
+  bootstrapResource.data = { capabilities: { agent_connected: true, dial: true, webrtc_audio: true }, lines: [voiceLine], line_catalog: [] }
+  gateway.getActiveCallSnapshot = async () => ({ calls: [], reservations: [] })
+  gateway.startCall = () => { starts++; return new Promise((_, reject) => { rejectStart = reject }) }
+  openDialer('10000', '', voiceLine.id)
+  const operation = dial('10000', voiceLine.id)
+  try {
+    assert.equal(starts, 1)
+    assert.deepEqual(callState.pendingDial, { number: '10000', lineID: voiceLine.id })
+    assert.equal(callState.session, null, 'the pending request invents no call')
+    assert.equal(callState.owned, false)
+    assert.equal(uiState.callMinimized, false)
+    const Surface = await loadComponent('components/CallSurface.vue')
+    const html = await render(Surface, {}, [i18n])
+    const text = textOf(html)
+    assert.ok(text.includes('10000'))
+    assert.ok(text.includes(i18n.global.t('calls.dialing')))
+    assert.ok(text.includes('fixture stick'))
+    assert.match(html, /aria-busy="true"/)
+    assert.ok(!text.includes(i18n.global.t('calls.inCall')))
+    rejectStart(new Error('fixture call refused'))
+    assert.equal(await operation, false)
+    assert.equal(callState.pendingDial, null)
+    assert.equal(uiState.dialerOpen, true)
+    assert.equal(uiState.dialTarget, '10000', 'failed dialing retains the draft')
+    assert.equal(callState.error, 'fixture call refused')
+    assert.equal(starts, 1, 'no automatic redial')
+  } finally {
+    rejectStart?.(new Error('test cleanup'))
+    await operation
+    shutdownCallRuntime()
+    resetUIState()
+    gateway.startCall = originalStartCall
+    gateway.getActiveCallSnapshot = originalSnapshot
+    bootstrapResource.data = originalBootstrap
+  }
+})
+
+
+for (const lineID of ['line-host', 'nsh:NSH-410-TEST01']) {
+  test(`remote hangup during a pending dial is reconciled after the receipt: ${lineID}`, async () => {
+    const originalBootstrap = bootstrapResource.data
+    const originalStart = gateway.startCall
+    const originalSnapshot = gateway.getActiveCallSnapshot
+    const originalRenew = gateway.renewCallLease
+    const outgoing = call({ id: 'call-terminal-race', line_id: lineID, direction: 'outgoing', phase: 'ringing', control_state: 'owned' })
+    let releaseStart
+    let reads = 0
+    let starts = 0
+    let snapshot = { calls: [], reservations: [] }
+    shutdownCallRuntime()
+    bootstrapResource.data = { capabilities: { dial: true, webrtc_audio: true }, lines: [{ id: lineID, capabilities: { dial: true, media: true } }], line_catalog: [] }
+    gateway.getActiveCallSnapshot = async () => { reads++; return snapshot }
+    gateway.renewCallLease = async () => ({ call_id: outgoing.id })
+    gateway.startCall = () => { starts++; return new Promise(resolve => { releaseStart = resolve }) }
+    try {
+      initializeCallRuntime()
+      await requestActiveCallRefresh()
+      const baselineReads = reads
+      const operation = dial('10000', lineID)
+      assert.equal(callState.busy, true)
+      // The server emitted the terminal state BEFORE its dial reply arrived.
+      acceptRuntimeActiveCalls({ calls: [], reservations: [] })
+      releaseStart(outgoing)
+      assert.equal(await operation, true)
+      assert.equal(callState.session, null, 'a stale dial receipt resurrected the ended call')
+      assert.equal(callState.owned, false)
+      assert.ok(reads > baselineReads, 'the deferred runtime event was forgotten')
+      assert.equal(starts, 1)
+    } finally {
+      shutdownCallRuntime()
+      resetUIState()
+      gateway.startCall = originalStart
+      gateway.getActiveCallSnapshot = originalSnapshot
+      gateway.renewCallLease = originalRenew
+      bootstrapResource.data = originalBootstrap
+    }
+  })
+}
+
+
+for (const lineID of ['line-host', 'nsh:NSH-410-TEST01']) {
+  test(`call heartbeat clears a remote hangup even when no terminal SSE arrives: ${lineID}`, async () => {
+    const originalSnapshot = gateway.getActiveCallSnapshot
+    const originalRenew = gateway.renewCallLease
+    let reads = 0
+    let snapshot = { calls: [call({ id: 'call-lost-event', line_id: lineID, phase: 'active', direction: 'outgoing', control_state: 'owned' })], reservations: [] }
+    shutdownCallRuntime()
+    gateway.getActiveCallSnapshot = async () => { reads++; return snapshot }
+    gateway.renewCallLease = async () => ({ call_id: 'call-lost-event' })
+    try {
+      initializeCallRuntime()
+      await requestActiveCallRefresh()
+      assert.equal(callState.session?.phase, 'active')
+      snapshot = { calls: [], reservations: [] }
+      const before = reads
+      await reconcileCallHeartbeat()
+      assert.ok(reads > before)
+      assert.equal(callState.session, null)
+      assert.equal(callState.owned, false)
+      const after = reads
+      await reconcileCallHeartbeat()
+      assert.equal(reads, after, 'idle heartbeats must not poll calls')
+    } finally {
+      shutdownCallRuntime()
+      resetUIState()
+      gateway.getActiveCallSnapshot = originalSnapshot
+      gateway.renewCallLease = originalRenew
+    }
+  })
+}

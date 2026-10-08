@@ -34,7 +34,10 @@ test('dialing and messages resolve context, contact, and global default lines', 
   assert.match(workspace, /return line\.id\.trim\(\)/)
   assert.doesNotMatch(workspace, /return line\.id \|\| line\.iccid/)
 
-  assert.match(dialer, /resolveLine\('dial'/)
+  // Both drafts resolve through the shared selection's resolver, which keeps
+  // resolveLine()'s order and ends at the one selected line
+  // (stable-line-selection.test.mjs holds the behaviour).
+  assert.match(dialer, /resolveLineChoice\('dial'/)
   assert.match(dialer, /contextKey: draftContextLineKey\.value/)
   assert.match(dialer, /preferredLineID: selectedContactPreferredLineID\.value/)
   assert.match(dialer, /lineSelectionOverridden/)
@@ -45,7 +48,7 @@ test('dialing and messages resolve context, contact, and global default lines', 
   assert.match(dialer, /lines\.value\.filter\(lineCanPlaceVoiceCall\)/)
   assert.doesNotMatch(dialer, /lines\.length === 1/)
 
-  assert.match(messages, /resolveLine\('message'/)
+  assert.match(messages, /resolveLineChoice\('message'/)
   assert.match(messages, /contextKey: composeContextLineKey\.value/)
   assert.match(messages, /preferredLineID: selectedRecipientPreferredLineID\.value/)
   assert.match(messages, /threadUsesLine\(thread, line\)/)
@@ -232,7 +235,7 @@ test('call rows reuse one selectable surface without a trailing callback button'
 test('call timer is excluded from live announcements', async () => {
   const surface = await source('../src/components/CallSurface.vue')
 
-  assert.match(surface, /<section v-if="session" class="call-surface">/)
+  assert.match(surface, /<section v-if="session \|\| pendingDial" class="call-surface"/)
   assert.match(surface, /<span role="status" aria-live="polite" aria-atomic="true">/)
   assert.match(surface, /<strong v-if="duration" aria-live="off">\{\{ duration \}\}<\/strong>/)
   assert.doesNotMatch(surface, /class="call-surface" aria-live=/)

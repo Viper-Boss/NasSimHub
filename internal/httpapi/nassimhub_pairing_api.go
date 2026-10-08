@@ -152,6 +152,8 @@ func writeNodeError(api *API, w http.ResponseWriter, r *http.Request, operation 
 		{nassimhubnode.ErrOwnedElsewhere, http.StatusConflict, "owned_elsewhere", "The device is paired with another NAS. Release it there first."},
 		{nassimhubnode.ErrIncompatible, http.StatusConflict, "incompatible", "The device software is not compatible with this NAS version."},
 		{nassimhubnode.ErrPairingNotConfirmed, http.StatusBadGateway, "not_confirmed", "The device did not confirm the pairing."},
+		{nassimhubnode.ErrNodeNeedsPQ, http.StatusConflict, "pq_identity_required", "This NAS's security level requires a post-quantum device identity that the device does not have."},
+		{nassimhubnode.ErrNodeDemandsPQ, http.StatusConflict, "core_pq_required", "The device requires a post-quantum identity from this NAS. Set the NAS security level to PQ or PQ_EXTREME."},
 		{nassimhubnode.ErrNodeUnavailable, http.StatusBadGateway, "node_unreachable", "The device is not reachable."},
 		{nassimhubnode.ErrUnknownNode, http.StatusNotFound, "node_not_found", "The device is not paired with this NAS."},
 	} {

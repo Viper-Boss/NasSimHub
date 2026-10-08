@@ -16,8 +16,9 @@ export interface SystemMetricsSample {
   cpuUsage: number
   mem: number
   flash: number
-  rxRate: number
-  txRate?: number
+  /** Null until two samples of the same interface exist to take a rate from. */
+  rxRate: number | null
+  txRate?: number | null
   /** Epoch millis when the sample was taken; used to expire restored history. */
   at?: number
 }
@@ -93,8 +94,11 @@ async function poll(): Promise<void> {
       return
     }
     const iface = modemInterface(snapshot)
-    let rxRate = 0
-    let txRate = 0
+    // No rate until there is an interval to measure one over. This used to
+    // start at 0, which drew "0 B/s" for the first ten seconds of every visit:
+    // a reading nothing had taken.
+    let rxRate: number | null = null
+    let txRate: number | null = null
     if (previous && iface) {
       const previousIface = modemInterface(previous)
       const seconds = (Date.parse(snapshot.observed_at) - Date.parse(previous.observed_at)) / 1000
@@ -107,7 +111,7 @@ async function poll(): Promise<void> {
         rxRate = (iface.rx_bytes - previousIface.rx_bytes) / seconds
         txRate = iface.tx_bytes >= previousIface.tx_bytes
           ? (iface.tx_bytes - previousIface.tx_bytes) / seconds
-          : 0
+          : null
       }
     }
     previous = snapshot

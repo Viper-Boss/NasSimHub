@@ -31,6 +31,8 @@ import { getCallFilter, getVowifiDiagnostics } from '../api/client'
 import type { CallFilterPolicy, VowifiEgressProbe } from '../api/client'
 import { getModuleSecurity } from '../api/dashboardCards'
 import type { ModuleSecurity, ModuleTrust, SecurityRow, SecurityState } from '../api/dashboardCards'
+import { getTrustDocument, journalStatus, trustCounts } from '../api/nodeSecurity'
+import type { TrustDocument } from '../api/nodeSecurity'
 import { i18n, resolvedLocale } from '../i18n'
 import { moduleSecurityCardLabels } from '../i18n/moduleSecurityCardLabels'
 import { sessionState } from '../state/session'
@@ -59,6 +61,19 @@ import { sessionState } from '../state/session'
 //   the guard's budgets and today's use  GET /api/v1/security/module -> guard
 //   the public egress IP and ISP         GET /api/v1/vowifi-diagnostics -> egress
 //   the inbound call filter policy       GET /api/v1/settings/homesim/call-filter
+//   device trust and the journal's state GET /api/v1/security/trust
+//
+// DEVICE TRUST IS NOW ONE OF THE REAL ONES. The gateway keeps a trust record
+// per device (internal/trustengine), so that tile reads it: how many devices
+// are in which state, and -- before anything else -- whether the journal those
+// states rest on failed its check, or whether the engine is only monitoring.
+// It is a summary; the per-device detail, the reasons and the administrator's
+// actions are in the security centre the footer links to.
+//
+// THE FOUR INTEGRITY TILES AND THE RISK LEVEL STILL HAVE NOTHING BEHIND THEM,
+// and no longer say "not wired" as if a wire were on its way: a UFI003 gives
+// the gateway no TPM, TEE or boot-chain evidence to check, so they read "not
+// supported" with that reason until a payload says otherwise.
 //
 // THE CENTREPIECE IS REAL. The anti-fraud guard in
 // internal/httpapi/call_guard.go is the one protection this product actually
@@ -83,6 +98,10 @@ import { sessionState } from '../state/session'
 const { t } = useI18n()
 
 const security = ref<ModuleSecurity | null>(null)
+// The trust document, or null when the gateway has none to give (an older
+// gateway, no engine attached, a failed read). Null falls back to the
+// "not assessed" wording; it is never read as "nothing is wrong".
+const trustDocument = ref<TrustDocument | null>(null)
 const loaded = ref(false)
 const egress = ref<VowifiEgressProbe | null>(null)
 const egressFailed = ref(false)
@@ -233,9 +252,53 @@ const trustRemaining = computed(() => {
 })
 
 /**
- * The six assessment tiles: four integrity checks, the risk level and the
- * trust period. Every value comes from the payload; an absent one reads
- * "not wired", which today is all six.
+ * The trust tile, from the trust document.
+ *
+ * In order of what an operator most needs to know: a journal that FAILED its
+ * check (every device is then held as restricted), monitor mode (the states
+ * are real and nothing is refused), and only then the count per state.
+ *
+ * The tile is green in exactly one case: the gateway enforces, the journal
+ * verified, and every device it knows is trusted. Monitor mode is never green
+ * and neither is a mode the gateway did not report -- a tick there would
+ * present a calculation nothing acts on as protection.
+ */
+const trustTile = computed<{ state?: SecurityState; value: string; detail: string } | null>(() => {
+  const document = trustDocument.value
+  if (!document) return null
+  const journal = journalStatus(document.journal)
+  if (journal === 'damaged') {
+    return { state: 'warn', value: label('trustJournalDamaged'), detail: label('trustJournalDamagedNote') }
+  }
+  const counts = trustCounts(document)
+  const order = ['QUARANTINE', 'RESTRICTED', 'OBSERVATION', 'TRUSTED', 'UNBOUND'] as const
+  const parts = order
+    .filter(state => counts[state])
+    .map(state => `${label(`trustState${state}`)} ${counts[state]}`)
+  const summary = parts.length ? parts.join(' · ') : label('trustNoDevices')
+  if (document.enforcement !== 'enforce') {
+    // The mode and how many devices, and no more: per-state counts beside
+    // "monitor only" would read as a verdict nothing acts on, and a tile this
+    // size has no room for both. The counts are in the security centre.
+    return {
+      value: `${label(document.enforcement === 'monitor' ? 'trustMonitor' : 'trustModeUnknown')} · ${label('trustDevices', { n: document.subjects.length })}`,
+      detail: label(document.enforcement === 'monitor' ? 'trustMonitorNote' : 'trustModeUnknownNote')
+    }
+  }
+  const held = (counts.QUARANTINE ?? 0) + (counts.RESTRICTED ?? 0)
+  const allTrusted =
+    journal === 'ok' && (counts.TRUSTED ?? 0) > 0 && counts.TRUSTED === document.subjects.length
+  return {
+    state: held > 0 ? 'warn' : allTrusted ? 'ok' : undefined,
+    value: summary,
+    detail: label('trustEnforcedNote')
+  }
+})
+
+/**
+ * The six assessment tiles: four integrity checks, the risk level and device
+ * trust. Every value comes from a payload; an absent one reads "not
+ * supported" or "not assessed" with the reason, which today is the first five.
  */
 const assessmentTiles = computed(() => [
   ...integrityRows.value.map(entry => ({
@@ -254,14 +317,16 @@ const assessmentTiles = computed(() => [
     value: riskValue(riskRow.value),
     detail: riskRow.value?.detail || label('riskPendingNote')
   },
-  {
-    key: 'trust',
-    icon: Hourglass,
-    name: label('trustTitle'),
-    state: trust.value?.state,
-    value: trustValue(trust.value),
-    detail: trustRemaining.value || label('trustPendingNote')
-  }
+  trustTile.value
+    ? { key: 'trust', icon: Hourglass, name: label('trustTitle'), ...trustTile.value }
+    : {
+        key: 'trust',
+        icon: Hourglass,
+        name: label('trustTitle'),
+        state: trust.value?.state,
+        value: trustValue(trust.value),
+        detail: trustRemaining.value || label('trustPendingNote')
+      }
 ])
 
 const filterModeLabel = computed(() => {
@@ -373,6 +438,9 @@ async function load(): Promise<void> {
   checking.value = true
   try {
     security.value = await getModuleSecurity()
+    // Read fresh every time and replaced whole: a failed read clears the tile
+    // back to "not assessed" instead of leaving the last answer up as current.
+    trustDocument.value = await getTrustDocument().catch(() => null)
     await refreshLive()
   } finally {
     checking.value = false
@@ -529,8 +597,9 @@ onBeforeUnmount(() => {
 
       </section>
 
-      <!-- Not built. Every tile says so, and none of them is green until the
-           thing it names exists. -->
+      <!-- Four integrity tiles and a risk level with nothing behind them, which
+           say so with the reason; and device trust, which is read from the
+           trust engine. None is green without a payload that says so. -->
       <section class="pc-section">
         <div class="pc-section__head">
           <ShieldCheck :size="15" />
@@ -581,14 +650,13 @@ onBeforeUnmount(() => {
       </section>
 
       <footer class="pc-foot">
-        <!-- Named for where it goes. There is no security detail page: the
-             call-filter policy this card shows lives inside an experimental
-             disclosure under Settings -> Audio, and diagnostics is the section
-             that is actually about observing this box. A link labelled only
-             "details" would promise a page that does not exist. -->
+        <!-- Named for where it goes: the security centre under Settings ->
+             Security, where the trust records this card summarises are listed
+             per device with their reasons, the journal and the link
+             boundaries. -->
         <RouterLink
           class="pc-button"
-          :to="{ name: 'settings', params: { section: 'diagnostics' } }"
+          :to="{ name: 'settings', params: { section: 'security' } }"
         >
           {{ label('details') }}
           <ExternalLink :size="14" />

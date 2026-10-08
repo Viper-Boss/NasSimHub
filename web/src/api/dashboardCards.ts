@@ -91,6 +91,140 @@ export interface SecurityPosture {
   packet_auth?: SecurityRow
   ota?: SecurityRow
   events?: SecurityEvents
+  /**
+   * "proxy_hop" when the request reached the gateway through Tailscale Serve.
+   * The handshake rows above then describe the local hop from Tailscale to the
+   * gateway, NOT the browser's own connection, and the card must say so.
+   */
+  transport_scope?: 'proxy_hop'
+  /** The proxy in front of the gateway, when there is one. */
+  proxy?: SecurityRow
+  /** One entry per link a request crosses. Absent on a gateway older than the list. */
+  boundaries?: LinkBoundary[]
+}
+
+/**
+ * One link boundary (internal/httpapi/security_boundaries.go).
+ *
+ * "Is this post-quantum?" has no single answer: a request crosses several
+ * links, each protected by something different. `evidence` says HOW the gateway
+ * knows what it reports, and `requested` / `negotiated` are kept apart so a
+ * shortfall is visible rather than averaged into one word.
+ */
+export type BoundaryEvidence = 'observed' | 'reported' | 'protocol' | 'not_used' | 'unknown'
+
+export interface LinkBoundary {
+  id: string
+  evidence: BoundaryEvidence
+  protection?: string
+  post_quantum: 'yes' | 'no' | 'unknown'
+  requested?: string
+  negotiated?: string
+  /** Absent unless the gateway compared the two; never defaulted to true. */
+  meets_requested?: boolean
+  node_id?: string
+  detail?: string
+}
+
+function readText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+/**
+ * One boundary, or `null` for an entry with no id. Anything this build does
+ * not recognise in `evidence` or `post_quantum` reads as "unknown": a new word
+ * from a newer gateway must not be drawn as a yes.
+ */
+export function readBoundary(value: unknown): LinkBoundary | null {
+  if (!value || typeof value !== 'object') return null
+  const source = value as Record<string, unknown>
+  const id = readText(source.id)
+  if (!id) return null
+  const evidence = source.evidence
+  const postQuantum = source.post_quantum
+  return {
+    id,
+    evidence:
+      evidence === 'observed' ||
+      evidence === 'reported' ||
+      evidence === 'protocol' ||
+      evidence === 'not_used'
+        ? evidence
+        : 'unknown',
+    protection: readText(source.protection),
+    post_quantum: postQuantum === 'yes' || postQuantum === 'no' ? postQuantum : 'unknown',
+    requested: readText(source.requested),
+    negotiated: readText(source.negotiated),
+    meets_requested:
+      typeof source.meets_requested === 'boolean' ? source.meets_requested : undefined,
+    node_id: readText(source.node_id),
+    detail: readText(source.detail)
+  }
+}
+
+function isBoundary(entry: LinkBoundary | null): entry is LinkBoundary {
+  return entry !== null
+}
+
+/**
+ * The secure-transport rows for ONE NasSimHub Node, from the boundaries the
+ * gateway reported for it.
+ *
+ * A Node's card used to be drawn from constants -- TLS 1.3, pinned, identified
+ * -- whatever the session actually was. The gateway now reports each device's
+ * session (`gateway_node`) and identity (`node_identity`) as boundaries, so the
+ * rows come from those and from nothing else:
+ *
+ *   transport     the TLS version the gateway observed on its session
+ *   post_quantum  what that session negotiated; amber when it falls short of
+ *                 the level requested
+ *   pinning       the pins the gateway says it holds for the device
+ *   identity      the outcome of the identity check: dual, classical only,
+ *                 or refused (amber)
+ *
+ * Replay, record authentication and OTA have no per-device evidence and stay
+ * "unknown". So does every row when the device has no boundary in the answer
+ * -- a member's view, an older gateway, a device that is not connected.
+ * Answers null when there is no posture at all, like the reader.
+ */
+export function nodePosture(posture: SecurityPosture | null, nodeID: string): SecurityPosture | null {
+  if (!posture) return null
+  const unknown: SecurityRow = { state: 'unknown' }
+  const mine = (posture.boundaries ?? []).filter(entry => entry.node_id === nodeID)
+  const link = mine.find(entry => entry.id === 'gateway_node')
+  const identity = mine.find(entry => entry.id === 'node_identity')
+  const rows: SecurityPosture = {
+    transport: unknown,
+    post_quantum: unknown,
+    pinning: unknown,
+    identity: unknown,
+    replay: unknown,
+    packet_auth: unknown,
+    ota: unknown
+  }
+  if (link?.evidence === 'observed') {
+    if (link.protection) rows.transport = { state: 'ok', value: link.protection }
+    if (link.meets_requested === false) {
+      rows.post_quantum = { state: 'warn', value: link.negotiated, detail: link.requested }
+    } else if (link.post_quantum === 'yes') {
+      rows.post_quantum = { state: 'ok', value: link.negotiated }
+    } else if (link.post_quantum === 'no') {
+      rows.post_quantum = { state: 'off', detail: link.negotiated }
+    }
+  }
+  if (identity) {
+    if (identity.protection) rows.pinning = { state: 'ok', value: identity.protection }
+    if (identity.evidence === 'observed') {
+      if (identity.negotiated === 'dual') {
+        rows.identity = { state: 'ok', value: 'Ed25519 + PQ', detail: identity.detail }
+      } else if (identity.negotiated === 'classical_only') {
+        rows.identity = { state: 'ok', value: 'Ed25519', detail: identity.detail }
+      } else if (identity.negotiated === 'refused') {
+        rows.identity = { state: 'warn', detail: identity.detail }
+      }
+    }
+  }
+  return rows
 }
 
 function readRow(value: unknown): SecurityRow | undefined {
@@ -133,6 +267,11 @@ export async function getSecurityPosture(): Promise<SecurityPosture | null> {
     replay: readRow(source.replay),
     packet_auth: readRow(source.packet_auth),
     ota: readRow(source.ota),
+    transport_scope: source.transport_scope === 'proxy_hop' ? 'proxy_hop' : undefined,
+    proxy: readRow(source.proxy),
+    boundaries: Array.isArray(source.boundaries)
+      ? source.boundaries.map(readBoundary).filter(isBoundary)
+      : undefined,
     events: events
       ? {
           window_hours: readCount(events.window_hours),
@@ -147,6 +286,25 @@ export async function getSecurityPosture(): Promise<SecurityPosture | null> {
         }
       : undefined
   }
+}
+
+let postureInFlight: Promise<SecurityPosture | null> | undefined
+
+/**
+ * The same read, shared between callers that ask while one is already out.
+ *
+ * The dashboard draws a secure-transport card per device group and each one
+ * asks for the posture on the same tick, so N devices used to be N identical
+ * requests. This is NOT a cache: nothing is kept once the request settles, and
+ * a caller that asks a moment later gets a fresh read.
+ */
+export function getSharedSecurityPosture(): Promise<SecurityPosture | null> {
+  if (!postureInFlight) {
+    postureInFlight = getSecurityPosture().finally(() => {
+      postureInFlight = undefined
+    })
+  }
+  return postureInFlight
 }
 
 // ---------------------------------------------------------------------------
@@ -212,10 +370,26 @@ function isBucket(entry: CommunicationBucket | null): entry is CommunicationBuck
   return entry !== null
 }
 
-export async function getCommunicationStats(lineID?: string): Promise<CommunicationStats | null> {
+/**
+ * The query for one scope.
+ *
+ * A SIM Node is a DEVICE, not a line: its own figures are `?node_id=<id>`
+ * (administrators only), and asking by line for a Node's line would let two
+ * devices be drawn with one set of numbers. A node id therefore takes the
+ * place of the line id rather than joining it.
+ */
+export function communicationStatsQuery(lineID?: string, nodeID?: string): string {
+  if (nodeID) return `?node_id=${encodeURIComponent(nodeID)}`
+  return lineID ? `?line_id=${encodeURIComponent(lineID)}` : ''
+}
+
+export async function getCommunicationStats(
+  lineID?: string,
+  nodeID?: string
+): Promise<CommunicationStats | null> {
   let payload: unknown
   try {
-    payload = await get(`${API_ROOT}/stats/communication${lineID ? `?line_id=${encodeURIComponent(lineID)}` : ''}`)
+    payload = await get(`${API_ROOT}/stats/communication${communicationStatsQuery(lineID, nodeID)}`)
   } catch {
     return null
   }

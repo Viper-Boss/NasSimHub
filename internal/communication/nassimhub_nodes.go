@@ -148,6 +148,21 @@ type nodeCallControl interface {
 	RefreshEndpoint(ctx context.Context, endpointLineID string) error
 }
 
+type nodeDTMFControl interface {
+	SendDTMF(context.Context, string, string, agentclient.DTMFRequest) (agentclient.CommandReceipt, error)
+}
+
+func (s *Service) endpointDTMF(ctx context.Context, lineID, callID string, request agentclient.DTMFRequest) (agentclient.CommandReceipt, error) {
+	if !s.nodeOwnsEndpoint(lineID) {
+		return s.agent.SendDTMF(ctx, callID, request)
+	}
+	control, ok := s.nodes.(nodeDTMFControl)
+	if !ok {
+		return agentclient.CommandReceipt{}, &agentclient.OperationError{Code: "not_supported", Operation: "dtmf", Message: "DTMF is not supported on this Node"}
+	}
+	return control.SendDTMF(ctx, lineID, callID, request)
+}
+
 func (s *Service) nodeCalls() (nodeCallControl, bool) {
 	if s.nodes == nil {
 		return nil, false

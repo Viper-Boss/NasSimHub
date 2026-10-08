@@ -12,6 +12,7 @@ import (
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
 	"github.com/human-agent65535/modemdeck/internal/store"
+	"github.com/human-agent65535/modemdeck/internal/trustengine"
 	"github.com/human-agent65535/nassimhub-node/proto"
 )
 
@@ -240,6 +241,7 @@ func projectNodeLine(deviceID, endpoint string, state nodeState) agentclient.Lin
 			Dial:               nodeVoiceReady(state), AnswerCall: nodeVoiceReady(state),
 			HangupCall: nodeVoiceReady(state), RejectCall: nodeVoiceReady(state),
 			Media:       nodeVoiceReady(state),
+			SendDTMF:    nodeVoiceReady(state) && state.Capabilities.DTMF,
 			SendMessage: state.Capabilities.SMS && simReady,
 		},
 	}
@@ -361,6 +363,9 @@ func (f *Fleet) SendMessage(ctx context.Context, request agentclient.SendMessage
 	}
 	if !state.StatusKnown || state.Status.SIM.State != proto.SIMReady {
 		return agentclient.CommandReceipt{}, &agentclient.OperationError{Code: "failed_precondition", Operation: "send_message", Message: ErrNodeNotReady.Error()}
+	}
+	if err := f.requireTrust(ctx, deviceID, trustengine.ActionSendSMS, "send_message"); err != nil {
+		return agentclient.CommandReceipt{}, err
 	}
 	number := strings.TrimSpace(request.Number)
 	response, err := client.SendSMS(ctx, proto.SendSMSRequest{

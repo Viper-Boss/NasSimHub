@@ -782,3 +782,55 @@ CREATE INDEX idx_sms_node_sim_timestamp ON sms(node_id, sim_id, COALESCE(timesta
 CREATE INDEX idx_call_history_node_sim_ended_at ON call_history(node_id, sim_id, COALESCE(ended_at, '') DESC, id DESC);
 
 CREATE INDEX idx_nassimhub_node_sims_line ON nassimhub_node_sims(line_id) WHERE line_id <> '';
+
+CREATE TABLE nassimhub_node_pq_pins (
+			node_id TEXT PRIMARY KEY,
+			algorithm TEXT NOT NULL,
+			public_key BLOB NOT NULL,
+			pinned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (node_id) REFERENCES nassimhub_nodes(node_id) ON DELETE CASCADE ON UPDATE CASCADE
+		);
+
+CREATE TABLE trust_records (
+			subject_id TEXT PRIMARY KEY,
+			state TEXT NOT NULL,
+			binding_hash TEXT NOT NULL DEFAULT '',
+			sim_hash TEXT NOT NULL DEFAULT '',
+			stable_seconds INTEGER NOT NULL DEFAULT 0,
+			required_seconds INTEGER NOT NULL DEFAULT 0,
+			trusted_seconds INTEGER NOT NULL DEFAULT 0,
+			sim_changes INTEGER NOT NULL DEFAULT 0,
+			identity_changes INTEGER NOT NULL DEFAULT 0,
+			integrity_failures INTEGER NOT NULL DEFAULT 0,
+			risk_score INTEGER NOT NULL DEFAULT 0,
+			otp_level INTEGER NOT NULL DEFAULT 0,
+			otp_limited INTEGER NOT NULL DEFAULT 0,
+			manual INTEGER NOT NULL DEFAULT 0,
+			reason TEXT NOT NULL DEFAULT '',
+			generation INTEGER NOT NULL DEFAULT 0,
+			last_event_hash TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL,
+			signature BLOB NOT NULL,
+			policy_generation INTEGER NOT NULL DEFAULT 0,
+			hardware_hash TEXT NOT NULL DEFAULT '',
+			modem_changes INTEGER NOT NULL DEFAULT 0
+		);
+
+CREATE TABLE security_events (
+			seq INTEGER PRIMARY KEY,
+			at TEXT NOT NULL,
+			subject_id TEXT NOT NULL DEFAULT '',
+			kind TEXT NOT NULL,
+			cause TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			result TEXT NOT NULL DEFAULT '',
+			prev_hash TEXT NOT NULL,
+			hash TEXT NOT NULL
+		);
+
+CREATE TABLE security_meta (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+
+CREATE INDEX idx_security_events_subject ON security_events(subject_id, seq);

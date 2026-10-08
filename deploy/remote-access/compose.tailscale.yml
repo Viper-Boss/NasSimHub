@@ -1,0 +1,18 @@
+name: nassimhub-remote
+services:
+  tailscale:
+    image: tailscale/tailscale@sha256:c507f3a2a6ab1cabd8d809b98edeb41edbd5c3fb6ad9632ffd098b4c7d0b4065
+    container_name: nassimhub-tailscale
+    network_mode: host
+    restart: unless-stopped
+    # Run the daemon directly: containerboot times out and restarts while
+    # waiting for an interactive user login, invalidating the login URL.
+    entrypoint: [tailscaled]
+    command: ["--state=/var/lib/tailscale/tailscaled.state", "--socket=/var/run/tailscale/tailscaled.sock"]
+    cap_add: [NET_ADMIN, NET_RAW]
+    devices: [/dev/net/tun:/dev/net/tun]
+    environment:
+      SSL_CERT_FILE: /etc/nassimhub/origin-ca.pem
+    volumes:
+      - ./state:/var/lib/tailscale
+      - ${NASSIMHUB_ORIGIN_CA:?Set public origin CA path}:/etc/nassimhub/origin-ca.pem:ro

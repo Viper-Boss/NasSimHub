@@ -33,6 +33,20 @@ type Identity struct {
 	Name       string
 	PublicKey  ed25519.PublicKey
 	PrivateKey ed25519.PrivateKey
+	// PQ is the Core's ADDITIONAL post-quantum signing key, or nil when it has
+	// none. When set, pairing offers its public half and every signed request
+	// carries a second signature over the same canonical bytes. It never
+	// replaces the Ed25519 key and CoreID does not depend on it.
+	PQ proto.PQSigner
+}
+
+// PQIdentity is the public half of the Core's post-quantum key, or an empty
+// identity.
+func (i Identity) PQIdentity() proto.PQIdentity {
+	if i.PQ == nil {
+		return proto.PQIdentity{}
+	}
+	return proto.PQIdentity{Algorithm: i.PQ.Algorithm(), PublicKey: proto.EncodeKey(i.PQ.PublicKey())}
 }
 
 // NewIdentity generates a fresh Core identity. Production Core persists this
@@ -54,6 +68,36 @@ type Client struct {
 
 	mu      sync.Mutex
 	session proto.Session
+	// link is what the most recent TLS response from the Node was carried
+	// over, as THIS side observed it.
+	link ObservedLink
+	// onSession runs after a new bearer session is obtained and before the
+	// request that needed it is sent. See trust.go.
+	onSession func(context.Context)
+	// sessionMu serialises obtaining a session, hook included, so no request
+	// goes out on a fresh session ahead of the hook.
+	sessionMu sync.Mutex
+}
+
+// ObservedLink is the TLS session the Core itself saw on its latest response
+// from the Node. It is the Core's own observation, independent of what the
+// Node reports about the same connection.
+type ObservedLink struct {
+	// Known is false until a response has arrived over TLS.
+	Known bool
+	// TLSVersion is the negotiated protocol version (tls.VersionTLS13, ...).
+	TLSVersion uint16
+	// Group is the negotiated key agreement group; GroupKnown is false on a
+	// toolchain that cannot report it.
+	Group      uint16
+	GroupKnown bool
+}
+
+// ObservedLink reports the TLS session of the latest response.
+func (c *Client) ObservedLink() ObservedLink {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.link
 }
 
 // Options configures a Client.
@@ -144,6 +188,9 @@ func (c *Client) Pair(ctx context.Context) (proto.PairResponse, error) {
 		CoreName:      c.identity.Name,
 		CorePublicKey: proto.EncodeKey(c.identity.PublicKey),
 	}
+	if offered := c.identity.PQIdentity(); offered.Present() {
+		body.CorePQ = &offered
+	}
 	var response proto.PairResponse
 	if err := c.signedCall(ctx, http.MethodPost, "/v1/pair", body, &response); err != nil {
 		return proto.PairResponse{}, err
@@ -152,6 +199,50 @@ func (c *Client) Pair(ctx context.Context) (proto.PairResponse, error) {
 	c.session = response.Session
 	c.mu.Unlock()
 	return response, nil
+}
+
+// ErrAttestationUnsupported reports a Node that predates identity attestation
+// (protocol 1.3). It is distinct from a failed attestation: the device did not
+// answer wrongly, it cannot answer. Whether that is acceptable is the caller's
+// policy, not this client's.
+var ErrAttestationUnsupported = errors.New("node does not support identity attestation")
+
+// AttestIdentity asks the Node to prove possession of its identity keys now,
+// and verifies the answer.
+//
+// deviceKey is the pinned Ed25519 key, pinnedPQ the post-quantum key recorded
+// from an earlier dual verification (empty if none), and policy what the
+// security level demands. The rules - including that a pinned post-quantum key
+// may never be dropped or replaced by the peer - live in
+// proto.VerifyIdentityAttestation; this method only carries the exchange.
+func (c *Client) AttestIdentity(
+	ctx context.Context,
+	deviceKey ed25519.PublicKey,
+	pinnedPQ proto.PQIdentity,
+	policy proto.PQIdentityPolicy,
+) (proto.AttestationResult, error) {
+	nonce, err := proto.NewAttestNonce()
+	if err != nil {
+		return proto.AttestationResult{}, err
+	}
+	var response proto.IdentityAttestResponse
+	err = c.call(ctx, http.MethodPost, proto.IdentityAttestPath, proto.IdentityAttestRequest{Nonce: nonce}, &response)
+	if err != nil {
+		if operation, ok := proto.AsOperationError(err); ok && operation.Code == proto.ErrorNotFound {
+			return proto.AttestationResult{}, ErrAttestationUnsupported
+		}
+		return proto.AttestationResult{}, err
+	}
+	return proto.VerifyIdentityAttestation(response, proto.AttestationExpectation{
+		Nonce:     nonce,
+		DeviceID:  c.selector.DeviceID(),
+		DeviceKey: deviceKey,
+		PinnedPQ:  pinnedPQ,
+		CoreID:    c.identity.CoreID,
+		CoreKey:   c.identity.PublicKey,
+		CorePQ:    c.identity.PQIdentity(),
+		Policy:    policy,
+	})
 }
 
 // Unpair releases the Node.
@@ -303,6 +394,15 @@ func (c *Client) Hangup(ctx context.Context, callID string) (proto.CallReceipt, 
 	return receipt, err
 }
 
+func (c *Client) SendDTMF(ctx context.Context, callID string, request proto.DTMFRequest) (proto.CallReceipt, error) {
+	if !validMediaCallID(callID) {
+		return proto.CallReceipt{}, proto.InvalidArgument("dtmf", "invalid call id")
+	}
+	var receipt proto.CallReceipt
+	err := c.call(ctx, http.MethodPost, "/v1/calls/"+callID+"/dtmf", request, &receipt)
+	return receipt, err
+}
+
 func (c *Client) WiFi(ctx context.Context) (proto.WiFiStatus, error) {
 	var status proto.WiFiStatus
 	err := c.call(ctx, http.MethodGet, "/v1/wifi", nil, &status)
@@ -417,6 +517,14 @@ func (c *Client) authenticatedCall(ctx context.Context, method, path string, bod
 }
 
 func (c *Client) ensureSession(ctx context.Context) error {
+	if !inSessionHook(ctx) {
+		// Held across the whole renewal, hook included: a concurrent request
+		// waits here and then finds the session valid, instead of using it
+		// before the hook has finished. Requests the hook itself makes are
+		// already inside this section and do not take it again.
+		c.sessionMu.Lock()
+		defer c.sessionMu.Unlock()
+	}
 	c.mu.Lock()
 	// Renew a little before expiry so a request cannot land in the gap.
 	valid := c.session.Token != "" && c.now().Add(30*time.Second).Before(c.session.ExpiresAt)
@@ -431,6 +539,7 @@ func (c *Client) ensureSession(ctx context.Context) error {
 	c.mu.Lock()
 	c.session = session
 	c.mu.Unlock()
+	c.sessionEstablished(ctx)
 	return nil
 }
 
@@ -449,13 +558,26 @@ func (c *Client) signedCall(ctx context.Context, method, path string, body, dest
 		return err
 	}
 	stamp := proto.FormatTimestamp(c.now())
-	signature := ed25519.Sign(c.identity.PrivateKey, proto.SigningString(method, path, stamp, nonce, encoded))
+	canonical := proto.SigningString(method, path, stamp, nonce, encoded)
+	signature := ed25519.Sign(c.identity.PrivateKey, canonical)
 
 	headers := map[string]string{
 		proto.HeaderCoreID:    c.identity.CoreID,
 		proto.HeaderTimestamp: stamp,
 		proto.HeaderNonce:     nonce,
 		proto.HeaderSignature: base64.StdEncoding.EncodeToString(signature),
+	}
+	if c.identity.PQ != nil {
+		// The second signature covers the same bytes as the first. A signer
+		// that fails is an error rather than a quietly classical request: a
+		// Node that has pinned this key would refuse it anyway, with a less
+		// useful message.
+		pq, err := c.identity.PQ.Sign(canonical)
+		if err != nil {
+			return fmt.Errorf("post-quantum request signing failed: %w", err)
+		}
+		headers[proto.HeaderPQSignature] = base64.StdEncoding.EncodeToString(pq)
+		headers[proto.HeaderPQAlgorithm] = string(c.identity.PQ.Algorithm())
 	}
 	return c.raw(ctx, method, endpoint.BaseURL+path, body, headers, destination)
 }
@@ -492,6 +614,12 @@ func (c *Client) raw(ctx context.Context, method, target string, body any, heade
 		return &url{err: err}
 	}
 	defer response.Body.Close()
+	if response.TLS != nil {
+		group, known := proto.NegotiatedGroup(*response.TLS)
+		c.mu.Lock()
+		c.link = ObservedLink{Known: true, TLSVersion: response.TLS.Version, Group: group, GroupKnown: known}
+		c.mu.Unlock()
+	}
 
 	payload, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes))
 	if err != nil {

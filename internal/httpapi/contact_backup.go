@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/human-agent65535/modemdeck/internal/auth"
 	"github.com/human-agent65535/modemdeck/internal/store"
 )
 
@@ -42,7 +45,11 @@ func (api *API) backupContacts(response http.ResponseWriter, request *http.Reque
 	defer func() { _ = file.Close(); _ = os.Remove(temporary) }()
 	timestamp := time.Now().UTC()
 	count := 0
-	_, err = fmt.Fprintf(file, `{"format":"homesim-contacts-v1","created_at":%q,"contacts":[`, timestamp.Format(time.RFC3339Nano))
+	// The header names the account whose contacts follow -- see
+	// contactBackupVisible for why, and for why it has to be the very first
+	// thing in the file.
+	_, err = fmt.Fprintf(file, `%s"created_at":%q,"contacts":[`,
+		contactBackupHeader(request.Context()), timestamp.Format(time.RFC3339Nano))
 	encoder := json.NewEncoder(file)
 	var after *store.ContactCursor
 	for err == nil {
@@ -152,6 +159,69 @@ func (api *API) backupContactsCollection(response http.ResponseWriter, request *
 	}
 }
 
+// Who may read a backup back.
+//
+// Contacts are per account: the store scopes every contact query to its
+// owner, administrators included. The backup directory is shared, though, and
+// the list and read handlers below used to serve every file in it to any
+// signed-in account -- so one member pressing "back up" handed their whole
+// address book to every other member, who did not even have to guess a name
+// because the listing printed it.
+//
+// The writer therefore stamps the owning account into the file, and a file is
+// visible only to that account. The stamp is the leading bytes of the file,
+// written by the server before any contact data, and it is compared as bytes
+// rather than parsed: nothing a contact contains can come before it, so a
+// contact named like a header cannot claim a file for somebody else.
+//
+// A file with no owner stamp was written before this existed. Its owner is
+// unknowable, so it is shown to the administrator only -- who owns the
+// directory it sits in -- rather than to everyone (the leak) or to no one
+// (the operator's existing backups vanishing on upgrade).
+//
+// With no principal there are no accounts to separate (authentication
+// disabled, the same case requireAdmin lets through).
+const contactBackupFormatPrefix = `{"format":"homesim-contacts-v1",`
+
+func contactBackupOwnerPrefix(userID string) string {
+	// json.Marshal, not %q: the two escape differently, and this must be
+	// byte-identical between the writer and every later comparison.
+	encoded, _ := json.Marshal(userID)
+	return contactBackupFormatPrefix + `"owner_user_id":` + string(encoded) + `,`
+}
+
+func contactBackupHeader(ctx context.Context) string {
+	if principal, ok := auth.PrincipalFromContext(ctx); ok {
+		return contactBackupOwnerPrefix(principal.UserID)
+	}
+	return contactBackupFormatPrefix
+}
+
+func contactBackupVisible(ctx context.Context, path string) bool {
+	principal, ok := auth.PrincipalFromContext(ctx)
+	if !ok {
+		return true
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = file.Close() }()
+	own := contactBackupOwnerPrefix(principal.UserID)
+	unowned := contactBackupFormatPrefix + `"owner_user_id":`
+	head := make([]byte, max(len(own), len(unowned)))
+	read, _ := io.ReadFull(file, head)
+	head = head[:read]
+	if bytes.HasPrefix(head, []byte(own)) {
+		return true
+	}
+	if bytes.HasPrefix(head, []byte(unowned)) {
+		// Somebody else's.
+		return false
+	}
+	return principal.IsAdmin()
+}
+
 type contactBackupEntry struct {
 	Filename  string    `json:"filename"`
 	CreatedAt time.Time `json:"created_at"`
@@ -178,6 +248,9 @@ func (api *API) listContactBackups(response http.ResponseWriter, request *http.R
 	backups := make([]contactBackupEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || !contactBackupName.MatchString(entry.Name()) {
+			continue
+		}
+		if !contactBackupVisible(request.Context(), filepath.Join(api.contactBackupDirectory, entry.Name())) {
 			continue
 		}
 		info, statErr := entry.Info()
@@ -238,6 +311,12 @@ func (api *API) readContactBackup(response http.ResponseWriter, request *http.Re
 	}
 	full := filepath.Join(root, name)
 	if filepath.Dir(full) != root {
+		writeError(response, http.StatusNotFound, "not_found", "Backup not found", "")
+		return
+	}
+	// Another account's backup answers exactly as a missing one does, so the
+	// reply does not confirm that the name exists.
+	if !contactBackupVisible(request.Context(), full) {
 		writeError(response, http.StatusNotFound, "not_found", "Backup not found", "")
 		return
 	}

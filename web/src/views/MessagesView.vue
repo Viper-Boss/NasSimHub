@@ -88,7 +88,6 @@ import {
   recentIncomingThreadKeys,
   refreshContacts,
   refreshMessageWorkspace,
-  resolveLine,
   setThreadsFavorite,
   sendMessage,
   threadReadErrors,
@@ -96,6 +95,12 @@ import {
   threadsPagination,
   threadsResource
 } from '../state/workspace'
+import {
+  lineSelectionState,
+  offlineLineRecord,
+  resolveLineChoice,
+  selectLine
+} from '../state/lineSelection'
 import { lineTagFallback, lineTagLine } from '../utils/lineIdentity'
 import {
   findRecipientThread,
@@ -299,10 +304,17 @@ const activeContact = computed(() =>
   activeRecipientIsContactable.value ? contactForNumber(activeRecipient.value) : undefined
 )
 const activeLineID = computed(() => (activeLine.value ? lineKey(activeLine.value) : ''))
+// The line this draft is meant for when its device is offline: the composer's
+// selection, or the line the open conversation belongs to. The draft stays on
+// it and says why it cannot be sent; it is not moved to another line.
+const offlineSendingLine = computed(() =>
+  offlineLineRecord(composingNew.value ? selectedLineKey.value : selectedThread.value?.line_id || '')
+)
 const sendDisabledReason = computed(() => {
   if (messageWriteUnavailable.value) return messageWriteUnavailable.value
   if (selectedThreadIsOneWay.value) return t('messages.senderDoesNotAcceptReplies')
   if (!activeRecipient.value) return t('messages.selectRecipient')
+  if (offlineSendingLine.value) return t('lines.deviceOfflineNoSwitch')
   if (!activeLineID.value) return t('messages.selectLine')
   if (lineSupports(activeLine.value, 'message') === false) {
     return t('messages.lineUnsupported')
@@ -393,14 +405,19 @@ async function contactSaved(contact: Contact): Promise<void> {
 function syncComposeLine(force = false): void {
   if (!composingNew.value) return
   const selectedStillExists = lines.value.some(line => lineKey(line) === selectedLineKey.value)
-  if (!selectedStillExists) lineSelectionOverridden = false
+  // A line the user chose stays chosen when its device goes offline. Only a
+  // line that is no longer known at all gives the choice up.
+  if (!selectedStillExists && !offlineLineRecord(selectedLineKey.value)) lineSelectionOverridden = false
   if (!force && lineSelectionOverridden) return
-  const resolved = resolveLine('message', {
+  // Context, the contact's preference, then THE selected line -- as it is.
+  // Resolving again when the lines change is safe for that reason: a line
+  // that has gone offline resolves to itself, marked offline, and is shown as
+  // such with sending disabled. It is never replaced by one that is up.
+  selectedLineKey.value = resolveLineChoice('message', {
     contextKey: composeContextLineKey.value,
     preferredLineID: selectedRecipientPreferredLineID.value,
     number: newRecipient.value
-  })
-  selectedLineKey.value = resolved ? lineKey(resolved) : ''
+  }).id
 }
 
 watch(
@@ -416,7 +433,14 @@ watch(
 )
 
 watch(
-  [lines, defaultLineID, () => contactsResource.data, newRecipient, composingNew],
+  [
+    lines,
+    defaultLineID,
+    () => contactsResource.data,
+    newRecipient,
+    composingNew,
+    () => lineSelectionState.selectedLineID
+  ],
   () => syncComposeLine()
 )
 
@@ -832,6 +856,9 @@ function viewExistingRecipientThread(): void {
 
 function changeSendingLine(): void {
   if (composingNew.value) lineSelectionOverridden = true
+  // Choosing a sending line chooses THE line: the top bar and the dialer read
+  // the same selection.
+  if (composingNew.value) selectLine(selectedLineKey.value)
   sendError.value = ''
   smsGuardBlocked.value = false
 }
@@ -1257,6 +1284,7 @@ onBeforeUnmount(() => {
                   v-model="selectedLineKey"
                   class="compose-line-select"
                   :lines="lines"
+                  :offline-line="composingNew ? offlineSendingLine : undefined"
                   :default-line-id="defaultLineID"
                   :label="t('messages.sendingLine')"
                   capability="message"

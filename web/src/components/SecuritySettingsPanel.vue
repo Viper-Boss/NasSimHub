@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ShieldCheck } from '@lucide/vue'
-import { onMounted, ref } from 'vue'
+import { defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { gateway } from '../api/client'
 import type { AccountSession } from '../api/types'
@@ -9,6 +9,12 @@ import { sessionState } from '../state/session'
 import AccountSecurityForm from './AccountSecurityForm.vue'
 import AccountSessionsPanel from './AccountSessionsPanel.vue'
 import SettingsLoadBoundary from './settings/SettingsLoadBoundary.vue'
+
+// The security centre (device trust, the security journal, link boundaries) is
+// an administrator's tool with a good deal of its own copy. It loads as its own
+// chunk, and only for an administrator: a member's security page stays the
+// password form and the session list it always was, and requests nothing more.
+const SecurityCentrePanel = defineAsyncComponent(() => import('./SecurityCentrePanel.vue'))
 
 const { t } = useI18n()
 const sessions = ref<AccountSession[]>([])
@@ -108,6 +114,8 @@ onMounted(() => {
         @revoke="revokeSession"
         @revoke-others="revokeOtherSessions"
       />
+
+      <SecurityCentrePanel v-if="sessionState.role === 'admin'" />
     </div>
   </SettingsLoadBoundary>
 </template>

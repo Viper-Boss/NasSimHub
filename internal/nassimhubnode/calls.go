@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
+	"github.com/human-agent65535/modemdeck/internal/trustengine"
 	"github.com/human-agent65535/nassimhub-node/proto"
 )
 
@@ -38,6 +39,9 @@ func (f *Fleet) StartCall(ctx context.Context, request agentclient.StartCallRequ
 	const operation = "start_call"
 	live, err := f.callableNode(request.LineID, operation)
 	if err != nil {
+		return agentclient.CommandReceipt{}, err
+	}
+	if err := f.requireTrust(ctx, live.record.ID, trustengine.ActionDial, operation); err != nil {
 		return agentclient.CommandReceipt{}, err
 	}
 	number := strings.TrimSpace(request.Number)
@@ -109,6 +113,36 @@ func (f *Fleet) RefreshEndpoint(ctx context.Context, endpointLineID string) erro
 		return ErrUnknownNode
 	}
 	return f.refreshCalls(ctx, live)
+}
+
+func (f *Fleet) SendDTMF(ctx context.Context, endpointLineID, callID string, request agentclient.DTMFRequest) (agentclient.CommandReceipt, error) {
+	const operation = "dtmf"
+	live, err := f.callableNode(endpointLineID, operation)
+	if err != nil {
+		return agentclient.CommandReceipt{}, err
+	}
+	if !nodeCallIDPattern.MatchString(callID) {
+		return agentclient.CommandReceipt{}, definite(operation, proto.ErrorInvalidArgument, "invalid call id")
+	}
+	live.mu.Lock()
+	supported := live.state.Capabilities.DTMF
+	live.mu.Unlock()
+	if !supported {
+		return agentclient.CommandReceipt{}, definite(operation, proto.ErrorNotSupported, "DTMF is not supported on this Node")
+	}
+	if err = f.requireTrust(ctx, live.record.ID, trustengine.ActionDTMF, operation); err != nil {
+		return agentclient.CommandReceipt{}, err
+	}
+	client, _ := live.handles()
+	id := nodeCallRequestID(request.RequestID)
+	receipt, err := client.SendDTMF(ctx, callID, proto.DTMFRequest{RequestID: id, Digits: request.Digits})
+	if err != nil {
+		return agentclient.CommandReceipt{}, classifyCallError(operation, err)
+	}
+	if receipt.RequestID != id || receipt.CallID != callID || receipt.State != proto.CallActive {
+		return agentclient.CommandReceipt{}, errors.New("node DTMF receipt does not match the command")
+	}
+	return agentclient.CommandReceipt{RequestID: request.RequestID, ResourceID: callID}, nil
 }
 
 func (f *Fleet) callableNode(endpointLineID, operation string) (*liveNode, error) {

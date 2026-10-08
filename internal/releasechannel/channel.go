@@ -40,7 +40,6 @@
 package releasechannel
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -457,7 +456,7 @@ func (channel *Channel) fetchOne(ctx context.Context, address string) (updateche
 	if response.StatusCode != http.StatusOK {
 		return source, nil
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, release.MaxManifestBytes+1))
+	body, err := io.ReadAll(io.LimitReader(response.Body, int64(release.MaxPublishedBytes())+1))
 	if err != nil {
 		return source, nil
 	}
@@ -467,11 +466,11 @@ func (channel *Channel) fetchOne(ctx context.Context, address string) (updateche
 // verifyCandidate checks one signed document and fills in the source's state.
 // A document over the size limit is malformed, not truncated and retried.
 func verifyCandidate(source updatecheck.Source, signed []byte, publicKey string) (updatecheck.Source, *candidate) {
-	if len(signed) > release.MaxManifestBytes {
+	if len(signed) > release.MaxPublishedBytes() {
 		source.State = updatecheck.SourceMalformed
 		return source, nil
 	}
-	manifest, err := release.VerifyJSON(bytes.NewReader(signed), publicKey)
+	manifest, err := release.VerifyPublished(signed, publicKey)
 	switch {
 	case errors.Is(err, release.ErrBadSignature):
 		source.State = updatecheck.SourceInvalidSignature

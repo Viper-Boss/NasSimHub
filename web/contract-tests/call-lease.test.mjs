@@ -30,9 +30,10 @@ test('call ownership uses independent control and server media liveness', async 
   )
   assert.match(callState, /CALL_LEASE_HEARTBEAT_MS\s*=\s*5_000/)
   assert.match(callState, /gateway[\s\S]*?\.renewCallLease\(callID\)/)
+  assert.match(callState, /export async function reconcileCallHeartbeat[\s\S]*?renewActiveCallLease\(\)/)
   assert.match(
     callState,
-    /callLeaseHeartbeatTimer\s*=\s*window\.setInterval\([\s\S]*?renewActiveCallLease\(\)[\s\S]*?CALL_LEASE_HEARTBEAT_MS/
+    /callLeaseHeartbeatTimer\s*=\s*window\.setInterval\([\s\S]*?reconcileCallHeartbeat\(\)[\s\S]*?CALL_LEASE_HEARTBEAT_MS/
   )
   assert.match(
     callState,

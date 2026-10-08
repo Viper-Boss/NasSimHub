@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { redialGeneration, redialNumbers, rememberDialedNumber, resetRedial } from './redial'
 import type { Router } from 'vue-router'
 import { gateway } from '../api/client'
 import type {
@@ -43,6 +44,7 @@ let runtimeStarted = false
 let activeCallRefreshRequested = false
 let activeCallRefreshLoop: Promise<void> | undefined
 let mutationEpoch = 0
+let deferredRuntimeCallRefresh = false
 let activeRouter: Router | undefined
 let callLeaseRenewal: Promise<void> | undefined
 let callLeaseRenewalCallID = ''
@@ -59,6 +61,7 @@ export const callState = reactive<{
   dtmfDigits: string
   busy: boolean
   pendingAction: PendingCallAction
+  pendingDial: { lineID: string; number: string } | null
   error: string
   errorStatus: number
   fraudGuard: boolean
@@ -73,6 +76,7 @@ export const callState = reactive<{
   dtmfDigits: '',
   busy: false,
   pendingAction: '',
+  pendingDial: null,
   error: '',
   errorStatus: 0,
   fraudGuard: false,
@@ -246,7 +250,14 @@ function reconcileActiveSnapshot(
 }
 
 export function acceptRuntimeActiveCalls(snapshot: ActiveCallSnapshot): void {
-  if (!runtimeStarted || callState.busy) return
+  if (!runtimeStarted) return
+  if (callState.busy) {
+    // Runtime events are deduplicated upstream. Dropping this event would
+    // permanently lose a remote hangup arriving before a command receipt.
+    // Re-read authority after the mutation; never replay an older receipt.
+    deferredRuntimeCallRefresh = true
+    return
+  }
   mutationEpoch += 1
   reconcileActiveSnapshot(snapshot)
   callState.syncStatus = 'ready'
@@ -409,6 +420,26 @@ export function refreshActiveCalls(): Promise<void> {
   return activeCallRefreshLoop
 }
 
+async function finishCallMutation(): Promise<void> {
+  callState.busy = false
+  callState.pendingAction = ''
+  callState.pendingDial = null
+  if (!runtimeStarted || !deferredRuntimeCallRefresh) return
+  deferredRuntimeCallRefresh = false
+  await requestActiveCallRefresh()
+}
+
+// Shared by host modems and paired Nodes. SSE is the primary update path;
+// an ongoing call also gets an authoritative read on the lease heartbeat.
+export async function reconcileCallHeartbeat(): Promise<void> {
+  if (!runtimeStarted) return
+  void renewActiveCallLease()
+  if (!runtimeStarted || callState.busy) return
+  if (callState.sessions.length || callState.reservations.length) {
+    await requestActiveCallRefresh()
+  }
+}
+
 export function initializeCallRuntime(router?: Router): void {
   if (runtimeStarted) return
   runtimeStarted = true
@@ -417,7 +448,7 @@ export function initializeCallRuntime(router?: Router): void {
   callState.syncError = ''
   if (typeof window !== 'undefined') {
     callLeaseHeartbeatTimer = window.setInterval(() => {
-      void renewActiveCallLease()
+      void reconcileCallHeartbeat()
     }, CALL_LEASE_HEARTBEAT_MS)
     window.addEventListener('online', resumeCallRuntime)
     window.addEventListener('pageshow', resumeCallRuntime)
@@ -445,8 +476,10 @@ export function requestActiveCallRefresh(): Promise<void> {
 }
 
 export function shutdownCallRuntime(): void {
+  resetRedial()
   runtimeStarted = false
   activeCallRefreshRequested = false
+  deferredRuntimeCallRefresh = false
   activeRouter = undefined
   mutationEpoch += 1
   callLeaseRenewalGeneration += 1
@@ -474,6 +507,7 @@ export function shutdownCallRuntime(): void {
   callState.dtmfDigits = ''
   callState.busy = false
   callState.pendingAction = ''
+  callState.pendingDial = null
   callState.error = ''
   callState.errorStatus = 0
   callState.fraudGuard = false
@@ -486,6 +520,9 @@ export async function dial(
   lineKey: string,
   recordingEnabled?: boolean
 ): Promise<boolean> {
+  number = number.trim() || redialNumbers[lineKey] || ''
+  if (!number) return false
+  const redialEpoch = redialGeneration()
   const unavailable = capabilityReason('dial')
   if (unavailable) {
     callState.error = unavailable
@@ -511,12 +548,17 @@ export async function dial(
   mutationEpoch += 1
   callState.busy = true
   callState.pendingAction = 'dial'
+  callState.pendingDial = { lineID: lineKey, number }
+  showCallSurface()
   callState.error = ''
   callState.errorStatus = 0
   callState.fraudGuard = false
   try {
     const session = await gateway.startCall(lineKey, number, recordingEnabled)
+    rememberDialedNumber(lineKey, number, redialEpoch)
     acceptSession(session)
+    // A successful command also expands an already observed/minimized call.
+    showCallSurface()
     closeDialer()
     return true
   } catch (error) {
@@ -533,8 +575,7 @@ export async function dial(
     await requestActiveCallRefresh()
     return false
   } finally {
-    callState.busy = false
-    callState.pendingAction = ''
+    await finishCallMutation()
   }
 }
 
@@ -573,8 +614,7 @@ async function act(action: CallAction): Promise<void> {
     callState.errorStatus = failure.status
     await requestActiveCallRefresh()
   } finally {
-    callState.busy = false
-    callState.pendingAction = ''
+    await finishCallMutation()
   }
 }
 
@@ -614,8 +654,7 @@ export async function sendDTMF(digit: string): Promise<void> {
     callState.error = failure.message
     callState.errorStatus = failure.status
   } finally {
-    callState.busy = false
-    callState.pendingAction = ''
+    await finishCallMutation()
   }
 }
 

@@ -3,6 +3,7 @@ package ota
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -39,7 +40,9 @@ func NewSignedManifestLoader(
 	client HTTPClient,
 ) *SignedManifestLoader {
 	if strings.TrimSpace(urlTemplate) == "" {
-		urlTemplate = DefaultSignedManifestURLTemplate
+		// The dual-signed manifest is published beside the classical one,
+		// under its own name; see release.PublishedManifestName.
+		urlTemplate = strings.TrimSuffix(DefaultSignedManifestURLTemplate, "release.signed.json") + release.PublishedManifestName()
 	}
 	if strings.TrimSpace(publicKeyBase64) == "" {
 		publicKeyBase64 = release.SigningPublicKey
@@ -84,7 +87,13 @@ func (loader *SignedManifestLoader) Load(
 		return ReleaseManifest{}, ErrManifestUnavailable
 	}
 
-	verified, err := release.VerifyJSON(response.Body, loader.publicKeyBase64)
+	// Read whole, bounded, then verified the way this build requires: a build
+	// with a post-quantum release key accepts only a dual-signed manifest.
+	document, err := io.ReadAll(io.LimitReader(response.Body, int64(release.MaxPublishedBytes())+1))
+	if err != nil || len(document) > release.MaxPublishedBytes() {
+		return ReleaseManifest{}, ErrManifestUnavailable
+	}
+	verified, err := release.VerifyPublished(document, loader.publicKeyBase64)
 	if err != nil {
 		return ReleaseManifest{}, fmt.Errorf("%w: %w", ErrManifestUnavailable, err)
 	}

@@ -7,10 +7,11 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/human-agent65535/nassimhub-node/proto"
 )
 
 // OpenMedia upgrades one authenticated, pinned TLS connection to the Node's
@@ -78,11 +79,8 @@ func (c *Client) OpenMedia(ctx context.Context, callID string) (io.ReadWriteClos
 }
 
 func validMediaCallID(id string) bool {
-	if !strings.HasPrefix(id, "mm-") {
-		return false
-	}
-	_, err := strconv.ParseUint(strings.TrimPrefix(id, "mm-"), 10, 32)
-	return err == nil
+	_, _, ok := proto.ParseMMCallID(id)
+	return ok
 }
 
 func validMediaHeaders(headers http.Header) bool {

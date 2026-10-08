@@ -237,3 +237,36 @@ func assertMessageIDs(t *testing.T, messages []Message, expected []int64) {
 		}
 	}
 }
+
+func TestMessageThreadPreviewAndSearchUseAuthoritativeBody(t *testing.T) {
+	s := newHardwareTestStore(t)
+	ctx := context.Background()
+	_, err := s.database.ExecContext(ctx, `INSERT INTO sms(id,line_id,peer,content,type) VALUES
+ (101,'line-node','10000','中文短信已修正',1),
+ (102,'line-other','10001','其他线路私有正文',1);
+ INSERT INTO sms_contacts(line_id,imsi,iccid,peer,last_sms_id,last_timestamp,last_content,last_type,unread_count,is_favorite) VALUES
+ ('line-node','','','10000',101,'2026-10-04 01:00:00','stale escaped body',1,3,1),
+ ('line-node','','','10001',102,'2026-10-04 02:00:00','保留缓存',1,0,0);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	threads, err := s.MessageThreads(ctx, ThreadQuery{Search: "中文短信"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 1 || threads[0].LastContent != "中文短信已修正" || threads[0].UnreadCount != 3 || !threads[0].Favorite {
+		t.Fatalf("preview/search/state mismatch: %+v", threads)
+	}
+	stale, err := s.MessageThreads(ctx, ThreadQuery{Search: "stale escaped"})
+	if err != nil || len(stale) != 0 {
+		t.Fatalf("search used stale cache: %+v %v", stale, err)
+	}
+	foreign, err := s.MessageThreads(ctx, ThreadQuery{Search: "其他线路私有正文"})
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("cross-line preview leaked: %+v %v", foreign, err)
+	}
+	fallback, err := s.MessageThreads(ctx, ThreadQuery{Search: "保留缓存"})
+	if err != nil || len(fallback) != 1 || fallback[0].LastContent != "保留缓存" {
+		t.Fatalf("cache fallback mismatch: %+v %v", fallback, err)
+	}
+}

@@ -32,6 +32,23 @@ func TestNodeVoiceProjectionRequiresCompleteReadiness(t *testing.T) {
 		})
 	}
 }
+
+func TestNodeDTMFProjectionRequiresExplicitCapabilityAndVoiceReadiness(t *testing.T) {
+	s := readyState()
+	s.Capabilities.VoLTE = proto.TriYes
+	s.Capabilities.VoiceControl, s.Capabilities.VoiceAudio = true, true
+	if projectNodeLine("node", "nsh:node:0", s).Capabilities.SendDTMF {
+		t.Fatal("missing DTMF advertised")
+	}
+	s.Capabilities.DTMF = true
+	if !projectNodeLine("node", "nsh:node:0", s).Capabilities.SendDTMF {
+		t.Fatal("verified DTMF not projected")
+	}
+	s.Online = false
+	if projectNodeLine("node", "nsh:node:0", s).Capabilities.SendDTMF {
+		t.Fatal("offline DTMF advertised")
+	}
+}
 func TestNodeActiveCallCarriesWidebandMedia(t *testing.T) {
 	s := readyState()
 	s.CallsKnown = true

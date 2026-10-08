@@ -17,7 +17,9 @@ import (
 func legacyNodeSchema(t *testing.T) string {
 	t.Helper()
 
-	legacy := currentSchemaSQL
+	// Tables added after Nodes that reference the registry did not exist
+	// before it either, so the fixture starts from the schema without them.
+	legacy := preSecuritySchema(t)
 	for _, table := range nodeTables {
 		before := legacy
 		legacy = strings.Replace(legacy, "\n"+table.definition+";\n", "\n", 1)

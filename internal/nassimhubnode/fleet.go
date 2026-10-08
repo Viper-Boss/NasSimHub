@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/human-agent65535/modemdeck/internal/store"
+	"github.com/human-agent65535/modemdeck/internal/trustengine"
 	"github.com/human-agent65535/nassimhub-node/core/nodeclient"
 	"github.com/human-agent65535/nassimhub-node/core/nodetrust"
 	"github.com/human-agent65535/nassimhub-node/core/transport"
@@ -54,6 +55,8 @@ var (
 	ErrNodeUnavailable      = errors.New("the device is not reachable")
 	ErrNodeNotReady         = errors.New("the device SIM is not ready")
 	ErrPairingNotConfirmed  = errors.New("the device did not confirm the pairing")
+	ErrNodeNeedsPQ          = errors.New("the device has no post-quantum identity, which this gateway's security level requires")
+	ErrNodeDemandsPQ        = errors.New("the device requires a post-quantum identity from this gateway; set the gateway security level to PQ or PQ_EXTREME")
 	errIdentityDoesNotMatch = errors.New("the device answering now is not the device that was discovered")
 )
 
@@ -74,9 +77,18 @@ type Options struct {
 	// USBBaseURL overrides the fixed USB address (tests, unusual setups).
 	USBBaseURL string
 	Security   nodetrust.Security
-	Timeout    time.Duration
-	Now        func() time.Time
-	Logger     *slog.Logger
+	// SecurityLevel is the outward-facing setting: STANDARD (the default), PQ
+	// or PQ_EXTREME. It decides the key agreement policy when Security is left
+	// empty, and how much post-quantum identity is demanded of each Node; see
+	// pqidentity.go.
+	SecurityLevel proto.SecurityLevel
+	// PQPins stores each Node's pinned post-quantum identity key. When nil the
+	// Repository is used if it can store them; otherwise identities are
+	// verified and reported but not recorded.
+	PQPins  PQIdentityRepository
+	Timeout time.Duration
+	Now     func() time.Time
+	Logger  *slog.Logger
 }
 
 // Fleet owns every Node this gateway has adopted.
@@ -86,14 +98,20 @@ type Fleet struct {
 	requirements proto.CoreRequirements
 	usbBaseURL   string
 	security     nodetrust.Security
+	level        proto.SecurityLevel
+	pins         PQIdentityRepository
 	timeout      time.Duration
 	now          func() time.Time
 	logger       *slog.Logger
 
-	mu       sync.Mutex
-	nodes    map[string]*liveNode
-	tickets  map[string]ticket
-	onChange func()
+	mu         sync.Mutex
+	nodes      map[string]*liveNode
+	tickets    map[string]ticket
+	onChange   func()
+	onIdentity func(IdentityEvent)
+	updating   map[string]struct{}
+	releases   *NodeReleaseStore
+	trust      *trustengine.Engine
 }
 
 type ticket struct {
@@ -115,9 +133,21 @@ func New(ctx context.Context, options Options) (*Fleet, error) {
 	if len(options.Identity.PrivateKey) != ed25519.PrivateKeySize || options.Identity.CoreID == "" {
 		return nil, errors.New("a node fleet requires the core identity")
 	}
+	level := options.SecurityLevel
+	if level == "" {
+		level = proto.LevelStandard
+	}
+	if err := proto.ValidateSecurityLevel(level); err != nil {
+		return nil, err
+	}
 	security := options.Security
 	if security.Profile == "" && security.Policy == "" {
-		security = nodetrust.DefaultSecurity()
+		// STANDARD maps to exactly what DefaultSecurity has always been.
+		security.Profile, security.Policy = proto.ProfileAndPolicyFor(level)
+	}
+	pins := options.PQPins
+	if pins == nil {
+		pins, _ = options.Repository.(PQIdentityRepository)
 	}
 	if err := security.Validate(); err != nil {
 		return nil, err
@@ -144,6 +174,8 @@ func New(ctx context.Context, options Options) (*Fleet, error) {
 		requirements: proto.LocalCoreRequirements(options.CoreVersion),
 		usbBaseURL:   usb,
 		security:     security,
+		level:        level,
+		pins:         pins,
 		timeout:      timeout,
 		now:          now,
 		logger:       logger,
@@ -399,6 +431,15 @@ func (f *Fleet) Pair(ctx context.Context, request PairRequest) (NodeView, error)
 	if err := proto.Negotiate(value.document.Compatibility(), f.requirements); err != nil {
 		return NodeView{}, fmt.Errorf("%w: %v", ErrIncompatible, err)
 	}
+	if f.identityPolicy() == proto.PQIdentityRequired && !value.document.HasPQIdentity() {
+		// Refused before anything is written: adopting a device that the
+		// first poll would refuse leaves the administrator with a paired row
+		// that can never come online.
+		return NodeView{}, ErrNodeNeedsPQ
+	}
+	if err := proto.CheckPQAlgorithmForLevel(f.level, value.document.PQIdentity); err != nil {
+		return NodeView{}, fmt.Errorf("%w (%s)", ErrNodeNeedsPQ, err)
+	}
 
 	record := store.NasSimHubNodeRecord{
 		ID:          value.deviceID,
@@ -434,6 +475,8 @@ func (f *Fleet) Pair(ctx context.Context, request PairRequest) (NodeView, error)
 			return NodeView{}, ErrOwnedElsewhere
 		case errors.As(err, &incompatible):
 			return NodeView{}, fmt.Errorf("%w: %v", ErrIncompatible, err)
+		case needsCorePQ(err):
+			return NodeView{}, ErrNodeDemandsPQ
 		}
 		if isTLSIdentityError(err) {
 			return NodeView{}, errIdentityDoesNotMatch
@@ -464,7 +507,7 @@ func (f *Fleet) Pair(ctx context.Context, request PairRequest) (NodeView, error)
 	f.logger.Info("node paired", "component", "nassimhub", "node_id", record.ID)
 	f.pollOne(ctx, live)
 	f.notify()
-	return live.view(f.identity.CoreID), nil
+	return f.viewOf(live), nil
 }
 
 // Unpair releases a Node and forgets it. The Node is told first so it becomes
@@ -515,9 +558,15 @@ type liveNode struct {
 
 	mu        sync.Mutex
 	state     nodeState
+	identity  identityState
 	sent      map[string]sentMessage
 	lastTouch time.Time
 	lastSIM   string
+	lastTrust time.Time
+
+	// policy is the trust policy last signed for the device and what the
+	// device reported back; see devicepolicy.go. It has its own lock.
+	policy devicePolicyState
 }
 
 type sentMessage struct {
@@ -548,6 +597,14 @@ type nodeState struct {
 	Calls          []proto.Call
 	CallsKnown     bool
 	ConnectionType proto.ConnectionType
+	// LinkSecurity is the key agreement the Node reported for the connection
+	// that carried the capability request.
+	LinkSecurity      proto.SecurityCapability
+	LinkSecurityKnown bool
+	// IdentityRefused marks a Node that answered but whose identity could not
+	// be established to the configured standard. Such a Node is reported
+	// offline to everything that consumes lines, with the reason.
+	IdentityRefused bool
 }
 
 func (f *Fleet) buildLive(record store.NasSimHubNodeRecord, pinRejected *atomic.Bool) (*liveNode, error) {
@@ -762,10 +819,27 @@ func (f *Fleet) pollOne(ctx context.Context, live *liveNode) {
 		live.setState(next)
 		return
 	}
+	if refused, reason := f.verifyIdentity(pollCtx, live, client, document.BootID); refused {
+		next.Online = false
+		next.IdentityRefused = true
+		next.LastError = "identity: " + reason
+		next.ConnectionType = proto.ConnectionNone
+		live.setState(next)
+		return
+	}
+	if reason := f.linkBelowLevel(client); reason != "" {
+		next.Online = false
+		next.LastError = "link: " + reason
+		next.ConnectionType = proto.ConnectionNone
+		live.setState(next)
+		return
+	}
 
 	var failures []string
 	if capabilities, err := client.Capabilities(pollCtx); err == nil {
 		next.Capabilities = capabilities.Capabilities
+		next.LinkSecurity = capabilities.Security
+		next.LinkSecurityKnown = true
 	} else {
 		failures = append(failures, "capabilities: "+publicError(err))
 	}
@@ -820,6 +894,7 @@ func (f *Fleet) pollOne(ctx context.Context, live *liveNode) {
 	live.state = next
 	live.mu.Unlock()
 	f.persistObservation(ctx, live, next)
+	f.observeTrust(ctx, live, next)
 }
 
 func (l *liveNode) handles() (*nodeclient.Client, *transport.Selector) {
@@ -998,6 +1073,32 @@ type NodeView struct {
 	VoiceAudio      bool                   `json:"voice_audio"`
 	MessagesOnStick int                    `json:"messages_on_device"`
 	LineEndpointID  string                 `json:"line_endpoint_id"`
+	// Identity is what was established about the Node's identity keys;
+	// LinkSecurity is the key agreement of the gateway's session with it. They
+	// are separate facts and neither implies the other.
+	Identity        IdentityView     `json:"identity"`
+	LinkSecurity    LinkSecurityView `json:"link_security"`
+	IdentityRefused bool             `json:"identity_refused"`
+	// Trust is how far the device may be used; see internal/trustengine.
+	Trust TrustView `json:"trust"`
+}
+
+// viewOf builds the administration view, including the security facts that
+// depend on the fleet's configured level.
+func (f *Fleet) viewOf(live *liveNode) NodeView {
+	view := live.view(f.identity.CoreID)
+	live.mu.Lock()
+	view.Identity = live.identityView(f)
+	view.LinkSecurity = linkSecurityView(f.level, live.client.ObservedLink(), live.state.LinkSecurity,
+		live.state.LinkSecurityKnown && live.state.Online)
+	if !live.state.Online {
+		// An observation from a session that is no longer up describes nothing.
+		view.LinkSecurity = linkSecurityView(f.level, nodeclient.ObservedLink{}, proto.SecurityCapability{}, false)
+	}
+	view.IdentityRefused = live.state.IdentityRefused
+	live.mu.Unlock()
+	view.Trust = f.trustView(live.record.ID)
+	return view
 }
 
 func (l *liveNode) view(coreID string) NodeView {
@@ -1061,7 +1162,7 @@ func (f *Fleet) Nodes() []NodeView {
 	f.mu.Unlock()
 	views := make([]NodeView, 0, len(nodes))
 	for _, live := range nodes {
-		views = append(views, live.view(f.identity.CoreID))
+		views = append(views, f.viewOf(live))
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].DeviceID < views[j].DeviceID })
 	return views
@@ -1078,7 +1179,7 @@ func (f *Fleet) Refresh(ctx context.Context, deviceID string) (NodeView, error) 
 	if f.contributionRevision() != before {
 		f.notify()
 	}
-	return live.view(f.identity.CoreID), nil
+	return f.viewOf(live), nil
 }
 
 func (f *Fleet) lookup(deviceID string) *liveNode {

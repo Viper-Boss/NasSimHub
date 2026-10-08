@@ -1,6 +1,14 @@
 # syntax=docker/dockerfile:1.19@sha256:b6afd42430b15f2d2a4c5a02b919e98a525b785b1aaff16747d2f623364e39b6
 
 ARG NODE_IMAGE=node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+# ML-DSA (post-quantum identity for Nodes, dual-signed releases) needs Go 1.27,
+# which is where crypto/mldsa arrived. This image is still 1.26.5: a gateway
+# built from it runs, reports the post-quantum signature provider as
+# unavailable, verifies classical signatures only, and refuses PQ_EXTREME at
+# start-up rather than pretending. To enable it, replace BOTH the tag and the
+# digest with a golang:1.27.x-bookworm pair read from the registry by whoever
+# cuts the release; go.mod stays at 1.26.5 (the ML-DSA code is behind a
+# go1.27 build tag), so nothing else changes.
 ARG GO_IMAGE=golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651
 ARG RUNTIME_IMAGE=alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 ARG NGINX_IMAGE=nginx:1.30.4-alpine-slim@sha256:ddde39c6e51f02fde7410c2e9c234cf2d0a4c7bdbbe176aeb37d8ad7ab4eb58c

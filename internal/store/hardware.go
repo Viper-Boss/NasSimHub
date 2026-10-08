@@ -904,6 +904,13 @@ func upsertHardwareMessage(
 			return Message{}, false, fmt.Errorf("query message endpoint identity: %w", err)
 		}
 	}
+	if existingID == 0 {
+		var err error
+		existingID, err = repairLegacyNodeSMS(ctx, transaction, message, reportedNumber)
+		if err != nil {
+			return Message{}, false, err
+		}
+	}
 	created := existingID == 0
 	if created {
 		messageType := int64(1)

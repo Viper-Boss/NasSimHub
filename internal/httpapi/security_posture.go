@@ -119,6 +119,16 @@ func (api *API) securityPosture(response http.ResponseWriter, request *http.Requ
 		body["replay"] = unknown
 		body["identity"] = postureRow{State: "ok", Value: "Cloudflare"}
 	}
+	// Each link a request crosses, reported separately; see
+	// security_boundaries.go. Additive: older pages ignore it.
+	body["boundaries"] = api.linkBoundaries(request, connection)
+	if connection.edge == edgeDirect && viaTailscaleServe(request.Header) {
+		// The rows above describe what nginx negotiated - which, through
+		// Tailscale Serve, is the local hop from Tailscale to the gateway and
+		// not the browser's own handshake. Say whose handshake it is.
+		body["transport_scope"] = "proxy_hop"
+		body["proxy"] = postureRow{State: "ok", Value: "Tailscale Serve"}
+	}
 	if events := api.securityEvents(request, connection); len(events) > 0 {
 		body["events"] = events
 	}
@@ -237,6 +247,9 @@ func (api *API) identityRow() (postureRow, bool) {
 // in the form the update card and the issuing console print it.
 func otaRow() postureRow {
 	row := postureRow{State: "ok", Value: "Ed25519"}
+	if release.PQSignaturePolicy() == release.PolicyDualRequired {
+		row.Value = "Ed25519 + " + release.PQSigningAlgorithm
+	}
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(release.SigningPublicKey))
 	if err == nil && len(decoded) == ed25519.PublicKeySize {
 		row.Detail = hex.EncodeToString(decoded[:4])

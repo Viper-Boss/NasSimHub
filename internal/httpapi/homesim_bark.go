@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/human-agent65535/modemdeck/internal/diagnostics"
 )
 
 // Bark is an iOS push channel. Following the NasSimHub integration rules the
@@ -157,7 +159,8 @@ func (api *API) homeSIMBarkTest(response http.ResponseWriter, request *http.Requ
 	client := &http.Client{Timeout: barkRequestTimeout, Transport: api.homeSIMOutboundTransport(request)}
 	barkResponse, err := client.Do(barkRequest)
 	if err != nil {
-		writeError(response, 502, "push_failed", "Bark server unreachable: "+err.Error(), "")
+		// err quotes the request URL, whose last segment is the device key.
+		writeError(response, 502, "push_failed", "Bark server unreachable: "+diagnostics.ScrubSecrets(err.Error()), "")
 		return
 	}
 	defer barkResponse.Body.Close()

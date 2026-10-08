@@ -344,6 +344,16 @@ func migrateSchema(ctx context.Context, database *sql.DB) error {
 			return err
 		}
 	}
+	migratedSecurity, err := migrateSecurityAdditions(ctx, database, actual)
+	if err != nil {
+		return err
+	}
+	if migratedSecurity {
+		actual, err = readSchemaShape(ctx, database)
+		if err != nil {
+			return err
+		}
+	}
 	if schemaContains(expected, actual) {
 		return nil
 	}

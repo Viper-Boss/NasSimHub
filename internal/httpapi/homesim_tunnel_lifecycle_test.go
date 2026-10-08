@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,17 +21,33 @@ import (
 // without applying -- by design, and correctly. What was missing was anyone
 // calling apply at startup.
 
+// The restore runs on its own goroutine, so ApplyDHT is called concurrently
+// with the test goroutine polling for the result. mu guards the two recorded
+// fields; tests read them through appliedConfigs(), never directly. Reading
+// the slice unguarded was a data race in this fake (found by -race in r128),
+// not in the code under test.
 type fakeDHTService struct {
+	mu      sync.Mutex
 	applied []agentclient.DHTConfig
 	reads   int
 	status  agentclient.DHTStatus
 	err     error
 }
 
+// appliedConfigs returns a copy, so a caller can index it while the restore
+// goroutine keeps running.
+func (f *fakeDHTService) appliedConfigs() []agentclient.DHTConfig {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]agentclient.DHTConfig(nil), f.applied...)
+}
+
 func (f *fakeDHTService) ApplyDHT(
 	_ context.Context,
 	config agentclient.DHTConfig,
 ) (agentclient.DHTStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.applied = append(f.applied, config)
 	if f.err != nil {
 		return agentclient.DHTStatus{}, f.err
@@ -45,6 +62,8 @@ func (f *fakeDHTService) DialDHT(_ context.Context, _ []string) (int, error) {
 }
 
 func (f *fakeDHTService) DHTStatus(_ context.Context, _ bool) (agentclient.DHTStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.reads++
 	if f.err != nil {
 		return agentclient.DHTStatus{}, f.err
@@ -123,8 +142,8 @@ func TestEnabledWireGuardComesBackUpAfterARestart(t *testing.T) {
 	defer cancel()
 	api.StartHomeSIMTunnelRestore(ctx)
 
-	waitForApply(t, func() int { return len(wireGuard.applied) }, 1)
-	applied := wireGuard.applied[0]
+	waitForApply(t, func() int { return len(wireGuard.appliedConfigs()) }, 1)
+	applied := wireGuard.appliedConfigs()[0]
 	if !applied.Enabled {
 		t.Fatal("the restore applied a disabled configuration")
 	}
@@ -157,11 +176,11 @@ func TestDisabledTunnelsAreLeftAloneOnRestart(t *testing.T) {
 	api.StartHomeSIMTunnelRestore(ctx)
 
 	time.Sleep(tunnelRestoreDelay + 500*time.Millisecond)
-	if len(wireGuard.applied) != 0 {
-		t.Fatalf("a disabled tunnel was brought up: %+v", wireGuard.applied)
+	if len(wireGuard.appliedConfigs()) != 0 {
+		t.Fatalf("a disabled tunnel was brought up: %+v", wireGuard.appliedConfigs())
 	}
-	if len(dht.applied) != 0 {
-		t.Fatalf("a disabled DHT was started: %+v", dht.applied)
+	if len(dht.appliedConfigs()) != 0 {
+		t.Fatalf("a disabled DHT was started: %+v", dht.appliedConfigs())
 	}
 }
 
@@ -180,8 +199,8 @@ func TestEnabledDHTComesBackUpAfterARestart(t *testing.T) {
 	defer cancel()
 	api.StartHomeSIMTunnelRestore(ctx)
 
-	waitForApply(t, func() int { return len(dht.applied) }, 1)
-	if !dht.applied[0].Enabled {
+	waitForApply(t, func() int { return len(dht.appliedConfigs()) }, 1)
+	if !dht.appliedConfigs()[0].Enabled {
 		t.Fatal("the restore started the DHT with enabled=false")
 	}
 }
@@ -201,10 +220,10 @@ func TestAnIsolatedDHTIsNotRestartedInALoop(t *testing.T) {
 	defer cancel()
 	api.StartHomeSIMTunnelRestore(ctx)
 
-	waitForApply(t, func() int { return len(dht.applied) }, 1)
+	waitForApply(t, func() int { return len(dht.appliedConfigs()) }, 1)
 	time.Sleep(600 * time.Millisecond)
-	if len(dht.applied) != 1 {
-		t.Fatalf("an isolated DHT was applied %d times; it should settle after one", len(dht.applied))
+	if len(dht.appliedConfigs()) != 1 {
+		t.Fatalf("an isolated DHT was applied %d times; it should settle after one", len(dht.appliedConfigs()))
 	}
 }
 

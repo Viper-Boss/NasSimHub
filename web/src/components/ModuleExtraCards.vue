@@ -24,16 +24,20 @@ import {
 } from '@lucide/vue'
 import type { Component } from 'vue'
 import type { Device, LineSummary, ModemPort } from '../api/types'
+import { deviceGroupLabels } from '../i18n/deviceGroupLabels'
 import { networkCardLabels } from '../i18n/networkCardNotes'
 import './insightCard.css'
 import { formatCallDuration, cumulativeDurationLabel } from '../utils/callDuration'
 import {
   getCommunicationStats,
-  getSecurityPosture,
+  getSharedSecurityPosture,
+  nodePosture,
   type CommunicationStats,
   type SecurityPosture,
   type SecurityRow
 } from '../api/dashboardCards'
+import type { NodeTrust } from '../api/nodeSecurity'
+import { sessionState } from '../state/session'
 import { refreshDeviceWorkspace } from '../state/workspace'
 import SensitiveValue from './SensitiveValue.vue'
 
@@ -61,10 +65,21 @@ import SensitiveValue from './SensitiveValue.vue'
 // line and device records the app already holds, and its refresh button
 // re-reads exactly those two.
 
-const props = defineProps<{ line: LineSummary; device?: Device; mode?: "all" | "device" }>()
+const props = defineProps<{
+  line: LineSummary
+  device?: Device
+  mode?: "all" | "device"
+  /**
+   * This device's trust record, for a NasSimHub Node. `null` is a Node whose
+   * record the viewer cannot read; left out, the device is a module on the NAS,
+   * which the trust engine does not assess.
+   */
+  trust?: NodeTrust | null
+}>()
 
 const i18n = useI18n()
 const { t } = i18n
+const groupLabels = computed(() => deviceGroupLabels(String(i18n.locale.value)))
 
 // The labels live in the lazily merged dashboard module rather than the locale
 // files, for the same reason the nodes card's do: the startup bundle had 0.1
@@ -93,17 +108,55 @@ const posture = ref<SecurityPosture | null>(null)
 const stats = ref<CommunicationStats | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
 
+/**
+ * A NasSimHub Node is a device with its own ID (it stands where a modem's IMEI
+ * does on the line record), and two things on these cards are per device.
+ */
+const nodeID = computed(() =>
+  props.line.device_imei.startsWith('NSH-') ? props.line.device_imei : ''
+)
+
+let disposed = false
+
 async function loadCards(): Promise<void> {
+  // mode="device" draws the module card alone, and that card reads records the
+  // app already holds. Asking for a posture and a day's statistics nothing
+  // will draw is traffic for no screen.
+  if (props.mode === 'device') return
+  // ONE DEVICE'S OWN FIGURES. For a Node the gateway counts by device
+  // (`?node_id=`), so two devices can never be drawn with one set of numbers.
+  // That query is administrators-only; a member keeps the line-scoped figures
+  // their role may read.
+  const byDevice = nodeID.value !== '' && sessionState.role === 'admin'
   const [security, communication] = await Promise.all([
-    getSecurityPosture(),
-    getCommunicationStats(props.line.id)
+    // Shared: the posture is one document about the gateway and every device
+    // group asks for it at the same moment.
+    getSharedSecurityPosture(),
+    byDevice ? getCommunicationStats(undefined, nodeID.value) : getCommunicationStats(props.line.id)
   ])
-  posture.value = props.line.device_imei.startsWith('NSH-') ? {
- transport: { state: 'ok', value: 'TLS 1.3' }, pinning: { state: 'ok' }, identity: { state: 'ok' },
- post_quantum: { state: 'unknown' }, packet_auth: { state: 'unknown' }, replay: { state: 'unknown' }, ota: { state: 'unknown' }
- } : security
+  // The group this card belongs to went away while the request was out (the
+  // device was unplugged): its answer is dropped rather than stored.
+  if (disposed) return
+  // A Node's card describes the gateway's session with THAT DEVICE, read from
+  // the boundaries the gateway reported for it. Never from constants: a row
+  // with no boundary behind it is "unknown".
+  posture.value = nodeID.value ? nodePosture(security, nodeID.value) : security
   stats.value = communication
 }
+
+/**
+ * Whose connection the rows describe, when it is not the obvious one.
+ *
+ * Through Tailscale Serve the gateway sees the hop from Tailscale to itself,
+ * not the browser's handshake; on a Node's card it is the gateway's session
+ * with the device. Left unsaid, both would read as "your browser's
+ * connection is TLS 1.3", which nothing here observed.
+ */
+const postureScope = computed(() => {
+  if (!posture.value) return ''
+  if (nodeID.value) return t('dashboard.secScopeNode')
+  return posture.value.transport_scope === 'proxy_hop' ? t('dashboard.secScopeProxyHop') : ''
+})
 
 onMounted(() => {
   void loadCards()
@@ -112,7 +165,10 @@ onMounted(() => {
   // the metrics cadence would be ten times the traffic for the same screen.
   timer = setInterval(() => { void loadCards() }, 300_000)
 })
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
+onBeforeUnmount(() => {
+  disposed = true
+  if (timer) clearInterval(timer)
+})
 
 interface PostureLine {
   key: string
@@ -139,8 +195,36 @@ const postureLines = computed<PostureLine[]>(() => {
     { key: 'identity', icon: KeyRound, label: t('dashboard.secIdentity'), row: data?.identity },
     { key: 'replay', icon: History, label: t('dashboard.secReplay'), row: data?.replay },
     { key: 'packet', icon: FileCheck2, label: t('dashboard.secPacketAuth'), row: data?.packet_auth },
-    { key: 'ota', icon: CloudUpload, label: t('dashboard.secOta'), row: data?.ota }
+    { key: 'ota', icon: CloudUpload, label: t('dashboard.secOta'), row: data?.ota },
+    { key: 'trust', icon: ShieldCheck, label: groupLabels.value.trustTitle, row: trustRow.value }
   ]
+})
+
+/**
+ * The device-trust row, from THIS device's record and from nothing else.
+ *
+ * Green in exactly one case: the device is trusted AND the gateway enforces.
+ * In monitor mode the state is real but nothing is refused because of it, so
+ * the pill carries the state's name with no tone and the tooltip says so --
+ * a tick there would present a calculation nothing acts on as protection.
+ * No record, a record the viewer may not read, and a device the engine does
+ * not assess are three different sentences and none of them is a pass.
+ */
+const trustRow = computed<SecurityRow>(() => {
+  const labels = groupLabels.value
+  const trust = props.trust
+  if (trust === undefined) {
+    return { state: 'unknown', value: labels.trustNotApplicable, detail: labels.trustHostNotApplicable }
+  }
+  if (trust === null) return { state: 'unknown', value: labels.unknown, detail: labels.trustAdminOnly }
+  const state = trust.effective_state || trust.state
+  if (!trust.known || !state) return { state: 'unknown', value: labels.trustNoRecord, detail: labels.trustNoRecord }
+  const value = labels.trustStates[state] ?? state
+  const monitor = trust.enforced !== true
+  const detail = [trust.reason, monitor ? labels.trustMonitor : ''].filter(Boolean).join(' · ') || value
+  if (state === 'RESTRICTED' || state === 'QUARANTINE') return { state: 'warn', value, detail }
+  if (state === 'TRUSTED' && !monitor) return { state: 'ok', value, detail }
+  return { state: 'unknown', value, detail }
 })
 
 /**
@@ -167,6 +251,8 @@ function pillText(row: SecurityRow): string {
   switch (row.state) {
     case 'ok': return t('dashboard.secOn')
     case 'off': return t('dashboard.secOff')
+    // A warning with no name to give: a refused identity, a shortfall.
+    case 'warn': return t('dashboard.secWarn')
     default: return t('dashboard.secUnknown')
   }
 }
@@ -228,7 +314,7 @@ const eventEntries = computed(() => [
 // Module information
 // ---------------------------------------------------------------------------
 
-interface ModuleFact { label: string; value: string; sensitive?: string }
+interface ModuleFact { label: string; value: string; sensitive?: string; note?: string }
 
 /**
  * Everything here is read from the line and device records the app already
@@ -244,12 +330,21 @@ const moduleFacts = computed<ModuleFact[]>(() => {
   const facts: ModuleFact[] = [
     { label: t('lines.model'), value: line.model || device?.model || unknown },
     { label: t('lines.firmware'), value: line.firmware || device?.firmware || unknown },
-    { label: t('device.hardwareVersion'), value: line.hardware_revision || unknown },
-    { label: t('diagnostics.modemIMEI'), value: '', sensitive: line.device_imei || device?.imei || '' },
-    { label: t('device.primaryPort'), value: line.primary_port || device?.port || unknown },
-    { label: 'ICCID', value: '', sensitive: line.iccid },
-    { label: 'IMSI', value: '', sensitive: line.imsi }
+    { label: t('device.hardwareVersion'), value: line.hardware_revision || unknown }
   ]
+  if (nodeID.value) {
+    // A Node's line record carries the Node's device ID where a modem's IMEI
+    // goes. It is not an IMEI and is not labelled as one; the stick's modem
+    // IMEI is something the gateway never reads, and the row says so.
+    facts.push({ label: groupLabels.value.deviceId, value: nodeID.value })
+    facts.push({ label: t('diagnostics.modemIMEI'), value: groupLabels.value.notProvided, note: groupLabels.value.imeiNotProvided })
+    facts.push({ label: t('device.primaryPort'), value: groupLabels.value.notProvided, note: groupLabels.value.portsNotProvided })
+  } else {
+    facts.push({ label: t('diagnostics.modemIMEI'), value: '', sensitive: line.device_imei || device?.imei || '' })
+    facts.push({ label: t('device.primaryPort'), value: line.primary_port || device?.port || unknown })
+  }
+  facts.push({ label: 'ICCID', value: '', sensitive: line.iccid })
+  facts.push({ label: 'IMSI', value: '', sensitive: line.imsi })
   const operator = line.serving_operator_name || line.home_operator_name || line.operator
   if (operator) facts.push({ label: t('network.operator'), value: operator })
   return facts
@@ -382,6 +477,7 @@ const trendBars = computed(() => {
             <span v-else class="insight-tag insight-sec__pending">{{ t('dashboard.cardPending') }}</span>
           </li>
         </ul>
+        <p v-if="postureScope" class="insight-card__pending-note insight-sec__scope">{{ postureScope }}</p>
 
         <section class="insight-sec__events">
           <h5>{{ eventsHeading }}</h5>
@@ -421,7 +517,7 @@ const trendBars = computed(() => {
             <dd v-if="fact.sensitive !== undefined" class="insight-mod__sensitive">
               <SensitiveValue :value="fact.sensitive" :label="fact.label" />
             </dd>
-            <dd v-else class="insight-line__value">{{ fact.value }}</dd>
+            <dd v-else class="insight-line__value" :class="{ 'is-muted': fact.note }" :title="fact.note">{{ fact.value }}</dd>
           </div>
         </dl>
 

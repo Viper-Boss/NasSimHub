@@ -76,3 +76,42 @@ PrivateDevices=no
 DeviceAllow=/dev/cdc-wdm0 rw
 DeviceAllow=char-alsa rw
 ```
+
+## 7. 语音安装脚本与出厂 Agent
+
+`/usr/bin/nassimhub-agent` 在更新机制里是**出厂 Agent**：每次启动都从它开始，更新从不改写它，
+已安装的版本出问题时回退到它，已安装版本的版本号不得低于它（`agent/ota/boot.go`、`launch.go`）。
+
+r128 起，`deploy/audio/install-voice.sh` **默认不再替换它**：
+
+```bash
+sudo sh deploy/audio/install-voice.sh /path/holder-arm64        # 只装 holder 与配置，保留出厂 Agent
+```
+
+旧的 `install-voice.sh AGENT HOLDER`（两个文件参数）会被拒绝并提示新写法，不会再悄悄覆盖出厂 Agent。
+
+必须更换出厂 Agent 时要显式写出并给出哈希：
+
+```bash
+sha256sum agent-arm64                                            # 在构建机上记录
+sudo sh deploy/audio/install-voice.sh --replace-agent agent-arm64 --expect-sha256 <hex> holder-arm64
+```
+
+脚本在改动任何东西之前拒绝以下情况：
+
+- 哈希不符；
+- 版本是 `dev` 或 `proto.ParseVersion` 解析不了的字符串（这样的 Agent 不参与更新，也不能做更新下限）；
+- 版本低于当前出厂 Agent（下限不下移）；
+- 版本高于状态目录里选中的已安装发布（那个发布会被新的出厂 Agent 取消选中），除非加 `--supersede-release`；
+- 更新处于 `APPLYING` / `PENDING_CONFIRM` / `ROLLING_BACK`（保留模式同样拒绝：脚本要重启 Agent，
+  确认前的再次重启会让 Agent 把更新判为失败并回滚）。
+
+脚本不写、不删状态目录里的任何东西（`agent-releases/`、`ota-state.json`、身份、配对），只读取。
+它会说明重启后**实际提供服务的是谁**：出厂 Agent，还是仍被选中的已安装发布——后者通过出厂 Agent 的
+启动校验后运行的是发布，不是 `/usr/bin/nassimhub-agent`。
+
+任何一步失败或被信号中断，脚本把所有文件恢复原状并重新启动它停掉的 Agent。逐条的行为差别见
+`deploy/audio/README-voice.md` 的“与旧脚本的差别”。
+
+验证：`sh scripts/test-install-voice.sh`（沙箱 + 命令替身）和 `test/voiceinstall`（Go，证明脚本的版本解析与
+`proto.ParseVersion` 一致）。**只有离线测试，没有在真机上验证过。**

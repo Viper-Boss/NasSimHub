@@ -73,7 +73,11 @@ test('message loads, reads, and post-send reconciliation use backend line identi
 test('new messages retain contact preference then global default resolution', async () => {
   const source = await readFile(messagesView, 'utf8')
 
-  assert.match(source, /resolveLine\('message', \{/)
+  // The order is unchanged -- context, the recipient's preferred line, the
+  // contact's -- and ends at the one shared selection (state/lineSelection.ts),
+  // which follows the configured default until the user picks a line.
+  // stable-line-selection.test.mjs holds the behaviour.
+  assert.match(source, /resolveLineChoice\('message', \{/)
   assert.match(source, /contextKey: composeContextLineKey\.value/)
   assert.match(source, /preferredLineID: selectedRecipientPreferredLineID\.value/)
   assert.match(source, /number: newRecipient\.value/)

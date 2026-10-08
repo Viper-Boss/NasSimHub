@@ -212,7 +212,7 @@ func run(
 		_ = db.Close()
 		return fmt.Errorf("configure call events: %w", err)
 	}
-	nodes, err := startNasSimHubNodes(ctx, logger, dataDirectory, repository, communications, version)
+	nodes, err := startNasSimHubNodes(ctx, logger, dataDirectory, repository, communications, version, db)
 	if err != nil {
 		_ = db.Close()
 		return err

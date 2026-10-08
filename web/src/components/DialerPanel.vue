@@ -35,11 +35,18 @@ import {
   contactsResource,
   lineCanPlaceVoiceCall,
   lineKey,
-  loadContacts,
-  resolveLine
+  loadContacts
 } from '../state/workspace'
+import {
+  lineSelectionState,
+  offlineLineRecord,
+  resolveLineChoice,
+  selectLine
+} from '../state/lineSelection'
 import { playDTMFTone } from '../state/dtmfAudio'
 import { unlockCallGuard } from '../api/client'
+import { loadRedialNumber, redialNumbers } from '../state/redial'
+import { redialLabel } from '../i18n/redialCopy'
 import { normalizeDialTarget } from '../utils/dialTarget'
 import { phoneDestination } from '../utils/format'
 import { phoneKeypad } from '../utils/phoneKeypad'
@@ -50,7 +57,7 @@ import LineSelector from './LineSelector.vue'
 import { matchHiddenCommand, runHiddenCommand } from '../state/hiddenCommands'
 import { showFeedback } from '../state/feedback'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const props = withDefaults(
   defineProps<{
     permanent?: boolean
@@ -126,9 +133,6 @@ const occupiedLineIDs = computed(() =>
   collectOccupiedLineIDs()
 )
 const occupiedLineCount = computed(() => occupiedLineIDs.value.size)
-const availableDialLines = computed(() =>
-  dialLines.value.filter(line => !occupiedLineIDs.value.has(lineKey(line)))
-)
 const unavailableDialLineIDs = computed(() =>
   lines.value
     .filter(
@@ -137,18 +141,18 @@ const unavailableDialLineIDs = computed(() =>
     )
     .map(lineKey)
 )
-const activeCallPresent = computed(() => Boolean(callState.session))
+const activeCallPresent = computed(() => Boolean(callState.session || callState.pendingDial))
 const showingCall = computed(
   () => activeCallPresent.value && !uiState.callMinimized
 )
 const showLineSwitcher = computed(
   () =>
-    !showingCall.value || callState.session?.control_state === 'occupied'
+    !showingCall.value || (!callState.pendingDial && callState.session?.control_state === 'occupied')
 )
 const lineSwitcherID = computed({
   get: () =>
     (showingCall.value || callState.owned)
-      ? callState.session?.line_id || selectedLineId.value
+      ? callState.pendingDial?.lineID || callState.session?.line_id || selectedLineId.value
       : selectedLineId.value,
   set: (lineID: string) => {
     if (callState.owned) return
@@ -158,6 +162,9 @@ const lineSwitcherID = computed({
     }
     selectedLineId.value = lineID
     lineSelectionOverridden.value = true
+    // Choosing a line here chooses it everywhere: the top bar and the message
+    // composer read the same selection.
+    selectLine(lineID)
     if (showingCall.value) openDialer('', '', lineID)
   }
 })
@@ -168,6 +175,10 @@ const defaultLineID = computed(
 const selectedLine = computed(() =>
   dialLines.value.find(line => lineKey(line) === selectedLineId.value)
 )
+// The draft's line when its device has gone offline. The draft keeps it: the
+// selector lists it as selected and unavailable, and the call button says why
+// it is disabled. Nothing here moves the draft to a line that happens to be up.
+const selectedOfflineLine = computed(() => offlineLineRecord(selectedLineId.value))
 const selectedLineBusy = computed(() =>
   selectedLine.value
     ? occupiedLineIDs.value.has(lineKey(selectedLine.value))
@@ -177,7 +188,13 @@ const dialUnavailable = computed(() => capabilityReason('dial'))
 const activeCallUnavailable = computed(() => {
   return callState.owned ? t('dialer.activeCall') : ''
 })
-const dialTarget = computed(() => normalizeDialTarget(number.value))
+const redialNumber = computed(() => redialNumbers[selectedLineId.value] || '')
+const redialAvailable = computed(() => !number.value.trim() && Boolean(redialNumber.value))
+const callButtonLabel = computed(() => redialAvailable.value ? redialLabel(locale.value) : t('calls.dial'))
+const callButtonTitle = computed(() => redialAvailable.value ? `${callButtonLabel.value} ${redialNumber.value}` : callButtonLabel.value)
+watch(selectedLineId, lineID => { void loadRedialNumber(lineID) }, { immediate: true })
+watch(() => uiState.dialerOpen, open => { if (open) void loadRedialNumber(selectedLineId.value) })
+const dialTarget = computed(() => normalizeDialTarget(number.value.trim() || redialNumber.value))
 const validationError = computed(() => {
   switch (dialTarget.value.error) {
     case 'too_long':
@@ -199,6 +216,9 @@ const callUnavailableReason = computed(
   () =>
     dialUnavailable.value ||
     activeCallUnavailable.value ||
+    // Before "no lines": when the draft's line is the only one and its device
+    // is offline, the reason is that device, not an empty system.
+    (selectedOfflineLine.value ? t('lines.deviceOfflineNoSwitch') : '') ||
     (dialLines.value.length === 0 ? t('dialer.noLines') : '') ||
     (!selectedLineId.value ? t('dialer.selectLine') : '') ||
     (selectedLineBusy.value ? t('calls.lineInUse') : '') ||
@@ -210,13 +230,13 @@ const disabledReason = computed(
   () =>
     callUnavailableReason.value ||
     validationError.value ||
-    (!number.value.trim() ? t('dialer.enterNumber') : '')
+    (!dialTarget.value.original ? t('dialer.enterNumber') : '')
 )
 const callButtonDisabled = computed(
   () =>
     callState.busy ||
     Boolean(callUnavailableReason.value) ||
-    !number.value.trim()
+    !dialTarget.value.original
 )
 function focusNumber(): void {
   inputAutofocus.value = false
@@ -229,27 +249,37 @@ function syncResolvedLine(force = false): void {
   const selectedStillExists = dialLines.value.some(
     line => lineKey(line) === selectedLineId.value
   )
-  if (!selectedStillExists) lineSelectionOverridden.value = false
+  // Only a line that is no longer a line at all gives the user's choice up;
+  // one whose device is merely offline is still the line that was chosen.
+  if (!selectedStillExists && !selectedOfflineLine.value) lineSelectionOverridden.value = false
+  // A draft the user has put a number or a line into keeps its line -- also
+  // when that line's device has just gone offline. It used to be re-resolved
+  // then, which silently moved a half-typed call onto another modem.
   if (
     !force &&
-    selectedStillExists &&
+    (selectedStillExists || Boolean(selectedOfflineLine.value)) &&
     (lineSelectionOverridden.value || Boolean(number.value.trim()))
   ) {
     return
   }
 
-  const resolved = resolveLine('dial', {
+  // Context, then the contact's preference, then THE selected line.
+  const choice = resolveLineChoice('dial', {
     contextKey: draftContextLineKey.value,
     preferredLineID: selectedContactPreferredLineID.value,
     number: number.value
   })
-  const supportedResolved =
-    resolved &&
-    lineCanPlaceVoiceCall(resolved) &&
-    !occupiedLineIDs.value.has(lineKey(resolved))
-      ? resolved
-      : availableDialLines.value[0] || dialLines.value[0]
-  selectedLineId.value = supportedResolved ? lineKey(supportedResolved) : ''
+  // A line whose device is offline is the draft's line all the same: it is
+  // shown as offline and the call button says why it is disabled. It is never
+  // a cue to pick some other line -- least of all the modem on the NAS for a
+  // call that was meant for a Node's SIM.
+  if (choice.offline) {
+    selectedLineId.value = choice.id
+    return
+  }
+  // Keep the chosen SIM even when busy or incapable of voice. Only an
+  // explicit selection may move a draft to another device or billable SIM.
+  selectedLineId.value = choice.id
 }
 
 function beginDraft(target = '', label = '', focus = false, contextLineKey = ''): void {
@@ -340,7 +370,14 @@ watch(
 )
 
 watch(
-  [dialLines, occupiedLineIDs, defaultLineID, () => contactsResource.data, number],
+  [
+    dialLines,
+    occupiedLineIDs,
+    defaultLineID,
+    () => contactsResource.data,
+    number,
+    () => lineSelectionState.selectedLineID
+  ],
   () => syncResolvedLine(),
   { immediate: true }
 )
@@ -452,9 +489,15 @@ async function placeCall(): Promise<void> {
   if (
     callState.busy ||
     callUnavailableReason.value ||
-    !number.value.trim() ||
+    !dialTarget.value.original ||
     dialTarget.value.error
   ) {
+    return
+  }
+  if (redialAvailable.value) {
+    number.value = redialNumber.value
+    numberTouched.value = true
+    focusNumber()
     return
   }
   const recordingReady = dialerRecordingState.status === 'ready'
@@ -610,6 +653,7 @@ onBeforeUnmount(() => {
               :lines="lines"
               :placeholder="dialLines.length > 0 ? t('dialer.selectLine') : t('dialer.noLines')"
               :default-line-id="defaultLineID"
+              :offline-line="selectedOfflineLine"
               :disabled-values="unavailableDialLineIDs"
               :disabled-value-label="t('dialer.voiceUnavailable')"
               :status-values="[...occupiedLineIDs]"
@@ -734,14 +778,14 @@ onBeforeUnmount(() => {
                   class="call-button"
                   type="button"
                   :disabled="callButtonDisabled"
-                  :title="disabledReason || t('calls.dial')"
-                  :aria-label="t('calls.dial')"
+                  :title="disabledReason || callButtonTitle"
+                  :aria-label="callButtonTitle"
                   @click="placeCall"
                 >
                   <LoaderCircle v-if="callState.pendingAction === 'dial'" class="spin" :size="22" />
                   <Phone v-else :size="22" />
                 </button>
-                <small>{{ t('calls.dial') }}</small>
+                <small>{{ callButtonLabel }}</small>
               </span>
             </div>
           </div>

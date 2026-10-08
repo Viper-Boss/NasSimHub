@@ -27,6 +27,7 @@ import {
 import {
   callMediaState,
   resumeCallAudio,
+  sendCallTestTone,
   toggleCallMute
 } from '../state/callMedia'
 import {
@@ -56,16 +57,17 @@ const dtmfOpen = ref(false)
 const dtmfDisplay = ref<HTMLOutputElement>()
 let timer: number | undefined
 
-const session = computed(() => callState.session)
+// A pending request is presentation only. No call ID/ownership/media is
+// invented before the gateway confirms the call.
+const pendingDial = computed(() => callState.pendingDial)
+const session = computed(() => pendingDial.value ? null : callState.session)
 const dtmfDigits = computed(() => callState.dtmfDigits)
-const line = computed(() => (session.value ? lineForKey(session.value.line_id) : undefined))
-const contact = computed(() =>
-  session.value ? contactForNumber(session.value.remote_number) : undefined
-)
+const lineID = computed(() => pendingDial.value?.lineID || session.value?.line_id || '')
+const line = computed(() => lineForKey(lineID.value))
+const remoteNumber = computed(() => pendingDial.value?.number || session.value?.remote_number || '')
+const contact = computed(() => remoteNumber.value ? contactForNumber(remoteNumber.value) : undefined)
 const presentedNumber = computed(() =>
-  session.value
-    ? displayPhoneNumber(session.value.remote_number, session.value.line_id)
-    : ''
+  remoteNumber.value ? displayPhoneNumber(remoteNumber.value, lineID.value) : ''
 )
 const contactName = computed(
   () =>
@@ -94,7 +96,7 @@ const phaseLabel = computed(() => {
     ended: t('calls.ended'),
     failed: t('calls.failed')
   }
-  return session.value ? labels[session.value.phase] : ''
+  return pendingDial.value ? t('calls.dialing') : session.value ? labels[session.value.phase] : ''
 })
 const duration = computed(() => {
   const start = session.value?.active_at
@@ -328,7 +330,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Transition name="call-surface">
-    <section v-if="session" class="call-surface">
+    <section v-if="session || pendingDial" class="call-surface" :aria-busy="Boolean(pendingDial)">
       <div class="call-surface__content" :class="{ 'is-dtmf-open': dtmfOpen }">
         <div class="call-surface__identity">
           <CommunicationAvatar
@@ -347,13 +349,14 @@ onBeforeUnmount(() => {
               :line="line"
               :fallback="lineLabel(line)"
             />
-            <small v-else>{{ session.line_id }}</small>
+            <small v-else>{{ lineID }}</small>
             <small v-if="bearerLabel" class="call-surface__bearer">{{ bearerLabel }}</small>
           </div>
         </div>
 
         <div class="call-surface__status">
           <span role="status" aria-live="polite" aria-atomic="true">
+            <LoaderCircle v-if="pendingDial" class="spin" :size="18" aria-hidden="true" />
             {{ occupied ? occupiedLabel : phaseLabel }}
           </span>
           <strong v-if="duration" aria-live="off">{{ duration }}</strong>
@@ -473,6 +476,14 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <div v-if="active && callState.owned && callMediaState.status === 'active'" class="call-surface__input-check">
+          <small :title="callMediaState.inputDevice">{{ t('calls.remoteMicrophoneLevel') }} · {{ callMediaState.inputLevel }}%</small>
+          <meter min="0" max="100" :value="callMediaState.inputLevel" :aria-label="t('calls.remoteMicrophoneLevel')" />
+          <small v-if="!callMediaState.inputRunning">{{ t('calls.microphonePaused') }}</small>
+          <button class="call-surface__tone-check" type="button" :disabled="callMediaState.muted || callMediaState.testTonePlaying" @click="sendCallTestTone">
+            {{ callMediaState.testTonePlaying ? t('calls.sendingTestTone') : t('calls.sendTestTone') }}
+          </button>
+        </div>
         <Transition name="dtmf">
           <div
             v-if="active && dtmfOpen"
@@ -627,6 +638,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.call-surface__input-check { display: grid; gap: 8px; margin: 12px auto; max-width: 240px; color: var(--text-muted); text-align: center; }
+.call-surface__input-check meter { width: 100%; height: 8px; }
+.call-surface__tone-check { padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; color: inherit; background: transparent; cursor: pointer; }
+.call-surface__tone-check:disabled { opacity: .5; cursor: default; }
+
 .call-surface {
   display: flex;
   min-height: 0;

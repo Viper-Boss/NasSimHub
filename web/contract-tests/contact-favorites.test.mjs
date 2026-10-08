@@ -181,7 +181,7 @@ test('contact details keep their avatar within the shared header geometry', asyn
 test('incoming and outgoing call surfaces reuse a matched contact avatar', async () => {
   const source = await readFile(callSurface, 'utf8')
 
-  assert.match(source, /contactForNumber\(session\.value\.remote_number\)/)
+  assert.match(source, /contactForNumber\(remoteNumber\.value\)/)
   assert.match(
     source,
     /<CommunicationAvatar[\s\S]*channel="call"[\s\S]*:address="presentedNumber"[\s\S]*:src="contact\?\.avatar"/

@@ -352,6 +352,21 @@ func adminOnlyAPIPath(path, method string) bool {
 	if path == "/api/v1/nodes" || strings.HasPrefix(path, "/api/v1/nodes/") {
 		return true
 	}
+	if path == "/api/v1/security/trust" || strings.HasPrefix(path, "/api/v1/security/trust/") ||
+		path == "/api/v1/security/journal" || strings.HasPrefix(path, "/api/v1/security/journal/") {
+		return true
+	}
+	// The F50 is a second device reached over its own HTTP backend. It is not
+	// a line: it has no line_id, so no member's line assignment can describe
+	// who may use it, and these routes had no check at all -- any signed-in
+	// account, including one assigned no lines, could read every SMS on the
+	// device and send from it. A resource outside line scoping follows the
+	// administrator (the rule canAccessLine applies to a line-less proxy), and
+	// the settings page that drives these routes is already administrator
+	// only.
+	if strings.HasPrefix(path, "/api/v1/homesim/f50/") {
+		return true
+	}
 	if path == "/api/v1/about" ||
 		path == "/api/v1/external-access/status" ||
 		path == "/api/v1/external-access/refresh" ||

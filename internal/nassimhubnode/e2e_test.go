@@ -43,7 +43,10 @@ type e2eNode struct {
 	wifi     string
 	control  string
 	scenario string
-	cmd      *exec.Cmd
+	// extraArgs are appended to the mock Node's command line, for tests that
+	// need a particular security level or an older device.
+	extraArgs []string
+	cmd       *exec.Cmd
 }
 
 func freePort(t *testing.T) string {
@@ -75,8 +78,10 @@ func (n *e2eNode) start() {
 	if scenario == "" {
 		scenario = "unicom"
 	}
-	n.cmd = exec.Command(n.binary, "-tls", "-platform", "msm8916", "-scenario", scenario,
-		"-state-dir", n.stateDir, "-usb-listen", n.usb, "-wifi-listen", n.wifi, "-control-listen", n.control)
+	arguments := append([]string{"-tls", "-platform", "msm8916", "-scenario", scenario,
+		"-state-dir", n.stateDir, "-usb-listen", n.usb, "-wifi-listen", n.wifi, "-control-listen", n.control},
+		n.extraArgs...)
+	n.cmd = exec.Command(n.binary, arguments...)
 	n.cmd.Stdout = io.Discard
 	n.cmd.Stderr = io.Discard
 	if err := n.cmd.Start(); err != nil {
@@ -86,6 +91,16 @@ func (n *e2eNode) start() {
 	for time.Now().Before(deadline) {
 		if connection, err := net.DialTimeout("tcp", n.usb, 200*time.Millisecond); err == nil {
 			_ = connection.Close()
+			// The control listener starts after USB. Starting a test as soon as
+			// USB opens races scenario injection against the control startup.
+			if n.control != "" {
+				control, err := net.DialTimeout("tcp", n.control, 200*time.Millisecond)
+				if err != nil {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				_ = control.Close()
+			}
 			return
 		}
 		time.Sleep(100 * time.Millisecond)

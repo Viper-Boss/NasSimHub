@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { NodeApiError, readNodeSecurity, resetNodePQPin } from '../api/nodeSecurity'
+import NodeSecurityBlock from '../components/NodeSecurityBlock.vue'
 import { simNodeInventoryCopy } from '../i18n/simNodeInventory'
 import { nodeResourceCopy } from '../i18n/nodeResources'
+import { nodeSecurityCopy } from '../i18n/nodeSecurityCopy'
+import { sessionState } from '../state/session'
+
+// The agent-update panel is opened for one device at a time and most visits
+// to this page never open it, so its code waits for the first click.
+const NodeUpdatePanel = defineAsyncComponent(() => import('../components/NodeUpdatePanel.vue'))
 
 // Mirrors nassimhubnode.NodeView. The page never receives SIM identifiers
 // (ICCID, IMSI, phone number) or key material, only what an administrator
@@ -34,6 +42,13 @@ type NodeView = {
   voice_control?: boolean
   voice_audio?: boolean
   messages_on_device: number
+  // Identity, link security and trust arrive as the gateway sent them and are
+  // read through readNodeSecurity, never used raw: a field an older gateway
+  // omits must come out as "unknown", not as undefined drawn as a pass.
+  identity?: unknown
+  link_security?: unknown
+  identity_refused?: unknown
+  trust?: unknown
 	resources?: {
 	  observed_at: string
 	  cpu_percent: number | null
@@ -70,6 +85,14 @@ type ApiError = { code?: string; message?: string }
 const { locale } = useI18n()
 const copy = computed(() => simNodeInventoryCopy(String(locale.value)))
 const resourceCopy = computed(() => nodeResourceCopy(String(locale.value)))
+const securityCopy = computed(() => nodeSecurityCopy(String(locale.value)))
+// Every route behind this page is administrators-only, and the navigation
+// shows its link to administrators alone. A member who arrives by address is
+// told so: no pairing controls that can only be refused, and no poll that
+// would be answered 403 every ten seconds.
+const admin = computed(() => sessionState.role === 'admin')
+// The flat resource fields carry no `omitempty`: a Node that did not sample
+// one sends 0, and the template shows that as unknown rather than as a reading.
 function mib(bytes: number) { return `${(Math.max(0, bytes) / 1048576).toFixed(1)} MiB` }
 function uptime(seconds: number) { const m = Math.floor(Math.max(0, seconds) / 60); return `${Math.floor(m / 60)}h ${m % 60}m` }
 
@@ -90,6 +113,11 @@ const pairError = ref('')
 const busyNode = ref('')
 const unpairArmed = ref('')
 const nodeError = ref<Record<string, string>>({})
+const managementLinks = ref<Record<string, string>>({})
+const resettingNode = ref('')
+// The device whose agent-update panel is open; '' when none is.
+const updateNodeID = ref('')
+const updateNode = computed(() => nodes.value.find((entry) => entry.node_id === updateNodeID.value))
 
 const now = ref(Date.now())
 let clock: ReturnType<typeof setInterval> | undefined
@@ -237,6 +265,53 @@ async function checkNode(node: NodeView) {
   }
 }
 
+async function openManagement(node: NodeView) {
+  // Open during the click gesture to avoid popup blocking after the request.
+  const target = window.open('about:blank', '_blank')
+  if (target) target.opener = null
+  busyNode.value = node.node_id
+  nodeError.value = { ...nodeError.value, [node.node_id]: '' }
+  try {
+    const data = await request<{ url: string }>('POST', '/api/v1/nodes/admin', { device_id: node.node_id })
+    const url = new URL(data.url)
+    if (url.protocol !== 'https:' || url.username || url.password) throw new Error(copy.value.invalidResponse)
+    if (target) target.location.replace(url.href)
+    else managementLinks.value = { ...managementLinks.value, [node.node_id]: url.href }
+  } catch (cause) {
+    target?.close()
+    nodeError.value = { ...nodeError.value, [node.node_id]: messageOf(cause, copy.value.genericError) }
+  } finally { busyNode.value = '' }
+}
+
+/**
+ * Accept a deliberate post-quantum key change.
+ *
+ * Sends the device ID and nothing else: the gateway forgets the ML-DSA key it
+ * recorded and, at the next check, records what the device then proves. The
+ * Ed25519 pin from pairing is not part of this request and is not touched.
+ * Reached only through the confirmation in NodeSecurityBlock.
+ */
+async function resetPQPin(node: NodeView) {
+  if (resettingNode.value) return
+  resettingNode.value = node.node_id
+  nodeError.value = { ...nodeError.value, [node.node_id]: '' }
+  notice.value = ''
+  try {
+    const refreshed = await resetNodePQPin(node.node_id)
+    if (refreshed && typeof refreshed === 'object') {
+      nodes.value = nodes.value.map((entry) => (entry.node_id === node.node_id ? refreshed as NodeView : entry))
+    } else {
+      await refresh(true)
+    }
+    notice.value = securityCopy.value.resetDone
+  } catch (cause) {
+    const known = cause instanceof NodeApiError ? copy.value.errors[cause.code] : ''
+    nodeError.value = { ...nodeError.value, [node.node_id]: known || messageOf(cause, copy.value.genericError) }
+  } finally {
+    resettingNode.value = ''
+  }
+}
+
 async function unpair(node: NodeView) {
   if (unpairArmed.value !== node.node_id) {
     unpairArmed.value = node.node_id
@@ -276,6 +351,7 @@ function bars(value: number): string {
 }
 
 onMounted(() => {
+  if (!admin.value) return
   void refresh()
   clock = setInterval(() => { now.value = Date.now() }, 1000)
   poll = setInterval(() => { void refresh(true) }, 10000)
@@ -291,7 +367,10 @@ onBeforeUnmount(() => {
   <main class="node-inventory-page">
     <header class="node-inventory-page__header"><h1>{{ copy.title }}</h1></header>
     <div class="node-inventory-page__scroll">
-    <div class="node-inventory">
+    <div v-if="!admin" class="node-inventory">
+      <p class="node-inventory__notice" role="status">{{ securityCopy.updates.forbidden }}</p>
+    </div>
+    <div v-else class="node-inventory">
     <div class="node-inventory__heading">
       <div>
         <p>{{ copy.subtitle }}</p>
@@ -333,6 +412,7 @@ onBeforeUnmount(() => {
               <p class="node-inventory__hint">{{ copy.expiresIn(secondsLeft(candidate)) }}</p>
               <p v-if="pairError" role="alert" class="node-inventory__error">{{ pairError }}</p>
               <div class="node-inventory__actions">
+
                 <button type="button" :disabled="pairing || secondsLeft(candidate) <= 0" @click="confirmPair">
                   {{ pairing ? copy.pairing_ : copy.pairConfirm }}
                 </button>
@@ -348,6 +428,15 @@ onBeforeUnmount(() => {
         </li>
       </ul>
     </section>
+
+    <NodeUpdatePanel
+      v-if="updateNode"
+      :device-id="updateNode.node_id"
+      :device-name="updateNode.display_name || updateNode.node_id"
+      :copy="securityCopy"
+      :locale="String(locale)"
+      @close="updateNodeID = ''"
+    />
 
     <p v-if="error" role="alert" class="node-inventory__error">{{ error }}</p>
     <p v-else-if="!loading && nodes.length === 0" class="node-inventory__empty">{{ copy.empty }}</p>
@@ -375,9 +464,9 @@ onBeforeUnmount(() => {
           <div v-if="node.online"><dt>{{ copy.onDevice }}</dt><dd>{{ node.messages_on_device }}</dd></div>
           <template v-if="node.online && node.resources">
             <div><dt>{{ resourceCopy.cpu }}</dt><dd>{{ node.resources.cpu_percent == null ? copy.unknown : `${node.resources.cpu_percent.toFixed(1)}%` }}</dd></div>
-            <div><dt>{{ resourceCopy.memory }}</dt><dd>{{ mib(node.resources.memory_total_bytes - node.resources.memory_available_bytes) }} / {{ mib(node.resources.memory_total_bytes) }}</dd></div>
-            <div><dt>{{ resourceCopy.uptime }}</dt><dd>{{ uptime(node.resources.uptime_seconds) }}</dd></div>
-            <div><dt>{{ resourceCopy.processes }}</dt><dd>{{ node.resources.process_count }}</dd></div>
+            <div><dt>{{ resourceCopy.memory }}</dt><dd>{{ node.resources.memory_total_bytes > 0 ? `${mib(node.resources.memory_total_bytes - node.resources.memory_available_bytes)} / ${mib(node.resources.memory_total_bytes)}` : copy.unknown }}</dd></div>
+            <div><dt>{{ resourceCopy.uptime }}</dt><dd>{{ node.resources.uptime_seconds > 0 ? uptime(node.resources.uptime_seconds) : copy.unknown }}</dd></div>
+            <div><dt>{{ resourceCopy.processes }}</dt><dd>{{ node.resources.process_count > 0 ? node.resources.process_count : copy.unknown }}</dd></div>
             <div><dt>{{ resourceCopy.updated }}</dt><dd>{{ formatTime(node.resources.observed_at) }}</dd></div>
           </template>
           <div><dt>{{ copy.version }}</dt><dd>{{ node.agent_version || copy.unknown }}</dd></div>
@@ -393,8 +482,19 @@ onBeforeUnmount(() => {
             <tbody><tr v-for="process in node.resources.processes" :key="process.pid"><td>{{ process.pid }}</td><td>{{ process.name }}</td><td>{{ mib(process.rss_bytes) }}</td></tr></tbody>
           </table>
         </details>
+        <NodeSecurityBlock
+          :security="readNodeSecurity(node)"
+          :copy="securityCopy"
+          :paired="node.pair_state === 'paired'"
+          :busy="resettingNode === node.node_id"
+          :locale="String(locale)"
+          @reset="resetPQPin(node)"
+        />
         <p v-if="nodeError[node.node_id]" role="alert" class="node-inventory__error">{{ nodeError[node.node_id] }}</p>
         <div class="node-inventory__actions">
+          <button type="button" :disabled="!node.online || busyNode === node.node_id" @click="openManagement(node)">{{ copy.openManagement }}</button>
+          <button type="button" class="node-inventory__secondary" @click="updateNodeID = node.node_id">{{ securityCopy.updates.open }}</button>
+          <a v-if="managementLinks[node.node_id]" :href="managementLinks[node.node_id]" target="_blank" rel="noopener noreferrer">{{ copy.continueManagement }}</a>
           <button type="button" :disabled="busyNode === node.node_id" @click="checkNode(node)">{{ copy.refreshNode }}</button>
           <button
             type="button"
@@ -427,18 +527,21 @@ h1 { margin: 0 0 8px; font-size: 28px; }
 h2 { margin: 0; font-size: 18px; }
 h3 { margin: 0 0 8px; font-size: 16px; }
 p { margin: 0; }
-button { border: 0; border-radius: 9px; padding: 10px 16px; background: #155f81; color: #fff; cursor: pointer; font: inherit; }
+/* Colours are the shared tokens throughout: the literal blues, greens and reds
+   this page was first written with were chosen against a light surface and
+   were close to unreadable on the dark one. */
+button { border: 0; border-radius: 9px; padding: 10px 16px; background: var(--accent); color: var(--on-accent); cursor: pointer; font: inherit; }
 button:disabled { opacity: .55; cursor: default; }
 .node-inventory__secondary { background: var(--surface-hover); color: var(--text); }
-.node-inventory__danger { background: #9b342b; }
+.node-inventory__danger { background: var(--danger-soft); color: var(--danger-strong); box-shadow: inset 0 0 0 1px var(--danger-border); }
 .node-inventory__notice, .node-inventory__empty { margin-top: 20px; padding: 16px; border-radius: 10px; background: var(--surface-subtle); color: var(--text); line-height: 1.6; }
-.node-inventory__success { margin-top: 12px; padding: 12px 16px; border-radius: 10px; background: #e6f4ea; color: #1d5a2e; }
-.node-inventory__error { margin-top: 12px; color: #9b342b; }
+.node-inventory__success { margin-top: 12px; padding: 12px 16px; border-radius: 10px; background: var(--success-soft); color: var(--success); overflow-wrap: anywhere; }
+.node-inventory__error { margin-top: 12px; color: var(--danger-strong); overflow-wrap: anywhere; }
 .node-inventory__discovery { margin-top: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); }
 .node-inventory__discovery > p { margin-top: 12px; }
 .node-inventory__candidates { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
 .node-inventory__candidate { border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-.node-inventory__blocked { margin-top: 12px; color: #7a5a12; }
+.node-inventory__blocked { margin-top: 12px; color: var(--warning-strong); }
 .node-inventory__confirm { margin-top: 14px; padding: 16px; border-radius: 10px; background: var(--surface-subtle); display: grid; gap: 10px; }
 .node-inventory__confirm label { display: grid; gap: 6px; }
 .node-inventory__confirm input { padding: 9px 11px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; font: inherit; max-width: 320px; }
@@ -448,16 +551,31 @@ button:disabled { opacity: .55; cursor: default; }
 .node-inventory__id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; }
 .node-inventory__id--large { font-size: 22px; letter-spacing: .04em; }
 .node-inventory__fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-.node-inventory__list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 20px; }
+.node-inventory__list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 20px; }
 .node-inventory__card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); padding: 20px; }
 .node-inventory__card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+/* A device with no name is headed by its ID, which has nowhere to break. */
+.node-inventory__card-head h2 { min-width: 0; overflow-wrap: anywhere; }
+.node-inventory__card { min-width: 0; }
 .node-inventory__badge { border-radius: 999px; padding: 3px 10px; font-size: 13px; white-space: nowrap; }
-.node-inventory__badge.is-ok { background: #e6f4ea; color: #1d5a2e; }
-.node-inventory__badge.is-off { background: #eef1f3; color: #55636d; }
-.node-inventory__badge.is-warn { background: #fbefd9; color: #7a5a12; }
-.node-inventory__bars { letter-spacing: 1px; color: #155f81; }
+.node-inventory__badge.is-ok { background: var(--success-soft); color: var(--success); }
+.node-inventory__badge.is-off { background: var(--surface-hover); color: var(--muted-strong); }
+.node-inventory__badge.is-warn { background: var(--warning-soft); color: var(--warning-strong); }
+.node-inventory__bars { letter-spacing: 1px; color: var(--accent); }
 dl { display: grid; gap: 10px; margin: 0; }
 dl div { display: flex; justify-content: space-between; gap: 14px; }
+/* Three short columns, so it stays a table at 360px: the name column takes
+   what is left and wraps, the two figures keep their width. */
+.node-inventory__processes { margin-top: 14px; }
+.node-inventory__processes table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 13px; }
+.node-inventory__processes th, .node-inventory__processes td { padding: 4px 6px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.node-inventory__processes th { color: var(--muted); font-weight: 600; }
+.node-inventory__processes th:last-child, .node-inventory__processes td:last-child { text-align: right; white-space: nowrap; }
+@media (max-width: 560px) {
+  .node-inventory { padding: 16px 14px 28px; }
+  .node-inventory-page__header { padding: 0 14px; }
+  .node-inventory__card, .node-inventory__discovery { padding: 14px; }
+}
 dt { color: var(--muted); flex-shrink: 0; }
 dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 </style>

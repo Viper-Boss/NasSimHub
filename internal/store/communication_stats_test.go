@@ -135,3 +135,83 @@ func TestCommunicationStatsCountsTheLastDayOfRecords(t *testing.T) {
 		t.Fatalf("a member with no lines is counted %+v", empty)
 	}
 }
+
+func TestCommunicationStatsPerNodeNeverMixDevicesOrTheHostModem(t *testing.T) {
+	t.Parallel()
+
+	repository := newHardwareTestStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	at := func(offset time.Duration) string { return now.Add(offset).Format(time.RFC3339Nano) }
+	code := "【示例】您的验证码是 482913，5 分钟内有效"
+	for _, message := range []struct {
+		node, content string
+		kind          int
+	}{
+		{"NSH-410-AAAAAA", code, 1}, {"NSH-410-AAAAAA", code, 1}, {"NSH-410-AAAAAA", "hello", 1}, {"NSH-410-AAAAAA", "out", 2},
+		{"NSH-410-BBBBBB", code, 1},
+		{"", code, 1}, {"", "host modem", 1}, // the NAS's own modem
+	} {
+		if _, err := repository.database.ExecContext(ctx,
+			`INSERT INTO sms (line_id, node_id, peer, content, delivery_status, type, timestamp, created_at)
+			 VALUES ('line-shared', ?, '+8613800000000', ?, '', ?, ?, ?)`,
+			message.node, message.content, message.kind, at(-time.Hour), at(-time.Hour),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, call := range []struct {
+		id, node           string
+		activeFor, ringFor time.Duration
+	}{
+		{"a-32s", "NSH-410-AAAAAA", 32 * time.Second, 9 * time.Second},
+		{"a-missed", "NSH-410-AAAAAA", 0, 20 * time.Second},
+		{"b-5m", "NSH-410-BBBBBB", 5 * time.Minute, 4 * time.Second},
+	} {
+		start := now.Add(-2 * time.Hour)
+		var active any
+		ended := start.Add(call.ringFor)
+		if call.activeFor > 0 {
+			active = start.Add(call.ringFor).Format(time.RFC3339Nano)
+			ended = ended.Add(call.activeFor)
+		}
+		if _, err := repository.database.ExecContext(ctx,
+			`INSERT INTO call_history (id, line_id, node_id, direction, phase, created_at, active_at, ended_at, end_reason)
+			 VALUES (?, 'line-shared', ?, 'incoming', 'ended', ?, ?, ?, 'remote')`,
+			call.id, call.node, start.Format(time.RFC3339Nano), active, ended.Format(time.RFC3339Nano),
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a, err := repository.CommunicationStatsForNode(ctx, now, 24, "NSH-410-AAAAAA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.SMSReceived != 3 || a.SMSVerification != 2 || a.SMSSent != 1 || a.CallsIncoming != 2 || a.CallsMissed != 1 {
+		t.Fatalf("node A: %+v", a)
+	}
+	// Seconds actually connected: ringing time and the missed call add nothing,
+	// and 32 seconds is 32 - not 41, and not 32 of anything else.
+	if a.CallDurationSeconds != 32 {
+		t.Fatalf("node A talked for 32 s, counted %d", a.CallDurationSeconds)
+	}
+	b, err := repository.CommunicationStatsForNode(ctx, now, 24, "NSH-410-BBBBBB")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.SMSReceived != 1 || b.SMSVerification != 1 || b.CallsIncoming != 1 || b.CallDurationSeconds != 300 {
+		t.Fatalf("node B: %+v", b)
+	}
+	none, err := repository.CommunicationStatsForNode(ctx, now, 24, "NSH-410-CCCCCC")
+	if err != nil || none.SMSReceived != 0 || none.CallsIncoming != 0 || none.CallDurationSeconds != 0 {
+		t.Fatalf("a device that handled nothing counts nothing: %+v %v", none, err)
+	}
+	if _, err := repository.CommunicationStatsForNode(ctx, now, 24, " "); err == nil {
+		t.Fatal("an empty node must not fall back to the whole gateway")
+	}
+	all, err := repository.CommunicationStats(ctx, now, 24)
+	if err != nil || all.SMSReceived != 6 || all.CallDurationSeconds != 332 {
+		t.Fatalf("the gateway total is the sum of its parts: %+v %v", all, err)
+	}
+}

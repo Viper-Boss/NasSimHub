@@ -48,6 +48,12 @@ const props = withDefaults(
     statusValueLabel?: string
     compact?: boolean
     filterMode?: boolean
+    /**
+     * The selected line when its device is offline: listed, shown as the
+     * selection and not choosable, so the control says which line is selected
+     * and why it cannot be used instead of falling back to its placeholder.
+     */
+    offlineLine?: LineSummary
   }>(),
   {
     label: '',
@@ -66,7 +72,8 @@ const props = withDefaults(
     statusValues: () => [],
     statusValueLabel: '',
     compact: false,
-    filterMode: false
+    filterMode: false,
+    offlineLine: undefined
   }
 )
 
@@ -98,8 +105,12 @@ function lineValue(line: LineSummary): string {
   return lineKey(line)
 }
 
-const selectedLine = computed(() =>
-  props.lines.find(line => lineValue(line) === props.modelValue)
+const selectedLine = computed(
+  () =>
+    props.lines.find(line => lineValue(line) === props.modelValue) ??
+    (props.offlineLine && lineValue(props.offlineLine) === props.modelValue
+      ? props.offlineLine
+      : undefined)
 )
 const selectedIsDefault = computed(
   () =>
@@ -125,7 +136,9 @@ const identityVariant = computed<'control' | 'compact' | 'filter'>(() =>
 function lineDetails(line: LineSummary, value: string): string {
   const name = lineLabel(line)
   const details = [
-    line.phone_number,
+    // The number the SIM or the gateway's settings report, or the words
+    // "unknown number". Never anything worked out from an ICCID, IMSI or IMEI.
+    line.phone_number.trim() || t('calls.unknownNumber'),
     line.operator && line.operator !== name ? line.operator : ''
   ].filter(Boolean)
   if (
@@ -166,6 +179,21 @@ const options = computed<SelectorOption[]>(() => {
       defaultLine:
         Boolean(line.id) && line.id === props.defaultLineId
     })
+  }
+  const offline = props.offlineLine
+  if (offline) {
+    const value = lineValue(offline)
+    if (value && !result.some(option => option.value === value)) {
+      result.push({
+        value,
+        name: lineLabel(offline),
+        details: t('lines.deviceOffline'),
+        status: '',
+        line: offline,
+        disabled: true,
+        defaultLine: Boolean(offline.id) && offline.id === props.defaultLineId
+      })
+    }
   }
   return result
 })

@@ -8,6 +8,7 @@ const insight = await readFile(
   new URL('../src/components/ModuleInsightCards.vue', import.meta.url),
   'utf8'
 )
+const networkState = await readFile(new URL('../src/state/dashboardNetworkNodes.ts', import.meta.url), 'utf8')
 const chrome = await readFile(
   new URL('../src/components/networkCard.css', import.meta.url),
   'utf8'
@@ -20,7 +21,7 @@ const chrome = await readFile(
 
 test('the nodes card reads the probe and the DHT, and nothing else', () => {
   for (const call of ['getNKNNetworkNodes', 'getNKNNetworkStatus', 'getDHTSettings']) {
-    assert.match(insight, new RegExp(`\\b${call}\\b`), `the nodes card no longer calls ${call}`)
+    assert.match(networkState, new RegExp(`\\b${call}\\b`), `the nodes card no longer calls ${call}`)
   }
   // Every figure it renders comes from one of those three refs. A literal in
   // the markup would be a mock-up number that shipped.
@@ -46,8 +47,8 @@ test('the nodes card says which path is off instead of showing an empty list', (
   assert.match(insight, /insight-card__empty[^>]*>\{\{ t\('dashboard\.nodesEmpty'\)/)
   // And it must not probe a channel that is switched off.
   assert.match(
-    insight,
-    /nknNodes\.value = nknEnabled\.value \? await getNKNNetworkNodes\(\) : null/,
+    networkState,
+    /enabled \? await getNKNNetworkNodes\(\) : null/,
     'the card probes NKN seed nodes even when NKN is disabled'
   )
 })

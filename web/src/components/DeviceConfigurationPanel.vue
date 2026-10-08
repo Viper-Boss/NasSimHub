@@ -30,6 +30,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { gateway } from '../api/client'
+import { saveOwnNumber } from '../api/ownNumber'
+import { ownNumberCopy } from '../i18n/ownNumberCopy'
 import {
   acquireSystemMetrics,
   releaseSystemMetrics,
@@ -116,7 +118,29 @@ import SettingsLoadBoundary from './settings/SettingsLoadBoundary.vue'
 type DeviceTab = 'overview' | 'network' | 'sim' | 'sms' | 'voice' | 'ussd'
 type AsyncStatus = 'idle' | 'loading' | 'ready' | 'error'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const numberCopy = computed(() => ownNumberCopy(locale.value))
+const ownNumberDraft = ref('')
+const ownNumberSaving = ref(false)
+const ownNumberError = ref('')
+
+async function applyOwnNumber(): Promise<void> {
+  const lineID = selectedLine.value?.id
+  const iccid = selectedLine.value?.iccid
+  if (!lineID || !iccid || ownNumberSaving.value || sessionState.role !== 'admin') return
+  ownNumberSaving.value = true
+  ownNumberError.value = ''
+  try {
+    await loadBootstrap(true)
+    if (selectedLine.value?.id !== lineID || selectedLine.value?.iccid !== iccid) {
+      throw new Error(numberCopy.value.changed)
+    }
+    await saveOwnNumber(lineID, iccid, ownNumberDraft.value)
+    await Promise.all([loadBootstrap(true), loadDevices(true)])
+  } catch (error) {
+    ownNumberError.value = error instanceof Error ? error.message : String(error)
+  } finally { ownNumberSaving.value = false }
+}
 const route = useRoute()
 const router = useRouter()
 const tabs = computed<Array<{ id: DeviceTab; label: string; icon: typeof RadioTower }>>(() => [
@@ -272,6 +296,10 @@ const selectedExplicitLineLabel = computed(() => {
   const label = selectedLine.value?.line_label.trim() || ''
   return label.toLocaleLowerCase() === selectedModuleName.value.toLocaleLowerCase() ? '' : label
 })
+watch(() => `${selectedLine.value?.id || ''}|${selectedLine.value?.iccid || ''}`, () => {
+  ownNumberDraft.value = selectedLine.value?.phone_number || ''
+  ownNumberError.value = ''
+}, { immediate: true })
 const currentSIMIdentity = computed(() => {
   const line = selectedLine.value
   if (!line) return ''
@@ -2372,6 +2400,20 @@ const channelBandwidthLabel = computed(() => {
             </LoadingSkeletonBoundary>
           </section>
 
+          <section v-if="sessionState.role === 'admin' && selectedLine?.iccid" class="configuration-section">
+            <header><Phone :size="18" /><h4>{{ numberCopy.title }}</h4></header>
+            <p class="homesim-sim-notice">{{ numberCopy.hint }}</p>
+            <form class="sim-form" @submit.prevent="applyOwnNumber">
+              <label class="field"><span>{{ numberCopy.title }}</span>
+                <input v-model="ownNumberDraft" type="tel" maxlength="64" autocomplete="tel" :disabled="ownNumberSaving" />
+              </label>
+              <p v-if="ownNumberError" class="inline-error sim-form__operation" role="alert">{{ ownNumberError }}</p>
+              <div class="line-label-form__actions sim-form__apply">
+                <button type="submit" class="primary-action" :disabled="ownNumberSaving"><Save :size="16" />{{ numberCopy.save }}</button>
+                <button type="button" class="secondary-action" :disabled="ownNumberSaving" @click="ownNumberDraft = ''">{{ numberCopy.clear }}</button>
+              </div>
+            </form>
+          </section>
           <section class="configuration-section">
             <header><ShieldAlert :size="18" /><h4>PIN</h4></header>
             <p class="homesim-sim-notice">{{ t('homesim.simNotice') }}</p>

@@ -62,6 +62,10 @@ component_changed() {
                 ':(glob)internal/release/**'
                 ':(glob)internal/releasechannel/**'
                 ':(glob)internal/license/**'
+                ':(glob)internal/pqsig/**'
+                # internal/pqsig links the vendored Node protocol module for
+                # its ML-DSA provider, so a change there is a change here.
+                ':(glob)third_party/nassimhub-node/proto/**'
                 ':(exclude,glob)**/*_test.go'
             )
             ;;

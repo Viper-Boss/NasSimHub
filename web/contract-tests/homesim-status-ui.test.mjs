@@ -67,8 +67,8 @@ test('the WireGuard rate chart survives a counter reset', async () => {
 })
 
 // The DHT is a second control path, not a second view of NKN, so it gets its
-// own light and its own section -- both hidden until asked for by name.
-test('the DHT stays hidden until unlocked, and reports isolated honestly', async () => {
+// own light; advanced settings stay hidden until explicitly opened.
+test('DHT status is visible across browsers; controls remain gated and isolated is honest', async () => {
  const nav = await readFile(new URL('../src/components/settings/settingsNavigation.ts', import.meta.url), 'utf8')
  assert.match(nav, /if \(section === 'dht'\) return visibility\.isAdmin && visibility\.dhtUnlocked === true/)
 
@@ -80,7 +80,8 @@ test('the DHT stays hidden until unlocked, and reports isolated honestly', async
  assert.match(registry, /unlockDHT\(\)/)
 
  const strip = await readFile(new URL('../src/components/LineStatusStrip.vue', import.meta.url), 'utf8')
- assert.match(strip, /v-if="dhtUnlockState\.unlocked"/)
+ assert.doesNotMatch(strip, /v-if="dhtUnlockState\.unlocked"/)
+ assert.match(strip, /@click="unlockDHT"/)
  // "isolated" means the node runs and has found nobody. That is neither
  // healthy nor broken, and showing it green would claim a path that cannot
  // carry a lookup.
