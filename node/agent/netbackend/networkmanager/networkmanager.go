@@ -123,6 +123,12 @@ func runNMCLI(ctx context.Context, arguments ...string) (string, error) {
 
 // Status reports the live radio state and the one profile owned by NasSimHub.
 func (b *Backend) Status(ctx context.Context) (proto.WiFiStatus, error) {
+	radio := b.radioEnabled(ctx)
+	if radio != nil && !*radio {
+		saved, _ := b.connectionSSID(ctx, defaultProfile)
+		return proto.WiFiStatus{State: proto.WiFiDisabled, RadioEnabled: radio, SavedSSID: saved,
+			ProvisioningState: proto.WiFiProvisioningDisabled, ObservedAt: b.now().UTC()}, nil
+	}
 	provisioning, _ := b.machine.State()
 	b.mu.Lock()
 	provisioningReason := ""
@@ -130,7 +136,7 @@ func (b *Backend) Status(ctx context.Context) (proto.WiFiStatus, error) {
 		provisioningReason = b.ap.failure
 	}
 	if b.state == proto.WiFiConnecting {
-		status := proto.WiFiStatus{State: b.state, SSID: b.target, ProvisioningState: provisioning, ObservedAt: b.now().UTC()}
+		status := proto.WiFiStatus{State: b.state, RadioEnabled: radio, SSID: b.target, ProvisioningState: provisioning, ObservedAt: b.now().UTC()}
 		b.mu.Unlock()
 		return status, nil
 	}
@@ -141,7 +147,7 @@ func (b *Backend) Status(ctx context.Context) (proto.WiFiStatus, error) {
 	lastFailure := ""
 	if b.state == proto.WiFiFailed && b.now().Sub(b.failedAt) < recoveryWindow {
 		if provisioning != proto.WiFiProvisioningAPReady {
-			status := proto.WiFiStatus{State: b.state, FailureReason: b.failure, ProvisioningState: provisioning,
+			status := proto.WiFiStatus{State: b.state, RadioEnabled: radio, FailureReason: b.failure, ProvisioningState: provisioning,
 				ProvisioningReason: provisioningReason, ObservedAt: b.now().UTC()}
 			b.mu.Unlock()
 			return status, nil
@@ -168,7 +174,7 @@ func (b *Backend) Status(ctx context.Context) (proto.WiFiStatus, error) {
 		return proto.WiFiStatus{}, proto.Unavailable("wifi.status", "Wi-Fi device is not managed by NetworkManager", nil)
 	}
 
-	status := proto.WiFiStatus{State: proto.WiFiNoConfig, ProvisioningState: provisioning,
+	status := proto.WiFiStatus{State: proto.WiFiNoConfig, RadioEnabled: radio, ProvisioningState: provisioning,
 		ProvisioningReason: provisioningReason, ObservedAt: b.now().UTC()}
 	savedSSID, _ := b.connectionSSID(ctx, defaultProfile)
 	status.SavedSSID = savedSSID
@@ -280,7 +286,7 @@ func (b *Backend) scan(ctx context.Context) (proto.WiFiScanResult, error) {
 }
 
 // Connect starts a bounded NetworkManager join in the background.
-func (b *Backend) Connect(_ context.Context, request proto.WiFiConnectRequest) (proto.WiFiStatus, error) {
+func (b *Backend) Connect(ctx context.Context, request proto.WiFiConnectRequest) (proto.WiFiStatus, error) {
 	ssid := strings.TrimSpace(request.SSID)
 	if err := validateSSID(ssid); err != nil {
 		return proto.WiFiStatus{}, proto.InvalidArgument("wifi.connect", err.Error())
@@ -295,6 +301,14 @@ func (b *Backend) Connect(_ context.Context, request proto.WiFiConnectRequest) (
 		if unicode.IsControl(character) {
 			return proto.WiFiStatus{}, proto.InvalidArgument("wifi.connect", "psk contains a control character")
 		}
+	}
+
+	if !b.lockOperation(ctx) {
+		return proto.WiFiStatus{}, proto.Conflict("wifi.connect", "Wi-Fi is busy")
+	}
+	defer b.opMu.Unlock()
+	if radio := b.radioEnabled(ctx); radio != nil && !*radio {
+		return proto.WiFiStatus{}, proto.FailedPrecondition("wifi.connect", "Enable Wi-Fi before joining a network")
 	}
 
 	b.mu.Lock()

@@ -271,7 +271,7 @@ func startTrustEngine(
 	if err != nil {
 		return nil, err
 	}
-	engine, err := trustengine.New(ctx, trustengine.Options{Store: trustStore, Key: key, Enforcement: mode})
+	engine, err := trustengine.New(ctx, trustengine.Options{Store: trustStore, Key: key, Enforcement: mode, HouseholdSIMDevices: strings.FieldsFunc(os.Getenv("MODEMDECK_HOUSEHOLD_SIM_DEVICES"), func(r rune) bool { return r == ',' || r == ' ' })})
 	if err != nil {
 		return nil, fmt.Errorf("open trust records: %w", err)
 	}

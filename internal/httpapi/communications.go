@@ -1036,6 +1036,8 @@ func (api *API) writeCommunicationError(
 		err,
 	)
 	switch {
+	case errors.Is(err, communication.ErrPermissionDenied):
+		writeError(response, http.StatusForbidden, "permission_denied", err.Error(), "")
 	case errors.Is(err, communication.ErrInvalidArgument):
 		writeError(response, http.StatusBadRequest, "invalid_argument", err.Error(), "")
 	case errors.Is(err, communication.ErrNotFound):
@@ -1059,6 +1061,8 @@ func (api *API) writeCommunicationError(
 
 func communicationErrorClass(err error) string {
 	switch {
+	case errors.Is(err, communication.ErrPermissionDenied):
+		return "permission_denied"
 	case errors.Is(err, communication.ErrInvalidArgument):
 		return "invalid_argument"
 	case errors.Is(err, communication.ErrNotFound):

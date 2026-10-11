@@ -540,6 +540,10 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(request.URL.Path,usbConsoleAPI) {
+		if !api.requireAdmin(response,request){return}
+		api.nassimhubUSBConsole(response,request);return
+	}
 	switch request.URL.Path {
 	case "/api/v1/nodes":
 		api.getOnly(response, request, api.nassimhubNodes)
@@ -687,7 +691,9 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.postOnly(response, request, api.securityTrustRestrict)
 	case "/api/v1/security/trust/quarantine":
 		api.postOnly(response, request, api.securityTrustQuarantine)
-	case "/api/v1/security/trust/restore":
+	case "/api/v1/security/trust/approve":
+  api.postOnly(response, request, api.securityTrustApprove)
+ case "/api/v1/security/trust/restore":
 		api.postOnly(response, request, api.securityTrustRestore)
 	case "/api/v1/security/journal":
 		api.getOnly(response, request, api.securityJournal)
@@ -888,8 +894,8 @@ func (api *API) bootstrap(response http.ResponseWriter, request *http.Request) {
 		api.writeInternalError(response, request, "load system settings", err)
 		return
 	}
-	lineResponses := attachLineQuotas(lineSummaryResponses(lines), api.loadLineQuotaMap())
-	catalogResponses := attachLineQuotas(lineSummaryResponses(lineCatalog), api.loadLineQuotaMap())
+	lineResponses := api.attachLineTrust(attachLineQuotas(lineSummaryResponses(lines), api.loadLineQuotaMap()), lines)
+	catalogResponses := api.attachLineTrust(attachLineQuotas(lineSummaryResponses(lineCatalog), api.loadLineQuotaMap()), lineCatalog)
 	writeJSON(response, http.StatusOK, bootstrapResponse{
 		Capabilities:   capabilities,
 		Lines:          lineResponses,

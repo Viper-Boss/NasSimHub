@@ -165,6 +165,9 @@ func (b *Backend) Tick(ctx context.Context) {
 	}
 	defer b.opMu.Unlock()
 
+	if radio := b.radioEnabled(ctx); radio != nil && !*radio {
+		return
+	}
 	seen, err := b.observe(ctx)
 	b.mu.Lock()
 	changed := b.ap.unavailable != (err != nil)

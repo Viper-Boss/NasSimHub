@@ -73,71 +73,45 @@ func get(h http.Handler, path string, cookie *http.Cookie, passive bool) *httpte
 	return w
 }
 
-func TestSessionExpiresWhenIdle(t *testing.T) {
+func TestRememberedSessionSurvivesIdleAndRestartAndLogout(t *testing.T) {
 	c := &clock{now: time.Unix(1_800_000_000, 0)}
-	_, h, cookie, _ := configured(t, c, &spy{})
-	// Activity slides the idle limit.
-	for i := 0; i < 3; i++ {
-		c.advance(idleLifetime - time.Minute)
-		if w := get(h, "/admin/api/v1/status", cookie, false); w.Code != 204 {
-			t.Fatalf("active session refused after %d periods: %d", i+1, w.Code)
-		}
-	}
-	// The page's own polling is answered but is not activity.
-	c.advance(idleLifetime - time.Minute)
+	a, h, cookie, csrf := configured(t, c, &spy{})
+	c.advance(time.Hour)
 	if w := get(h, "/admin/api/v1/status", cookie, true); w.Code != 204 {
-		t.Fatal("passive request refused inside the idle limit", w.Code)
+		t.Fatal("idle session lost", w.Code)
 	}
-	c.advance(2 * time.Minute)
-	w := get(h, "/admin/api/v1/status", cookie, true)
-	if w.Code != 401 || !strings.Contains(w.Body.String(), `"session_expired"`) {
-		t.Fatal("polling kept an idle session alive", w.Code, w.Body.String())
+	reopened, err := Open(a.options)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if w = get(h, "/admin/api/v1/status", cookie, false); w.Code != 401 {
-		t.Fatal("an expired session came back", w.Code)
+	h = reopened.Wrap(&spy{})
+	if w := get(h, "/admin/api/v1/status", cookie, false); w.Code != 204 {
+		t.Fatal("restart lost session", w.Code)
 	}
-	var state struct{ Authenticated bool }
-	_ = json.Unmarshal(get(h, "/admin/session", cookie, false).Body.Bytes(), &state)
-	if state.Authenticated {
-		t.Fatal("session probe reports an expired session as signed in")
+	if w := call(t, h, "/admin/logout", "POST", nil, cookie, csrf, origin); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
 	}
-}
-
-func TestSessionProbeIsNotActivity(t *testing.T) {
-	c := &clock{now: time.Unix(1_800_000_000, 0)}
-	_, h, cookie, _ := configured(t, c, &spy{})
-	for i := 0; i < 4; i++ {
-		c.advance(idleLifetime / 3)
-		if i < 2 {
-			if w := get(h, "/admin/session", cookie, false); !strings.Contains(w.Body.String(), `"authenticated":true`) {
-				t.Fatal("probe inside the idle limit", w.Body.String())
-			}
-		}
+	reopened, err = Open(a.options)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if w := get(h, "/admin/api/v1/status", cookie, false); w.Code != 401 {
-		t.Fatal("asking whether a session exists extended it", w.Code)
+	if w := get(reopened.Wrap(&spy{}), "/admin/api/v1/status", cookie, false); w.Code != 401 {
+		t.Fatal("logout undone by restart", w.Code)
 	}
 }
-
-func TestSessionExpiresAbsolutelyHoweverBusy(t *testing.T) {
+func TestRememberedSessionKeepsAbsoluteOneDayLimit(t *testing.T) {
 	c := &clock{now: time.Unix(1_800_000_000, 0)}
-	_, h, cookie, csrf := configured(t, c, &spy{})
-	step := idleLifetime / 2
-	for elapsed := step; elapsed < absoluteLifetime; elapsed += step {
-		c.advance(step)
-		if w := get(h, "/admin/api/v1/status", cookie, false); w.Code != 204 {
-			t.Fatalf("busy session refused at %s: %d", elapsed, w.Code)
-		}
+	a, _, cookie, _ := configured(t, c, &spy{})
+	c.advance(25 * time.Hour)
+	reopened, err := Open(a.options)
+	if err != nil {
+		t.Fatal(err)
 	}
-	c.advance(step)
-	if w := get(h, "/admin/api/v1/status", cookie, false); w.Code != 401 {
-		t.Fatal("session outlived the absolute limit", w.Code)
+	if w := get(reopened.Wrap(&spy{}), "/admin/api/v1/status", cookie, false); w.Code != 401 {
+		t.Fatal("expired session restored", w.Code)
 	}
-	if w := call(t, h, "/admin/api/v1/wifi/scan", "POST", nil, cookie, csrf, origin); w.Code != 401 {
-		t.Fatal("expired session could still change state", w.Code)
-	}
-	if cookie.MaxAge != int(absoluteLifetime.Seconds()) {
-		t.Fatal("cookie outlives or undercuts the server-side limit", cookie.MaxAge)
+	if cookie.MaxAge != int((24 * time.Hour).Seconds()) {
+		t.Fatal("unexpected cookie lifetime")
 	}
 }
 

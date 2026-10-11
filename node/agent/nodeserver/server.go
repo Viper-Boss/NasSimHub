@@ -25,10 +25,12 @@ import (
 	"github.com/human-agent65535/nassimhub-node/agent/internal/logbuf"
 	"github.com/human-agent65535/nassimhub-node/agent/internal/pairing"
 	"github.com/human-agent65535/nassimhub-node/agent/internal/pqidentity"
+	"github.com/human-agent65535/nassimhub-node/agent/internal/systemadmin"
 	"github.com/human-agent65535/nassimhub-node/agent/internal/transportkey"
 	"github.com/human-agent65535/nassimhub-node/agent/internal/voicemedia"
 	"github.com/human-agent65535/nassimhub-node/agent/modembackend"
 	"github.com/human-agent65535/nassimhub-node/agent/netbackend"
+	"github.com/human-agent65535/nassimhub-node/agent/netbackend/radios"
 	"github.com/human-agent65535/nassimhub-node/agent/nodetls"
 	"github.com/human-agent65535/nassimhub-node/agent/trust"
 	"github.com/human-agent65535/nassimhub-node/proto"
@@ -148,6 +150,9 @@ type Server struct {
 	// out (Options.DisableTrustEnforcement).
 	Trust *trust.Gate
 
+	deviceRadios     *radios.Backend
+	radioCancel      context.CancelFunc
+	radioDone        chan struct{}
 	adminHandler     http.Handler
 	adminCertificate *tls.Certificate
 	adminAddress     string
@@ -392,6 +397,7 @@ func New(options Options) (*Server, error) {
 	var adminWrap func(http.Handler)
 	var adminHandler http.Handler
 	var adminCertificate *tls.Certificate
+	var deviceRadios *radios.Backend
 	if options.EnableLocalAdmin {
 		if !options.EnableTLS {
 			return nil, errors.New("local administration requires TLS")
@@ -408,6 +414,29 @@ func New(options Options) (*Server, error) {
 		// localadmin: read-only security and update pages; see admin.go.
 		sources := adminSources(loaded, pairs, postQuantum, proto.LevelFor(profile, policy), identityPolicy, adminCertificate, options.Updates, options.Network, logs)
 		sources.Trust, sources.RequireSendSMS = adminTrust(gateOfTrust), adminRequireSendSMS(gateOfTrust)
+
+		if options.Modem.Name() != "mock" {
+			deviceRadios = &radios.Backend{Dir: options.StateDir, GPS: func(ctx context.Context, q radios.Request) (systemadmin.GPSStatus, error) {
+				request := systemadmin.Request{Action: "gps_status"}
+				switch q.Action {
+				case "gps_power":
+					request.Action = "gps_power"
+					request.Enabled = *q.Enabled
+				case "gps_config":
+					request.Action = "gps_interval"
+					request.GPSRefresh = q.Refresh
+				}
+				v, e := (systemadmin.Client{}).Execute(ctx, request)
+				if e != nil {
+					return systemadmin.GPSStatus{}, e
+				}
+				if v.GPS == nil {
+					return systemadmin.GPSStatus{}, errors.New("GPS control unavailable")
+				}
+				return *v.GPS, nil
+			}}
+			sources.Radios = deviceRadios
+		}
 		admin.Attach(sources)
 		if options.AdminListen == "" {
 			options.AdminListen = "127.0.0.1:0"
@@ -423,19 +452,25 @@ func New(options Options) (*Server, error) {
 	handler := httpapi.New(httpapi.Options{
 		LocalAdmin:       adminWrap,
 		LocalAdminAccess: adminAccess,
-		Identity:         loaded,
-		Pairing:          pairs,
-		Modem:            options.Modem,
-		CallMedia:        options.CallMedia,
-		Network:          options.Network,
-		Logs:             logs,
-		AgentVersion:     options.AgentVersion,
-		BuildDate:        options.BuildDate,
-		ListenPorts:      listenPorts(options.Listeners),
-		TLS:              options.EnableTLS,
-		PQProfile:        profile,
-		PQPolicy:         policy,
-		TransportKeys:    transportKeyIssuer{store: keys},
+		LocalAdminCertificate: func() []byte {
+			if adminCertificate != nil && len(adminCertificate.Certificate) > 0 {
+				return append([]byte(nil), adminCertificate.Certificate[0]...)
+			}
+			return nil
+		}(),
+		Identity:      loaded,
+		Pairing:       pairs,
+		Modem:         options.Modem,
+		CallMedia:     options.CallMedia,
+		Network:       options.Network,
+		Logs:          logs,
+		AgentVersion:  options.AgentVersion,
+		BuildDate:     options.BuildDate,
+		ListenPorts:   listenPorts(options.Listeners),
+		TLS:           options.EnableTLS,
+		PQProfile:     profile,
+		PQPolicy:      policy,
+		TransportKeys: transportKeyIssuer{store: keys},
 		// The post-quantum identity is additional to the Ed25519 one and never
 		// derives device_id. A device without one publishes an empty identity,
 		// which is the honest answer for an older build or a damaged key.
@@ -455,7 +490,7 @@ func New(options Options) (*Server, error) {
 	options.PQProfile = profile
 	options.PQPolicy = policy
 	options.TransportMode = mode
-	return &Server{
+	return &Server{deviceRadios: deviceRadios,
 		Identity: loaded, Pairing: pairs, Logs: logs,
 		PQIdentity: postQuantum,
 		Trust:      gateOfTrust,
@@ -587,6 +622,13 @@ func (s *Server) Start() error {
 		_ = s.Stop(context.Background())
 		return err
 	}
+
+	if s.deviceRadios != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.radioCancel = cancel
+		s.radioDone = make(chan struct{})
+		go func() { defer close(s.radioDone); s.deviceRadios.Restore(ctx); s.deviceRadios.RunLoop(ctx) }()
+	}
 	s.Logs.Infof("node", "device %s ready, platform %s, pairing %s",
 		s.Identity.DeviceID, s.Identity.Platform, s.Pairing.State())
 	return nil
@@ -615,6 +657,14 @@ func (s *Server) SetLinkUp(address string, up bool) bool {
 
 // Stop shuts the Node down.
 func (s *Server) Stop(ctx context.Context) error {
+	if s.radioCancel != nil {
+		s.radioCancel()
+		select {
+		case <-s.radioDone:
+		case <-ctx.Done():
+		}
+		s.radioCancel = nil
+	}
 	var firstError error
 	for _, server := range s.servers {
 		if err := server.Shutdown(ctx); err != nil && firstError == nil {

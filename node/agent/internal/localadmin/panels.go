@@ -24,7 +24,8 @@ import (
 // field is optional; a missing one is reported as unsupported or unknown, not
 // as an error and never as a default "fine".
 type Sources struct {
- System SystemAdministrator
+	Radios RadioController
+	System SystemAdministrator
 	// Security describes the device's identity and trust state. Public
 	// fingerprints only.
 	Security func() SecurityReport
@@ -443,6 +444,40 @@ func (a *Admin) wifiForget(w http.ResponseWriter, r *http.Request, _ string, api
 		a.change = change
 		a.mu.Unlock()
 	}
+}
+
+func (a *Admin) wifiRadio(w http.ResponseWriter, r *http.Request, _ string, _ http.Handler) {
+	var request struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if !decode(w, r, &request) {
+		return
+	}
+	if request.Enabled == nil {
+		failCode(w, 400, "invalid_argument", "enabled must be true or false")
+		return
+	}
+	controller, ok := a.wifiReader().(interface {
+		SetRadioEnabled(context.Context, bool) (proto.WiFiStatus, error)
+	})
+	if !ok {
+		failCode(w, 501, "not_supported", "Wi-Fi radio control is not supported")
+		return
+	}
+	status, err := controller.SetRadioEnabled(r.Context(), *request.Enabled)
+	if err != nil {
+		var pe *proto.OperationError
+		if errors.As(err, &pe) && pe.Code == proto.ErrorConflict {
+			failCode(w, 409, "conflict", "Wi-Fi is busy; try again shortly")
+		} else {
+			failCode(w, 503, "unavailable", "Wi-Fi radio change failed; refresh to check its actual state")
+		}
+		return
+	}
+	a.mu.Lock()
+	a.change = nil
+	a.mu.Unlock()
+	respond(w, 200, status)
 }
 
 // wifiOutcome reports what the last change led to, from the radio's state as

@@ -33,11 +33,10 @@ const (
 	// PBKDF2-HMAC-SHA256 iteration count for the stored password hash.
 	rounds     = 210000
 	cookieName = "__Host-nsh-admin"
-	// idleLifetime ends a session nobody is using. Only requests a person
-	// caused extend it; the page's own polling does not (see passiveHeader).
-	idleLifetime = 30 * time.Minute
+	// Remember this browser for one day, including across agent restarts.
+	idleLifetime = 24 * time.Hour
 	// absoluteLifetime ends a session however busy it is.
-	absoluteLifetime = 12 * time.Hour
+	absoluteLifetime = 24 * time.Hour
 	// maxSessions bounds the table. The least recently used session is
 	// dropped when a new sign-in would exceed it.
 	maxSessions = 32
@@ -101,6 +100,9 @@ func Open(options Options) (*Admin, error) {
 	if err == nil {
 		if json.Unmarshal(b, &a.cred) != nil || !validCredentials(a.cred) {
 			return nil, errors.New("invalid local administrator credentials")
+		}
+		if err := a.restoreSessions(); err != nil {
+			return nil, err
 		}
 		// A crash between saving credentials and deleting the code must not reopen setup.
 		_ = os.Remove(filepath.Join(options.Dir, "admin-bootstrap.txt"))
@@ -193,6 +195,7 @@ func (a *Admin) save(password string) error {
 	a.cred = c
 	a.bootstrap = ""
 	a.sessions = make(map[string]session)
+	_ = os.Remove(filepath.Join(a.options.Dir, "admin-sessions.json"))
 	_ = os.Remove(filepath.Join(a.options.Dir, "admin-bootstrap.txt"))
 	return nil
 }
@@ -245,12 +248,13 @@ func (a *Admin) current(r *http.Request) (string, session, bool) {
 	if err != nil {
 		return "", session{}, false
 	}
-	s, ok := a.sessions[c.Value]
+	id := sessionKey(c.Value)
+	s, ok := a.sessions[id]
 	if !ok || a.expired(s, a.options.Now()) {
-		delete(a.sessions, c.Value)
+		delete(a.sessions, id)
 		return "", session{}, false
 	}
-	return c.Value, s, true
+	return id, s, true
 }
 
 // authenticate is current plus the idle clock: activity a person caused
@@ -285,7 +289,10 @@ func (a *Admin) createSession(w http.ResponseWriter) session {
 	}
 	id := randomToken()
 	s := session{CSRF: randomToken(), Created: now, Seen: now}
-	a.sessions[id] = s
+	a.sessions[sessionKey(id)] = s
+	if err := a.persistSessions(); err != nil {
+		a.logf("local administrator session persistence unavailable")
+	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: id, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: int(absoluteLifetime.Seconds())})
 	return s
 }
@@ -318,6 +325,8 @@ type route struct {
 // it: a state-changing route added here is checked for its CSRF guard without
 // anyone remembering to write that test.
 var routes = []route{
+	{"GET", "/admin/api/v1/radios", (*Admin).radioStatus},
+	{"POST", "/admin/api/v1/radios/change", (*Admin).radioChange},
 	{"GET", "/admin/api/v1/system", (*Admin).systemStatus},
 	{"POST", "/admin/api/v1/system/change", (*Admin).systemChange},
 	{"POST", "/admin/password", (*Admin).password},
@@ -329,6 +338,7 @@ var routes = []route{
 	{"GET", "/admin/api/v1/wifi/change", (*Admin).wifiOutcome},
 	{"POST", "/admin/api/v1/wifi/connect", (*Admin).wifiConnect},
 	{"POST", "/admin/api/v1/wifi/forget", (*Admin).wifiForget},
+	{"POST", "/admin/api/v1/wifi/radio", (*Admin).wifiRadio},
 	{"GET", "/admin/api/v1/wifi/setup-ap", (*Admin).setupAPStatus},
 	{"POST", "/admin/api/v1/wifi/setup-ap/reveal", (*Admin).setupAPReveal},
 	{"POST", "/admin/api/v1/sms/send", (*Admin).smsSend},
@@ -426,6 +436,11 @@ func (a *Admin) Wrap(api http.Handler) http.Handler {
 func (a *Admin) logout(w http.ResponseWriter, _ *http.Request, id string, _ http.Handler) {
 	a.mu.Lock()
 	delete(a.sessions, id)
+	if err := a.persistSessions(); err != nil {
+		a.mu.Unlock()
+		failCode(w, 503, "unavailable", "Could not persist logout; retry shortly")
+		return
+	}
 	a.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 	respond(w, 200, map[string]bool{"ok": true})

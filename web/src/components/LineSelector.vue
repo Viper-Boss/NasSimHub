@@ -14,6 +14,7 @@ import type { CommunicationCapabilityName, LineSummary } from '../api/types'
 import { lineKey, lineLabel, lineSupports } from '../state/workspace'
 import { lineTone } from '../utils/lineTone'
 import LineIdentity from './LineIdentity.vue'
+import { lineTrustReminder } from '../i18n/lineTrustCopy'
 import PopoverTransition from './PopoverTransition.vue'
 
 type SelectorOption = {
@@ -26,7 +27,7 @@ type SelectorOption = {
   line?: LineSummary
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const props = withDefaults(
   defineProps<{
     modelValue: string
@@ -81,6 +82,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
   change: [value: string]
 }>()
+
+const trustReminder = computed(() => props.compact || props.filterMode ? '' : lineTrustReminder(selectedLine.value?.trust_notice, locale.value))
 
 const root = ref<HTMLElement>()
 const trigger = ref<HTMLButtonElement>()
@@ -396,6 +399,7 @@ onBeforeUnmount(() => {
         aria-hidden="true"
       />
     </button>
+    <p v-if="trustReminder" class="line-selector__trust-notice" role="status">{{ trustReminder }}</p>
     <PopoverTransition>
       <div
         v-if="open"
@@ -450,6 +454,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.line-selector__trust-notice {
+ margin: 0; padding: 10px 12px; border: 1px solid rgba(255, 195, 92, .28);
+ border-radius: 10px; background: rgba(255, 195, 92, .08); color: var(--text);
+ font-size: 12px; line-height: 1.65; overflow-wrap: anywhere;
+}
+
 .line-selector {
   position: relative;
   display: grid;

@@ -37,7 +37,8 @@ const (
 
 	// Paid, and machine-scoped rather than module-scoped: tunnels belong to
 	// the gateway, not to whichever SIM happens to be in it.
-	FeatureWireGuard Feature = "net.wireguard"
+	FeatureWireGuard  Feature = "net.wireguard"
+	FeatureTrustAdmin Feature = "security.trust_admin"
 )
 
 // Period is the window a free allowance resets over.
@@ -91,6 +92,7 @@ type rule struct {
 
 // catalog is the policy. Editing this table is how the policy changes.
 var catalog = map[Feature]rule{
+	FeatureTrustAdmin: {Free: paid, Licensed: unlimited, Requires: []Scope{ScopeMachine}},
 	FeatureSMSForward: {Free: free, Licensed: free},
 	FeatureCallAnswer: {Free: free, Licensed: free},
 	// The two outbound features are FREE here, and that is not an oversight.

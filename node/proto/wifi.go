@@ -17,6 +17,7 @@ const (
 	WiFiNoConfig       WiFiState = "NO_WIFI_CONFIG"
 	WiFiConnecting     WiFiState = "CONNECTING"
 	WiFiConnected      WiFiState = "CONNECTED"
+	WiFiDisabled       WiFiState = "RADIO_DISABLED"
 	WiFiFailed         WiFiState = "FAILED"
 	WiFiProvisioningAP WiFiState = "PROVISIONING_AP"
 )
@@ -60,6 +61,8 @@ const (
 // PSKs never appear here in any state. The field does not exist on purpose:
 // a value that is never carried cannot be leaked by a future logging change.
 type WiFiStatus struct {
+	// RadioEnabled is observed from NetworkManager; nil means unknown.
+	RadioEnabled *bool `json:"radio_enabled,omitempty"`
 	State         WiFiState `json:"state"`
 	SSID          string    `json:"ssid,omitempty"`
 	IPv4          string    `json:"ipv4,omitempty"`

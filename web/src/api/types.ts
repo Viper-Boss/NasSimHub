@@ -64,6 +64,7 @@ export type LineQuota = {
 }
 
 export type LineSummary = {
+ trust_notice?: { state: string; enforced: boolean; outgoing_allowed: boolean; remaining_seconds: number }
   id: string
   iccid: string
   imsi: string

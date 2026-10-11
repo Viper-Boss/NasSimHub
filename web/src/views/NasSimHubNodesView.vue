@@ -265,16 +265,18 @@ async function checkNode(node: NodeView) {
   }
 }
 
-async function openManagement(node: NodeView) {
+async function openUSBConsole(node: NodeView) { await openManagement(node, true) }
+
+async function openManagement(node: NodeView, usb = false) {
   // Open during the click gesture to avoid popup blocking after the request.
   const target = window.open('about:blank', '_blank')
   if (target) target.opener = null
   busyNode.value = node.node_id
   nodeError.value = { ...nodeError.value, [node.node_id]: '' }
   try {
-    const data = await request<{ url: string }>('POST', '/api/v1/nodes/admin', { device_id: node.node_id })
-    const url = new URL(data.url)
-    if (url.protocol !== 'https:' || url.username || url.password) throw new Error(copy.value.invalidResponse)
+    const data = await request<{ url: string }>('POST', '/api/v1/nodes/admin', { device_id: node.node_id, transport: usb ? 'usb' : 'wifi' })
+    const url = new URL(data.url, window.location.origin)
+    if (url.protocol !== 'https:' || url.username || url.password || (usb && (url.origin !== window.location.origin || !url.pathname.startsWith('/sim-nodes/setting/')))) throw new Error(copy.value.invalidResponse)
     if (target) target.location.replace(url.href)
     else managementLinks.value = { ...managementLinks.value, [node.node_id]: url.href }
   } catch (cause) {
@@ -493,6 +495,7 @@ onBeforeUnmount(() => {
         <p v-if="nodeError[node.node_id]" role="alert" class="node-inventory__error">{{ nodeError[node.node_id] }}</p>
         <div class="node-inventory__actions">
           <button type="button" :disabled="!node.online || busyNode === node.node_id" @click="openManagement(node)">{{ copy.openManagement }}</button>
+          <button type="button" :disabled="!node.online" @click="openUSBConsole(node)">{{ copy.usbManagement }}</button>
           <button type="button" class="node-inventory__secondary" @click="updateNodeID = node.node_id">{{ securityCopy.updates.open }}</button>
           <a v-if="managementLinks[node.node_id]" :href="managementLinks[node.node_id]" target="_blank" rel="noopener noreferrer">{{ copy.continueManagement }}</a>
           <button type="button" :disabled="busyNode === node.node_id" @click="checkNode(node)">{{ copy.refreshNode }}</button>

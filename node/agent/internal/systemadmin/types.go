@@ -21,12 +21,13 @@ const Socket = "/run/nassimhub-system-admin/control.sock"
 const Unit = "nassimhub-user-ssh.service"
 
 type Request struct {
-	Action   string       `json:"action"`
-	User     string       `json:"user,omitempty"`
-	Password string       `json:"password,omitempty"`
-	Enabled  bool         `json:"enabled,omitempty"`
-	Keys     []string     `json:"keys,omitempty"`
-	SSH      *SSHSettings `json:"ssh,omitempty"`
+	GPSRefresh int          `json:"gps_refresh,omitempty"`
+	Action     string       `json:"action"`
+	User       string       `json:"user,omitempty"`
+	Password   string       `json:"password,omitempty"`
+	Enabled    bool         `json:"enabled,omitempty"`
+	Keys       []string     `json:"keys,omitempty"`
+	SSH        *SSHSettings `json:"ssh,omitempty"`
 }
 type SSHSettings struct {
 	Enabled       bool `json:"enabled"`
@@ -44,6 +45,7 @@ type Account struct {
 	Keys   []string `json:"keys"`
 }
 type Status struct {
+	GPS             *GPSStatus  `json:"gps,omitempty"`
 	Accounts        []Account   `json:"accounts"`
 	SSH             SSHSettings `json:"ssh"`
 	Running         bool        `json:"running"`
@@ -53,6 +55,23 @@ type Status struct {
 var userName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,30}$`)
 
 func Validate(r Request) error {
+	if r.Action == "gps_status" || r.Action == "gps_power" || r.Action == "gps_interval" {
+		if r.User != "" || r.Password != "" || len(r.Keys) > 0 || r.SSH != nil {
+			return errors.New("GPS takes no account arguments")
+		}
+		if r.Action == "gps_interval" {
+			if r.GPSRefresh < 1 || r.GPSRefresh > 120 || r.Enabled {
+				return errors.New("GPS interval must be 1-120 seconds")
+			}
+		} else if r.GPSRefresh != 0 || (r.Action == "gps_status" && r.Enabled) {
+			return errors.New("invalid GPS request")
+		}
+		return nil
+	}
+	if r.GPSRefresh != 0 {
+		return errors.New("GPS field on non-GPS request")
+	}
+
 	if r.Action == "status" {
 		if r.User != "" || r.Password != "" || len(r.Keys) > 0 || r.SSH != nil || r.Enabled {
 			return errors.New("status takes no arguments")

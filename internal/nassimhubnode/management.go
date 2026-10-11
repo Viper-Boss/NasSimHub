@@ -63,3 +63,39 @@ func (f *Fleet) LocalManagement(ctx context.Context, deviceID string) (Managemen
 	}
 	return managementLink(endpoint, access)
 }
+
+// USB management opens the NAS proxy path, including a one-use setup fragment
+// only when the device has not yet initialized its own administrator password.
+func (f *Fleet) LocalUSBManagement(ctx context.Context, id string) (ManagementLink, error) {
+	live := f.lookup(id)
+	if live == nil {
+		return ManagementLink{}, ErrUnknownNode
+	}
+	live.mu.Lock()
+	state, record := live.state, live.record
+	live.mu.Unlock()
+	if !state.Online || state.Revoked || !state.Compatible || record.USBEndpoint != "https://10.55.0.2:7580" {
+		return ManagementLink{}, ErrNodeUnavailable
+	}
+	client, _ := live.handles()
+	access, e := client.LocalAdministration(ctx)
+	if e != nil {
+		return ManagementLink{}, e
+	}
+	if len(access.CertificateDER) == 0 {
+		return ManagementLink{}, errors.New("device needs USB console support")
+	}
+	link, e := managementLink(record.USBEndpoint, access)
+	if e != nil {
+		return ManagementLink{}, e
+	}
+	u, e := url.Parse(link.URL)
+	if e != nil {
+		return ManagementLink{}, e
+	}
+	u.Scheme = ""
+	u.Host = ""
+	u.Path = "/sim-nodes/setting/" + id + "/"
+	link.URL = u.String()
+	return link, nil
+}

@@ -778,6 +778,7 @@ function readTrustEvidence(value: unknown): Record<EvidenceKey, EvidenceState> {
 }
 
 export interface TrustDocument {
+ issuer_admin_allowed?: boolean
   /** "monitor" evaluates and records and refuses nothing. Unreported is unknown. */
   enforcement: 'enforce' | 'monitor' | 'unknown'
   subjects: TrustSubject[]
@@ -790,7 +791,8 @@ export function readTrustDocument(value: unknown): TrustDocument {
   const evidence = record(source.evidence) ?? {}
   const subjects = Array.isArray(source.subjects) ? source.subjects : []
   return {
-    enforcement: oneOf(source.enforcement, ['enforce', 'monitor'] as const) ?? 'unknown',
+    issuer_admin_allowed: source.issuer_admin_allowed === true,
+ enforcement: oneOf(source.enforcement, ['enforce', 'monitor'] as const) ?? 'unknown',
     subjects: subjects
       .map(readTrustSubject)
       .filter((entry): entry is TrustSubject => entry !== null),
@@ -887,7 +889,7 @@ export function reasonProblem(reason: string): '' | 'required' | 'too_long' {
   return size > REASON_LIMIT_BYTES ? 'too_long' : ''
 }
 
-export type TrustAdminAction = 'restrict' | 'quarantine' | 'restore'
+export type TrustAdminAction = 'restrict' | 'quarantine' | 'restore' | 'approve'
 
 /**
  * POST /api/v1/security/trust/{restrict|quarantine|restore}

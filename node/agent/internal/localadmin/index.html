@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>NasSimHub · 棒子管理</title><link rel="stylesheet" href="/admin/style.css"><script src="/admin/app.js" defer></script></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>AirSimHub · 设备控制台</title><link rel="stylesheet" href="/admin/style.css"><script src="/admin/app.js" defer></script></head>
 <!-- Every visible string lives in the T object in app.js and is placed by data-t (text), data-t-label (aria-label) and data-t-placeholder. -->
 <body><a class="skip" href="#main" data-t="skip"></a><noscript><p class="noscript">此管理后台需要启用 JavaScript。This console needs JavaScript.</p></noscript>
-<div class="shell"><aside class="rail"><a class="brand" href="/"><b aria-hidden="true">N</b><span>NasSimHub<small data-t="brandSub"></small></span></a>
+<div class="shell"><aside class="rail"><a class="brand" href="/"><b aria-hidden="true">A</b><span>AirSimHub<small data-t="brandSub"></small></span></a>
 <nav id="nav" hidden data-t-label="nav.label">
 <button type="button" data-tab="overview"><i aria-hidden="true">◫</i><span data-t="nav.overview"></span></button>
 <button type="button" data-tab="wifi"><i aria-hidden="true">⌁</i><span data-t="nav.wifi"></span></button>
+<button type="button" data-tab="radios"><i aria-hidden="true">⌘</i><span>连接与定位</span></button>
 <button type="button" data-tab="sms"><i aria-hidden="true">▤</i><span data-t="nav.sms"></span></button>
 <button type="button" data-tab="security"><i aria-hidden="true">◈</i><span data-t="nav.security"></span></button>
 <button type="button" data-tab="update"><i aria-hidden="true">⟳</i><span data-t="nav.update"></span></button>
@@ -16,7 +17,7 @@
 <main id="main" tabindex="-1"><header><div><small class="eyebrow">DEVICE CONSOLE</small><h1 id="title"></h1><p id="identity"></p></div><div class="actions"><span class="badge" id="connection">HTTPS</span><button type="button" id="refresh" hidden data-t="action.refresh"></button><button type="button" id="logout" class="quiet" hidden data-t="action.logout"></button></div></header>
 <div id="notice" role="status" aria-live="polite" hidden></div>
 
-<section id="login" class="login card" hidden aria-labelledby="login-title"><div class="icon" aria-hidden="true">N</div><h2 id="login-title" tabindex="-1"></h2><p id="login-help"></p>
+<section id="login" class="login card" hidden aria-labelledby="login-title"><div class="icon" aria-hidden="true">A</div><h2 id="login-title" tabindex="-1"></h2><p id="login-help"></p>
 <p id="session-ended" class="banner" role="alert" hidden></p>
 <form id="login-form" novalidate>
 <label id="setup-label" hidden><span data-t="login.setupCode"></span><input id="setup-code" autocomplete="off" spellcheck="false" maxlength="64"></label>
@@ -35,6 +36,7 @@
 
 <section id="wifi" class="page" hidden aria-labelledby="wifi-h"><div class="section-heading"><h2 id="wifi-h" tabindex="-1" data-t="wifi.title"></h2><button type="button" id="scan" data-t="wifi.scan"></button></div>
 <p class="state" id="wifi-state-panel" role="status" hidden></p>
+<div class="card" id="wifi-power-card" hidden><div class="section-heading"><h3 data-t="wifi.radioTitle"></h3><button type="button" id="wifi-radio-toggle"></button></div><p id="wifi-radio-state" role="status"></p><p class="description" data-t="wifi.radioHint"></p></div>
 <div class="card" id="wifi-card"><div id="wifi-state" class="description"></div><p id="wifi-provisioning" class="description" role="status"></p>
 <p id="wifi-outcome" class="banner" role="status" aria-live="polite" hidden></p>
 <p class="state" id="networks-state" role="status" hidden></p><p id="scan-note" class="banner error" role="status" hidden></p><div id="networks" class="networks"></div>
@@ -96,6 +98,15 @@
 <label id="system-toggle-field" hidden><span data-t="system.toggle"></span><input id="system-toggle" type="checkbox"></label>
 <label><span data-t="system.current"></span><input id="system-account-current" type="password" autocomplete="current-password" maxlength="256" required></label>
 <button id="system-account-submit" class="primary" type="submit" data-t="system.apply"></button></form></div></div></section>
+
+<section id="radios" class="page" hidden aria-labelledby="radios-h"><div class="section-heading"><div><small class="eyebrow">CONNECTIVITY</small><h2 id="radios-h" tabindex="-1">连接与定位</h2></div><button type="button" id="radios-refresh">刷新状态</button></div>
+<p class="hint">独立控制每种连接。移动数据默认关闭，关闭 Wi-Fi 不会自动使用 SIM 流量。</p>
+<div class="card connectivity-policy"><span class="radio-icon">⇄</span><div><h3>USB 优先 · 不自动使用移动流量</h3><p id="usb-policy-state">正在读取 USB 状态…</p><p class="hint">USB 保留设备管理与 NAS 通信。USB 管理连接不等于已经共享互联网，未提供上网通道时保持离线。</p></div></div>
+<div class="radio-config-grid">
+<article class="card radio-config"><div class="section-heading"><h3>移动数据</h3><span id="cellular-badge" class="badge">未知</span></div><p class="hint">仅控制 SIM 上网，电话、短信和 VoLTE 注册保持独立。</p><button type="button" id="cellular-toggle">读取中</button><form id="cellular-form"><label>接入点（APN）<input id="cellular-apn" maxlength="100" placeholder="例如：3gnet" autocomplete="off" required></label><p class="hint">填写运营商提供的 APN。保存不会开启流量；USB 已连接时无法开启移动数据。</p><button type="submit" id="cellular-save">保存 APN</button></form><p id="cellular-note" class="hint"></p></article>
+<article class="card radio-config"><div class="section-heading"><h3>蓝牙</h3><span id="bluetooth-badge" class="badge">未知</span></div><p class="hint">扫描并选择你自己的外设；设备不会对外开放自动配对。</p><div class="actions"><button type="button" id="bluetooth-toggle">读取中</button><button type="button" id="bluetooth-scan">扫描附近设备</button></div><form id="bluetooth-name-form"><label>设备蓝牙名称<input id="bluetooth-name" maxlength="64" autocomplete="off" required></label><button type="submit" id="bluetooth-name-save">保存名称</button></form><p class="hint">网页配对先支持免输入码设备。PIN/数字确认码配对和蓝牙音频用途尚未完成适配。</p><div id="bluetooth-devices" class="bluetooth-device-list"></div></article>
+<article class="card radio-config"><div class="section-heading"><h3>GPS 定位</h3><span id="gps-badge" class="badge">未知</span></div><p class="hint">首次定位建议靠窗或在室外等待，室内可能无法取得位置。位置仅显示给已登录的管理员。</p><button type="button" id="gps-toggle">读取中</button><form id="gps-form"><label>采样间隔（秒）<input id="gps-refresh" type="number" min="1" max="120" value="30" required></label><button type="submit" id="gps-save">保存间隔</button></form><div id="gps-location" class="gps-location">尚未定位</div><p id="gps-note" class="hint"></p></article>
+</div></section>
 
 <section id="settings" class="page" hidden aria-labelledby="settings-h"><div class="section-heading"><h2 id="settings-h" tabindex="-1" data-t="settings.title"></h2><span data-t="settings.thisDevice"></span></div><div class="split"><div class="card"><h3 data-t="settings.changePassword"></h3><form id="password-form" novalidate>
 <label><span data-t="settings.oldPassword"></span><input id="old-password" type="password" required autocomplete="current-password" maxlength="256" aria-describedby="old-password-error"><span class="field-error" id="old-password-error" role="alert" hidden></span></label>

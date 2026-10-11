@@ -8,9 +8,10 @@ import (
 // LocalAdminAccess is delivered through the pinned, owner-authenticated Node
 // protocol. Never persist or log SetupCode; it is absent after initialization.
 type LocalAdminAccess struct {
-	Configured bool   `json:"configured"`
-	SetupCode  string `json:"setup_code,omitempty"`
-	Port       int    `json:"port"`
+	Configured     bool   `json:"configured"`
+	SetupCode      string `json:"setup_code,omitempty"`
+	Port           int    `json:"port"`
+	CertificateDER []byte `json:"certificate_der,omitempty"`
 }
 
 func (c *Client) LocalAdministration(ctx context.Context) (LocalAdminAccess, error) {

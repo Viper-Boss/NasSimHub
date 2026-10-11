@@ -19,6 +19,7 @@ const (
 	CodeUnavailable        ErrorCode = "unavailable"
 	CodeVerification       ErrorCode = "verification_failed"
 	CodeInternal           ErrorCode = "internal"
+	CodePermissionDenied   ErrorCode = "permission_denied"
 )
 
 type Error struct {
@@ -60,6 +61,7 @@ var (
 	ErrUnavailable        = &Error{Code: CodeUnavailable}
 	ErrVerification       = &Error{Code: CodeVerification}
 	ErrInternal           = &Error{Code: CodeInternal}
+	ErrPermissionDenied   = &Error{Code: CodePermissionDenied}
 	// ErrStartCallOutcomeIndeterminate marks a dial attempt that could not be
 	// followed by a complete authoritative snapshot. The HTTP ownership layer
 	// must retain its single outgoing record until a later snapshot resolves it.
@@ -91,6 +93,8 @@ func translateAgentError(operation string, err error) error {
 		code = CodeNetworkRejected
 	case "unavailable":
 		code = CodeUnavailable
+	case "permission_denied":
+		code = CodePermissionDenied
 	case "verification_failed":
 		code = CodeVerification
 	}

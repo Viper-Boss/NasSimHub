@@ -494,8 +494,8 @@ func (api *API) writeRuntimeState(
 		)
 		communication := &runtimeCommunicationState{
 			Capabilities: projection.Capabilities,
-			Lines:        lineSummaryResponses(projection.Lines),
-			LineCatalog:  lineSummaryResponses(projection.LineCatalog),
+			Lines:        api.attachLineTrust(lineSummaryResponses(projection.Lines), projection.Lines),
+			LineCatalog:  api.attachLineTrust(lineSummaryResponses(projection.LineCatalog), projection.LineCatalog),
 		}
 		if current.Communication.Devices != nil {
 			devices := append([]store.Device(nil), (*current.Communication.Devices)...)

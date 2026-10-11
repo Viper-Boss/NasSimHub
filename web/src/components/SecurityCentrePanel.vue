@@ -26,6 +26,7 @@ import { getSecurityPosture } from '../api/dashboardCards'
 import type { SecurityPosture } from '../api/dashboardCards'
 import { securityCentreLabels } from '../i18n/securityCentreLabels'
 import { sessionState } from '../state/session'
+import { loadBootstrap } from '../state/workspace'
 import { formatRemaining } from '../utils/callDuration'
 import LinkBoundaryList from './LinkBoundaryList.vue'
 import SecurityJournalViewer from './SecurityJournalViewer.vue'
@@ -137,6 +138,8 @@ async function refreshAll(): Promise<void> {
 }
 
 /** True only when the gateway said it refuses what a state forbids. */
+const issuerAdminNote = computed(() => labels.value.issuerAdminNote)
+
 const enforcing = computed(() => trust.value?.enforcement === 'enforce')
 
 function stateLabel(subject: TrustSubject): string {
@@ -237,6 +240,7 @@ async function confirm(): Promise<void> {
   try {
     if (current.kind === 'trust') {
       trust.value = await runTrustAction(current.action, current.device, reason.value)
+      void loadBootstrap(true)
       notice.value = labels.value.adminActionDone[current.action] ?? ''
     } else {
       await resealJournal(reason.value)
@@ -427,6 +431,13 @@ onMounted(() => {
                   @click="open({ kind: 'trust', action, device: subject.node_id })"
                 >{{ labels.adminActions[action] }}</button>
               </div>
+              <p v-if="subjectState(subject) !== 'TRUSTED'" class="security-centre__muted">{{ issuerAdminNote }}</p>
+              <button v-if="!isPendingTrust(subject) && subjectState(subject) !== 'TRUSTED'"
+                type="button" class="secondary-button"
+                :disabled="working || verifying || pending !== null || trust.issuer_admin_allowed !== true || subject.record_verified !== true || journalState !== 'ok'"
+                :title="issuerAdminNote"
+                @click="open({ kind: 'trust', action: 'approve', device: subject.node_id })"
+              >{{ labels.adminActions.approve }}</button>
             </li>
           </ul>
         </section>

@@ -20,14 +20,14 @@ const T = {
   skip: '跳到主要内容',
   brandSub: '独立设备管理',
   railFoot: '运行在棒子上，无需 NAS 或云服务',
-  footer: 'NasSimHub · 本机管理',
+  footer: 'AirSimHub · 本机管理',
   unknown: '未知',
   none: '无',
   notReported: '尚未上报',
   yes: '是',
   no: '否',
   usbAddress: 'https://10.55.0.2:7581',
-  title: { signedOut: '棒子管理', signedIn: '设备管理' },
+  title: { signedOut: 'AirSimHub · 设备控制台', signedIn: 'AirSimHub · 设备控制台' },
   connecting: '正在连接设备…',
   connection: { ok: '设备已连接', bad: '连接异常', https: 'HTTPS' },
   nav: { system: '系统管理', label: '管理功能', overview: '设备概览', wifi: '无线网络', sms: '短信管理', security: '安全', update: '更新', diagnostics: '诊断日志', settings: '管理设置' },
@@ -37,7 +37,7 @@ const T = {
     timeout: '设备响应超时，请确认 USB 或 Wi-Fi 连接。',
     network: '无法联系设备，请确认 USB 或 Wi-Fi 连接。',
     http: '设备请求失败（{status}）',
-    unreachable: '无法访问棒子管理服务：{message}',
+    unreachable: '无法访问设备控制台服务：{message}',
   },
   // Codes of the device API, which answers in English; the page leads with
   // what the code means and keeps the device's own sentence in brackets.
@@ -102,6 +102,9 @@ const T = {
   },
   operators: { 'CHN-CT': '中国电信', 'China Telecom': '中国电信', 'CHN-UNICOM': '中国联通', 'CHN-CU': '中国联通', 'China Unicom': '中国联通', 'CHN-CM': '中国移动', 'China Mobile': '中国移动' },
   wifi: {
+    radioTitle: 'Wi-Fi 电源', radioOn: '已开启', radioOff: '已关闭', radioEnable: '开启 Wi-Fi', radioDisable: '关闭 Wi-Fi',
+    radioHint: '通过 USB 连接 NAS 时可关闭 Wi-Fi，减少无线活动。已保存网络和密码会保留，开关状态重启后保持；USB 管理、4G 电话和短信不受影响。关闭 Wi-Fi 不等于整机不再发热。',
+    radioConfirm: '关闭 Wi-Fi？通过 Wi-Fi 打开的管理页面会断开，之后需要通过 USB 管理入口重新开启。已保存网络不会删除，开关状态重启后保持。',
     title: 'Wi-Fi 配置', scan: '扫描附近网络', ssid: '网络名称（SSID）', security: '加密方式', wpa2: 'WPA2 / 混合 WPA2-WPA3', wpa3: 'WPA3', open: '开放网络', psk: 'Wi-Fi 密码',
     submit: '连接并保存', forget: '忘记已保存网络', noNetworks: '暂未发现可见网络。', channel: '信道 {channel}', unsupported: '此设备的 Wi-Fi 不能从这里配置。',
     safety: '提交前请确认：USB 管理地址 https://10.55.0.2:7581 不受 Wi-Fi 变更影响，始终可用。已保存的网络只有在新网络连接成功后才会被替换；如果最长约 90 秒内连不上，新配置会被丢弃。设备上已有保存的网络时，切换失败后设备回到已保存的网络，而不是回到配网热点；没有已保存的网络时才回到配网热点（前提是热点没有在配置中关闭）。本页会告诉你设备实际回到了原网络、回到了配网热点，还是仍未连接。密码只用于本次连接，不保存在浏览器。',
@@ -311,7 +314,7 @@ if (location.hash) {
 // reused only when the user sends the SAME message again by hand; nothing in
 // this file ever repeats a send by itself.
 let pendingSMS = null;
-let auth = null, tab = 'overview', refreshing = false, poll = null, status = null, wifi = null, node = null, caps = null;
+let auth = null, tab = 'overview', refreshing = false, poll = null, status = null, wifi = null, node = null, caps = null, radios = null;
 let wifiWatch = 0, updateShown = null;
 // The setup access point passphrase is never held in a variable: it goes from
 // the response into one element and is removed from there by hideSetupAP.
@@ -332,7 +335,7 @@ const age = v => {
   const n = Math.floor(v);
   return n >= 86400 ? t('overview.days', { d: Math.floor(n / 86400), h: Math.floor(n % 86400 / 3600) }) : n >= 3600 ? t('overview.hours', { h: Math.floor(n / 3600), m: Math.floor(n % 3600 / 60) }) : t('overview.minutes', { m: Math.floor(n / 60) });
 };
-const label = v => T.names[v] || text(v);
+const label = v => v === 'RADIO_DISABLED' ? T.wifi.radioOff : T.names[v] || text(v);
 const operator = v => T.operators[v] || text(v);
 const utf8Length = s => new TextEncoder().encode(s).length;
 const hasControl = s => /[\u0000-\u001f\u007f-\u009f]/.test(s);
@@ -437,7 +440,13 @@ class ApiError extends Error {
 // a timeout is reported to the person, who decides what to do next.
 async function request(path, options = {}) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const proxyBase = document.querySelector('meta[name="airsimhub-proxy-base"]')?.content || '';
   const headers = {};
+  if (proxyBase) {
+    path = proxyBase + path;
+    const nasCSRF = document.querySelector('meta[name="airsimhub-nas-csrf"]')?.content || '';
+    if(nasCSRF) headers['X-ModemDeck-CSRF'] = nasCSRF;
+  }
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (auth && auth.csrf) headers['X-CSRF-Token'] = auth.csrf;
   // Timer-driven requests say so, and the device does not count them as
@@ -496,11 +505,15 @@ async function busy(button, fn) {
 // It runs on logout and on expiry, so a signed-out tab shows nothing.
 let systemGeneration = 0;
 function wipe() {
-  systemGeneration++;
+  systemGeneration++; radiosGeneration++;
   $('system-users').replaceChildren();
   $('system-fingerprint').textContent = '';
   $('system-ssh-form').reset();
   $('system-account-form').reset();
+  radios = null;
+  $('bluetooth-devices').replaceChildren();
+  $('gps-location').textContent = '尚未定位';
+  for(const id of ['cellular-form','bluetooth-name-form','gps-form']) $(id).reset();
   status = wifi = node = caps = pendingSMS = updateShown = null;
   wifiWatch++;
   clearTimeout(poll);
@@ -617,7 +630,15 @@ function provisioningText(d) {
   return words;
 }
 function renderWiFi() {
-  $('wifi-state').textContent = wifi ? [label(wifi.state), wifi.ssid || wifi.ap_ssid, wifi.ipv4 || wifi.ap_address].filter(Boolean).join(' · ') : '';
+  const radioKnown = wifi && typeof wifi.radio_enabled === 'boolean';
+  $('wifi-power-card').hidden = !radioKnown;
+  if (radioKnown) {
+    $('wifi-radio-state').textContent = wifi.radio_enabled ? T.wifi.radioOn : T.wifi.radioOff;
+    $('wifi-radio-toggle').textContent = wifi.radio_enabled ? T.wifi.radioDisable : T.wifi.radioEnable;
+  }
+  $('scan').disabled = !!(radioKnown && !wifi.radio_enabled);
+  $('wifi-form').querySelectorAll('input,select,button').forEach(el => { el.disabled = !!(radioKnown && !wifi.radio_enabled); });
+  $('wifi-state').textContent = wifi && wifi.state === 'RADIO_DISABLED' ? T.wifi.radioOff : wifi ? [label(wifi.state), wifi.ssid || wifi.ap_ssid, wifi.ipv4 || wifi.ap_address].filter(Boolean).join(' · ') : '';
   // The access point is offered beside a saved network, never instead of it.
   const kept = wifi && wifi.saved_ssid && wifi.provisioning_state && wifi.provisioning_state !== 'JOINED' ? ' ' + t('wifi.provisioningSaved', { saved: wifi.saved_ssid }) : '';
   $('wifi-provisioning').textContent = wifi ? t('wifi.provisioning', { state: provisioningText(wifi) }) + kept : '';
@@ -708,7 +729,14 @@ function render() {
   cards.append(card(o.sim, operator(sim.operator_name), label(sim.state), [[o.phone, sim.phone_number || o.phoneMissing], ['ICCID', sim.iccid ? '••••' + sim.iccid.slice(-4) : '—']]));
   cards.append(card(o.wifi, (wifi && (wifi.ssid || wifi.ap_ssid)) || 'Wi-Fi', wifi ? label(wifi.state) : T.unknown, [[o.wifiAddress, (wifi && (wifi.ipv4 || wifi.ap_address)) || '—'], [o.saved, (wifi && wifi.saved_ssid) || o.notConfigured]]));
   cards.append(card(o.system, auth.device_id, age(r.uptime_seconds), [[o.version, auth.version], [o.pairing, node ? label(node.pairing_state) : T.unknown]]));
-  cards.append(card(o.voice, o.voiceSource, !caps ? T.unknown : caps.voice_audio ? o.audioReady : o.audioNotReady, [[o.smsCapability, !caps ? T.unknown : caps.sms ? o.available : o.unavailable], [o.volte, caps ? label(caps.volte) : T.unknown]]));
+  cards.append(card(o.voice, o.voiceSource, !caps ? T.unknown : caps.voice_audio ? o.audioReady : o.audioNotReady, [[o.smsCapability, !caps ? T.unknown : caps.sms === true ? o.available : caps.sms === false ? o.unavailable : T.unknown], [o.volte, caps ? label(caps.volte) : T.unknown]]));
+
+ const radioCard=(title,subtitle,value,details,icon)=>{const c=card(title,subtitle,value,details);c.classList.add('connection-card');const symbol=el('span',icon,'radio-icon');c.prepend(symbol);const button=el('button','查看配置','quiet card-config');button.type='button';button.addEventListener('click',()=>switchTab('radios'));c.append(button);cards.append(c);};
+ const rs=radios,cb=rs&&rs.cellular,bt=rs&&rs.bluetooth,gps=rs&&rs.gps;
+ radioCard('USB / NAS','优先管理通道',cb?(cb.usb_connected?'已连接':'未连接'):T.unknown,[['USB 地址',cb&&cb.usb_address||'—'],['网络策略','不自动使用流量']],'⇄');
+ radioCard('移动数据','SIM 上网',cb?(cb.external_connection?'外部程序已连接':cb.connected?'已连接':cb.enabled?'已允许':'已关闭'):T.unknown,[['APN',cb&&cb.apn||'未配置'],['自动连接','关闭']],'▥');
+ radioCard('蓝牙','外设连接',bt?(bt.supported?(bt.powered===null?T.unknown:bt.powered?'已开启':'已关闭'):'不可用'):T.unknown,[['已配对',bt?(bt.devices||[]).filter(d=>d.paired).length+' 个':'—'],['已连接',bt?(bt.devices||[]).filter(d=>d.connected).length+' 个':'—']],'ᛒ');
+ radioCard('GPS','卫星定位',gps?(gps.supported?(gps.enabled?(gps.fixed?'已定位':'等待定位'):'已关闭'):'不可用'):T.unknown,[['采样间隔',gps&&gps.refresh?gps.refresh+' 秒':'—'],['定位状态',gps&&gps.fixed?'有效位置':'未取得位置']],'◎');
   const p = $('processes');
   p.replaceChildren();
   for (const proc of r.processes || []) {
@@ -737,9 +765,10 @@ async function refresh(passive) {
   try {
     status = await api('status', { passive });
     const optional = async (current, path) => { if (current) return current; try { return await api(path, { passive }); } catch (err) { if (err.code === 'session_expired') throw err; return null; } };
-    wifi = await optional(wifi, 'wifi');
+    wifi = await optional(null, 'wifi');
+    radios = await optional(null, 'radios');
     node = await optional(node, 'node');
-    caps = await optional(caps, 'capabilities');
+    caps = await optional(null, 'capabilities');
     setState('overview-state', status.resources ? null : 'empty', T.notReported);
     setState('settings-state', null);
     render();
@@ -764,6 +793,7 @@ async function refresh(passive) {
 function tick() {
   if (!auth || !auth.authenticated) return;
   if (!document.hidden && tab === 'overview') refresh(true);
+  else if (!document.hidden && tab === 'radios') loadRadios().finally(() => { if(auth && auth.authenticated) poll=setTimeout(tick,POLL_MS); });
   else poll = setTimeout(tick, POLL_MS);
 }
 
@@ -785,6 +815,7 @@ async function switchTab(next, focus = true) {
   notice('');
   const heading = document.querySelector('#' + next + ' h2');
   if (focus && heading) heading.focus();
+  if (next === 'radios') await loadRadios();
   if (next === 'system') await loadSystem();
   if (next === 'wifi') await loadWiFi();
   if (next === 'sms') await loadSMS();
@@ -943,6 +974,15 @@ async function loadWiFi() {
   // be configured from here still says that it has no access point.
   await loadSetupAP();
 }
+$('wifi-radio-toggle').addEventListener('click', () => {
+  if (!wifi || typeof wifi.radio_enabled !== 'boolean') return;
+  const enabled = !wifi.radio_enabled;
+  if (!enabled && !confirm(T.wifi.radioConfirm)) return;
+  busy($('wifi-radio-toggle'), async () => {
+    wifi = await api('wifi/radio', { body: { enabled } });
+    wifiWatch++; $('wifi-outcome').hidden = true; renderWiFi();
+  });
+});
 function togglePSK() {
   const open = $('wifi-security').value === 'open';
   $('psk-label').hidden = open;
@@ -1419,4 +1459,37 @@ document.addEventListener('visibilitychange', () => {
 });
 setInterval(checkSession, SESSION_CHECK_MS);
 session().catch(err => notice(t('error.unreachable', { message: err.message }), true));
+
+// Connection configuration uses only authenticated API results.
+let radiosGeneration=0;
+function renderRadios(){
+ if(!radios)return;const c=radios.cellular,b=radios.bluetooth,g=radios.gps;
+ $('usb-policy-state').textContent=c.usb_connected?'USB 已连接 · '+(c.usb_address||'地址未上报'):'USB 未连接 · 移动数据不会自动开启';
+ $('cellular-badge').textContent=c.known===false?'状态未知':c.external_connection?'外部连接':c.connected?'已连接':c.enabled?'已允许':'已关闭';
+ $('cellular-toggle').textContent=c.enabled?'关闭移动数据':'开启移动数据';$('cellular-toggle').disabled=!c.enabled&&(c.usb_connected||c.known===false);
+ $('cellular-note').textContent=c.external_connection?'检测到其他程序建立的蜂窝连接，请检查该程序；本后台只控制自己的连接。':c.usb_connected?'NAS 通过 USB 连接时，保持移动数据关闭。':'移动数据默认关闭，需你主动开启。';
+ if(document.activeElement!==$('cellular-apn'))$('cellular-apn').value=c.apn||'';
+ $('bluetooth-badge').textContent=!b.supported?'不可用':b.powered===null?'未知':b.powered?'已开启':'已关闭';
+ $('bluetooth-toggle').textContent=b.powered?'关闭蓝牙':'开启蓝牙';$('bluetooth-toggle').disabled=!b.supported||b.powered===null;$('bluetooth-scan').disabled=!b.powered;
+ if(document.activeElement!==$('bluetooth-name'))$('bluetooth-name').value=b.alias||'AirSimHub';
+ const list=$('bluetooth-devices');list.replaceChildren();
+ for(const d of b.devices||[]){const item=el('div',undefined,'bluetooth-device');const info=el('div');info.append(el('strong',d.name||d.address),el('small',d.address+' · '+(d.connected?'已连接':d.paired?'已配对':'未配对')));item.append(info);const actions=el('div',undefined,'actions');const add=(label,action)=>{const btn=el('button',label,'quiet');btn.type='button';btn.addEventListener('click',()=>{if(action==='bluetooth_pair'&&!confirm('确认配对你的设备：'+d.name+'（'+d.address+'）？'))return;if(action==='bluetooth_remove'&&!confirm('移除设备 '+d.name+' 的配对记录？'))return;radioChange(btn,{action,address:d.address});});actions.append(btn);};if(d.paired){add(d.connected?'断开':'连接',d.connected?'bluetooth_disconnect':'bluetooth_connect');add('移除','bluetooth_remove');}else add('配对','bluetooth_pair');item.append(actions);list.append(item);}
+ if(!list.children.length)list.append(el('p',b.powered?'暂无设备，点击扫描后将你的外设置于配对状态。':'蓝牙关闭时不扫描设备。','hint'));
+ $('gps-badge').textContent=!g.supported?'不可用':!g.enabled?'已关闭':g.fixed?'已定位':'等待定位';$('gps-toggle').textContent=g.enabled?'关闭 GPS':'开启 GPS';$('gps-toggle').disabled=!g.supported||!radios.gps_control;
+ if(document.activeElement!==$('gps-refresh'))$('gps-refresh').value=g.refresh||30;
+ $('gps-save').disabled=!g.supported||!radios.gps_control;
+ $('gps-location').textContent=g.fixed&&g.latitude!=null&&g.longitude!=null?'纬度 '+g.latitude.toFixed(6)+' · 经度 '+g.longitude.toFixed(6):g.enabled?'GPS 已开启，尚未取得有效位置':'GPS 已关闭';
+ $('gps-note').textContent=radios.gps_control?'只开启卫星定位，不自动开启辅助定位或移动数据。':'GPS 控制服务不可用。';
+}
+async function loadRadios(){const generation=++radiosGeneration;try{const v=await api('radios');if(generation!==radiosGeneration||!auth||!auth.authenticated)return;radios=v;renderRadios();}catch(e){if(e.code!=='session_expired')notice(e.message,true);}}
+async function radioChange(button,body){await busy(button,async()=>{const generation=radiosGeneration;const v=await api('radios/change',{body});if(generation!==radiosGeneration||!auth||!auth.authenticated)return;radios=v;renderRadios();notice('配置已更新');});if(auth&&auth.authenticated&&radios)renderRadios();}
+$('radios-refresh').addEventListener('click',()=>busy($('radios-refresh'),loadRadios));
+$('cellular-toggle').addEventListener('click',()=>{if(!radios)return;const enabled=!radios.cellular.enabled;if(enabled&&!confirm('开启移动数据可能产生运营商流量费用，确认开启？'))return;radioChange($('cellular-toggle'),{action:'cellular_power',enabled});});
+$('bluetooth-toggle').addEventListener('click',()=>{if(radios)radioChange($('bluetooth-toggle'),{action:'bluetooth_power',enabled:!radios.bluetooth.powered});});
+$('bluetooth-scan').addEventListener('click',()=>radioChange($('bluetooth-scan'),{action:'bluetooth_scan'}));
+$('gps-toggle').addEventListener('click',()=>{if(radios)radioChange($('gps-toggle'),{action:'gps_power',enabled:!radios.gps.enabled});});
+$('cellular-form').addEventListener('submit',e=>{e.preventDefault();radioChange($('cellular-save'),{action:'cellular_config',apn:$('cellular-apn').value.trim()});});
+$('bluetooth-name-form').addEventListener('submit',e=>{e.preventDefault();radioChange($('bluetooth-name-save'),{action:'bluetooth_alias',alias:$('bluetooth-name').value.trim()});});
+$('gps-form').addEventListener('submit',e=>{e.preventDefault();radioChange($('gps-save'),{action:'gps_config',refresh:Number($('gps-refresh').value)});});
+
 })();

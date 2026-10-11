@@ -326,6 +326,9 @@ func (m *Manager) Execute(ctx context.Context, r Request) (Status, error) {
 	if e := Validate(r); e != nil {
 		return Status{}, e
 	}
+	if r.Action == "gps_status" || r.Action == "gps_power" || r.Action == "gps_interval" {
+		return m.gps(ctx, r)
+	}
 	if e := m.prepare(); e != nil {
 		return Status{}, e
 	}

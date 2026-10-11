@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/human-agent65535/modemdeck/internal/auth"
+	"github.com/human-agent65535/modemdeck/internal/license"
 	"github.com/human-agent65535/modemdeck/internal/nassimhubnode"
 	"github.com/human-agent65535/modemdeck/internal/trustengine"
 )
@@ -41,6 +42,7 @@ func (api *API) trustEngine(w http.ResponseWriter) (*trustengine.Engine, bool) {
 }
 
 type trustDocument struct {
+	IssuerAdminAllowed bool `json:"issuer_admin_allowed"`
 	// Enforcement is "enforce" or "monitor". In monitor mode the states below
 	// are real but nothing is refused, and the UI must say so.
 	Enforcement string                  `json:"enforcement"`
@@ -128,7 +130,7 @@ func (api *API) trustSubjects(engine *trustengine.Engine) []trustSubjectDocument
 	return subjects
 }
 
-func (api *API) securityTrust(w http.ResponseWriter, _ *http.Request) {
+func (api *API) securityTrust(w http.ResponseWriter, r *http.Request) {
 	engine, ok := api.trustEngine(w)
 	if !ok {
 		return
@@ -136,7 +138,8 @@ func (api *API) securityTrust(w http.ResponseWriter, _ *http.Request) {
 	subjects := api.trustSubjects(engine)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, trustDocument{
-		Enforcement: string(engine.Enforcement()), Subjects: subjects, Journal: engine.Chain(), Evidence: trustEvidence(subjects),
+		IssuerAdminAllowed: api.licensedFeature(r.Context(), license.FeatureTrustAdmin),
+		Enforcement:        string(engine.Enforcement()), Subjects: subjects, Journal: engine.Chain(), Evidence: trustEvidence(subjects),
 	})
 }
 
@@ -302,4 +305,15 @@ func (api *API) securityJournalReseal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, struct {
 		Journal trustengine.ChainReport `json:"journal"`
 	}{report})
+}
+
+func (api *API) securityTrustApprove(w http.ResponseWriter, r *http.Request) {
+	if !api.licensedFeature(r.Context(), license.FeatureTrustAdmin) {
+		writeError(w, http.StatusForbidden, "issuer_authorization_required",
+			"请在签发控制台签发并导入本 NAS 的「设备限制管理员解除」机器授权，然后重试。普通外呼或短信授权不包含此权限。", "")
+		return
+	}
+	api.securityTrustAction(w, r, "approve device trust", func(ctx context.Context, e *trustengine.Engine, id, actor, reason string) error {
+		return e.AdministratorTrust(ctx, id, actor, reason)
+	})
 }

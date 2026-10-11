@@ -291,7 +291,11 @@ const (
 
 // Options configures an Engine.
 type Options struct {
-	Store Store
+	// HouseholdSIMDevices is an explicit deployment allowlist for already known
+	// household hardware. Only SIM swaps are exempt; identity, module, integrity,
+	// OTP, administrator restrictions and damaged journals remain enforced.
+	HouseholdSIMDevices []string
+	Store               Store
 	// Key signs records and the journal head; it is the Core's identity key.
 	Key         ed25519.PrivateKey
 	Policy      Policy
@@ -304,13 +308,14 @@ type Options struct {
 
 // Engine evaluates and records trust.
 type Engine struct {
-	store       Store
-	key         ed25519.PrivateKey
-	public      ed25519.PublicKey
-	policy      Policy
-	enforcement Enforcement
-	now         func() time.Time
-	flushEvery  time.Duration
+	householdSIMDevices map[string]bool
+	store               Store
+	key                 ed25519.PrivateKey
+	public              ed25519.PublicKey
+	policy              Policy
+	enforcement         Enforcement
+	now                 func() time.Time
+	flushEvery          time.Duration
 
 	mu       sync.Mutex
 	records  map[string]*Record
@@ -359,6 +364,12 @@ func New(ctx context.Context, options Options) (*Engine, error) {
 	}
 	if engine.flushEvery <= 0 {
 		engine.flushEvery = 5 * time.Minute
+	}
+	engine.householdSIMDevices = map[string]bool{}
+	for _, id := range options.HouseholdSIMDevices {
+		if id = strings.TrimSpace(id); id != "" {
+			engine.householdSIMDevices[id] = true
+		}
 	}
 	records, err := engine.store.Records(ctx)
 	if err != nil {
@@ -520,6 +531,17 @@ func (e *Engine) Observe(ctx context.Context, observation Reading) error {
 	}
 	next := *record
 	var events []Event
+	household := e.householdSIMDevices[subject] && observation.Healthy &&
+		next.BindingHash == observation.IdentityHash &&
+		(observation.HardwareHash == "" || next.HardwareHash == "" || next.HardwareHash == observation.HardwareHash) &&
+		!next.Manual && next.IdentityChanges == 0 && next.ModemChanges == 0 && next.IntegrityFailures == 0 &&
+		next.OTPLevel == 0 && !next.OTPLimited &&
+		uint64(next.RiskScore) <= uint64(next.SIMChanges)*uint64(e.policy.RiskSIMChange)
+	if household && next.State == Observation && next.Reason == "SIM changed: observation period restarted" && observation.SIMHash != "" {
+		next.State, next.Reason = Trusted, ""
+		e.pending[subject] = 0
+		events = append(events, e.event(subject, EventUpgrade, "administrator enabled household SIM switching", "deployment configuration", "trusted; SIM swaps permitted, other restrictions unchanged"))
+	}
 
 	if next.BindingHash != observation.IdentityHash {
 		// The same device ID with another identity key. Pairing refuses that
@@ -538,10 +560,14 @@ func (e *Engine) Observe(ctx context.Context, observation Reading) error {
 				next.SIMHash = observation.SIMHash // first SIM seen: nothing to compare with
 			} else {
 				next.SIMChanges++
-				next.RiskScore += e.policy.RiskSIMChange
 				next.SIMHash = observation.SIMHash
-				events = append(events, e.event(subject, EventSIMChanged, "a different SIM is in the device", "gateway", "risk raised"))
-				e.downgradeLocked(&next, &events, "SIM changed")
+				if household && next.State == Trusted {
+					events = append(events, e.event(subject, EventSIMChanged, "household SIM changed", "gateway", "trusted under explicit household SIM setting"))
+				} else {
+					next.RiskScore += e.policy.RiskSIMChange
+					events = append(events, e.event(subject, EventSIMChanged, "a different SIM is in the device", "gateway", "risk raised"))
+					e.downgradeLocked(&next, &events, "SIM changed")
+				}
 			}
 		}
 		// The same identity key reporting a different hardware identifier: the
@@ -956,4 +982,28 @@ func (e *Engine) Note(ctx context.Context, subject, kind, cause, source, result 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.store.Commit(ctx, nil, []Event{e.event(strings.TrimSpace(subject), kind, cause, source, result)}, e.seal)
+}
+
+// AdministratorTrust is an explicit, issuer-authorized action (the HTTP layer
+// verifies that grant). It never turns an unverifiable record or journal into
+// a valid one. Counters are retained, the decision and reason are journalled,
+// and any subsequent integrity or identity failure can restrict it again.
+func (e *Engine) AdministratorTrust(ctx context.Context, subject, actor, reason string) error {
+	return e.change(ctx, subject, func(record *Record, events *[]Event) error {
+		if strings.TrimSpace(actor) == "" || strings.TrimSpace(reason) == "" {
+			return ErrNotAllowed
+		}
+		if _, bad := e.damaged[subject]; bad || (e.chainSet && !e.chain.OK) {
+			return ErrNotAllowed
+		}
+		if record.State == Unbound {
+			return ErrNotAllowed
+		}
+		previous := record.State
+		record.State, record.Reason, record.Manual = Trusted, "", false
+		record.StableSeconds, record.TrustedSeconds = record.RequiredSeconds, 0
+		*events = append(*events, e.event(subject, "ISSUER_AUTHORIZED_TRUST", reason, actor,
+			fmt.Sprintf("%s -> TRUSTED; explicit administrator approval", previous)))
+		return nil
+	})
 }

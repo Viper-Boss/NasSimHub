@@ -76,8 +76,8 @@ func TestLocalLoginPersistsAndNeverPersistsPlainPassword(t *testing.T) {
 		t.Fatal("setup was reopened")
 	}
 	wh := b.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
-	if w := call(t, wh, "/admin/api/v1/status", "GET", nil, c, "", ""); w.Code != 401 {
-		t.Fatal("restart retained session")
+	if w := call(t, wh, "/admin/api/v1/status", "GET", nil, c, "", ""); w.Code != 204 {
+		t.Fatal("restart lost remembered session")
 	}
 	w := call(t, wh, "/admin/login", "POST", map[string]string{"password": password}, nil, "", "https://device.test")
 	if w.Code != 200 {

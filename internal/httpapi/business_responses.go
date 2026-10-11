@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"github.com/human-agent65535/modemdeck/internal/trustengine"
+	"strings"
 	"time"
 
 	"github.com/human-agent65535/modemdeck/internal/store"
@@ -16,7 +18,15 @@ type incomingMessageEventResponse struct {
 	ObservedAt time.Time `json:"observed_at"`
 }
 
+type lineTrustNotice struct {
+	State            string `json:"state"`
+	Enforced         bool   `json:"enforced"`
+	OutgoingAllowed  bool   `json:"outgoing_allowed"`
+	RemainingSeconds uint64 `json:"remaining_seconds"`
+}
+
 type lineSummaryResponse struct {
+	TrustNotice              *lineTrustNotice       `json:"trust_notice,omitempty"`
 	ID                       string                 `json:"id"`
 	ICCID                    string                 `json:"iccid"`
 	LineLabel                string                 `json:"line_label"`
@@ -289,4 +299,36 @@ func recordingEntryResponses(entries []store.RecordingEntry) []recordingEntryRes
 		})
 	}
 	return result
+}
+
+// Only return a compact decision for the already-authorized lines. No device
+// key, fingerprint, subscriber identity or detailed security history is added.
+func (api *API) attachLineTrust(responses []lineSummaryResponse, lines []store.LineSummary) []lineSummaryResponse {
+	provider, ok := api.nodeFleet.(trustProvider)
+	if !ok || provider.Trust() == nil {
+		return responses
+	}
+	engine := provider.Trust()
+	views := engine.Subjects()
+	for i, line := range lines {
+		rest, belongs := strings.CutPrefix(line.EndpointID, store.NasSimHubNodeEndpointPrefix)
+		if !belongs || i >= len(responses) {
+			continue
+		}
+		id, slot, valid := strings.Cut(rest, ":")
+		if !valid || slot != "0" {
+			continue
+		}
+		for _, view := range views {
+			if view.SubjectID != id {
+				continue
+			}
+			responses[i].TrustNotice = &lineTrustNotice{State: string(view.EffectiveState),
+				Enforced:         engine.Enforcement() == trustengine.Enforce,
+				OutgoingAllowed:  view.Allowed[trustengine.ActionDial] && view.Allowed[trustengine.ActionSendSMS],
+				RemainingSeconds: view.RemainingSeconds}
+			break
+		}
+	}
+	return responses
 }

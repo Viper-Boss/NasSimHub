@@ -64,11 +64,12 @@ func TestManagementProofRequiresCurrentPairedCoreAndTLS(t *testing.T) {
 		t.Fatal("paired owner access", w.Code)
 	}
 	var result struct {
-		Configured bool
-		SetupCode  string `json:"setup_code"`
-		Port       int
+		Configured     bool
+		SetupCode      string `json:"setup_code"`
+		Port           int
+		CertificateDER []byte `json:"certificate_der"`
 	}
-	if json.Unmarshal(w.Body.Bytes(), &result) != nil || result.Configured || len(result.SetupCode) != 43 || result.Port != 7581 {
+	if json.Unmarshal(w.Body.Bytes(), &result) != nil || result.Configured || len(result.SetupCode) != 43 || result.Port != 7581 || len(result.CertificateDER) == 0 {
 		t.Fatal("invalid owner setup result")
 	}
 	if _, err = node.Pairing.Unpair(); err != nil {

@@ -39,8 +39,9 @@ const maxRequestBodyBytes = 64 << 10
 // Options wires the handler's collaborators.
 type Options struct {
 	// LocalAdmin wraps only the explicit local device routes with separate browser authentication.
-	LocalAdmin       func(http.Handler)
-	LocalAdminAccess func() (bool, string, int)
+	LocalAdmin            func(http.Handler)
+	LocalAdminAccess      func() (bool, string, int)
+	LocalAdminCertificate []byte
 
 	Identity     *identity.Identity
 	Pairing      *pairing.Store
@@ -232,10 +233,11 @@ func NewWithRoutes(options Options) (http.Handler, []Route) {
 		configured, proof, port := options.LocalAdminAccess()
 		w.Header().Set("Cache-Control", "no-store")
 		h.writeJSON(w, http.StatusOK, struct {
-			Configured bool   `json:"configured"`
-			SetupCode  string `json:"setup_code,omitempty"`
-			Port       int    `json:"port"`
-		}{configured, proof, port})
+			Configured     bool   `json:"configured"`
+			SetupCode      string `json:"setup_code,omitempty"`
+			Port           int    `json:"port"`
+			CertificateDER []byte `json:"certificate_der,omitempty"`
+		}{configured, proof, port, options.LocalAdminCertificate})
 	}))
 	mux.HandleFunc("GET /v1/capabilities", h.authenticated(h.getCapabilities))
 	mux.HandleFunc("GET /v1/version", h.authenticated(h.getVersion))

@@ -466,7 +466,8 @@ export function parseLine(value: unknown): LineSummary {
     signal_quality: nullableNumber(source, 'signal_quality') ?? undefined,
     signal_snr: rawSignalSNR ?? undefined,
     quota: parseLineQuota(source.quota),
-    capabilities: parseCommunicationCapabilities(source.capabilities, 'line.capabilities')
+    capabilities: parseCommunicationCapabilities(source.capabilities, 'line.capabilities'),
+    trust_notice: parseLineTrustNotice(source.trust_notice)
   }
   return line
 }
@@ -562,4 +563,13 @@ export function parseBootstrap(value: unknown): BootstrapResponse {
       revision: systemSettingsRevision
     }
   }
+}
+
+function parseLineTrustNotice(raw: unknown): LineSummary['trust_notice'] {
+ if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+ const value = raw as Record<string, unknown>
+ if (typeof value.state !== 'string' || !['UNBOUND', 'OBSERVATION', 'TRUSTED', 'RESTRICTED', 'QUARANTINE'].includes(value.state) ||
+     typeof value.enforced !== 'boolean' || typeof value.outgoing_allowed !== 'boolean' ||
+     typeof value.remaining_seconds !== 'number' || !Number.isSafeInteger(value.remaining_seconds) || value.remaining_seconds < 0) return undefined
+ return { state: value.state, enforced: value.enforced, outgoing_allowed: value.outgoing_allowed, remaining_seconds: value.remaining_seconds }
 }

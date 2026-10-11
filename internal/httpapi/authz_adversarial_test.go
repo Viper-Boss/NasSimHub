@@ -160,6 +160,7 @@ var advStaticRoutes = map[string]advAudience{
 	"/api/v1/security/trust/restrict":   advAdmin,
 	"/api/v1/security/trust/quarantine": advAdmin,
 	"/api/v1/security/trust/restore":    advAdmin,
+	"/api/v1/security/trust/approve":    advAdmin,
 	"/api/v1/security/journal":          advAdmin,
 	"/api/v1/security/journal/verify":   advAdmin,
 	"/api/v1/security/journal/reseal":   advAdmin,

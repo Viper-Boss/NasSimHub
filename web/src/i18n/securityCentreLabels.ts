@@ -13,6 +13,7 @@
 // simplified text.
 
 export type SecurityCentreLabels = {
+ issuerAdminNote: string
   title: string
   subtitle: string
   refresh: string
@@ -147,6 +148,7 @@ export type SecurityCentreLabels = {
 }
 
 const english: SecurityCentreLabels = {
+ issuerAdminNote: 'Approval needs the issuer-signed device trust administrator machine grant. Give a reason; the action is recorded in the security journal.',
   title: 'Security centre',
   subtitle: 'Device trust, the security journal and what protects each link',
   refresh: 'Read again',
@@ -389,6 +391,7 @@ const english: SecurityCentreLabels = {
 }
 
 const chinese: SecurityCentreLabels = {
+ issuerAdminNote: '解除观察期、受限或隔离需要签发控制台的“设备限制管理员解除”机器授权；操作需填写原因并记入安全日志。',
   title: '安全中心',
   subtitle: '设备信任、安全日志，以及每一段链路靠什么保护',
   refresh: '重新读取',
@@ -625,3 +628,12 @@ const chinese: SecurityCentreLabels = {
 export function securityCentreLabels(locale: string): SecurityCentreLabels {
   return locale.startsWith('zh') ? chinese : english
 }
+
+english.adminActions.approve = 'Administrator approval'
+english.adminActionTitles.approve = device => `Approve ${device} for outgoing use?`
+english.adminActionExplain.approve = ['The issuer-signed machine grant authorizes this administrator action.', 'This device becomes trusted immediately. Give a reason; the action is recorded in the security journal. Later security failures can restrict it again.']
+english.adminActionDone.approve = 'The device was approved and its policy will be sent to it.'
+chinese.adminActions.approve = '管理员解除限制'
+chinese.adminActionTitles.approve = device => `解除 ${device} 的设备使用限制？`
+chinese.adminActionExplain.approve = ['此操作需要签发控制台签名的机器授权。', '设备会立即变为已信任。请填写解除原因，操作会记入安全日志；后续安全异常仍可再次触发限制。']
+chinese.adminActionDone.approve = '已解除设备使用限制，正在向棒子同步策略。'

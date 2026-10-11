@@ -9,13 +9,13 @@ import (
 
 func TestScanTransitionNetworkChoosesCompatibleWPA2AndKeepsPureWPA3(t *testing.T) {
 	backend := New(Options{Run: func(context.Context, ...string) (string, error) {
-		return "Cat home:100:WPA2 WPA3:1\nPure:90:WPA3:6\n", nil
+		return "Example Home:100:WPA2 WPA3:1\nPure:90:WPA3:6\n", nil
 	}})
 	result, err := backend.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Networks) != 2 || result.Networks[0].SSID != "Cat home" || result.Networks[0].Security != proto.WiFiSecurityWPA2 || result.Networks[1].Security != proto.WiFiSecurityWPA3 {
+	if len(result.Networks) != 2 || result.Networks[0].SSID != "Example Home" || result.Networks[0].Security != proto.WiFiSecurityWPA2 || result.Networks[1].Security != proto.WiFiSecurityWPA3 {
 		t.Fatal("transition mode was mistaken for mandatory SAE", result.Networks)
 	}
 }

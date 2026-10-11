@@ -64,6 +64,7 @@ export type SimNodeInventoryCopy = {
   onDevice: string
   lastError: string
   openManagement: string
+  usbManagement: string
   continueManagement: string
   refreshNode: string
   unpair: string
@@ -142,7 +143,8 @@ const english: SimNodeInventoryCopy = {
   callAudioUnavailable: 'Unavailable; calling from NasSimHub is disabled',
   onDevice: 'Messages on device',
   lastError: 'Last problem',
-  openManagement: 'Open device console',
+  openManagement: 'Open device Wi-Fi console',
+  usbManagement: 'Control device over USB',
   continueManagement: 'Continue to device console',
   refreshNode: 'Check now',
   unpair: 'Unpair',
@@ -235,7 +237,8 @@ const chinese: SimNodeInventoryCopy = {
   callAudioUnavailable: '尚不可用；NasSimHub 暂不开放拨号',
   onDevice: '设备上的短信',
   lastError: '最近的问题',
-  openManagement: '打开棒子后台',
+  openManagement: '打开棒子 Wi-Fi 后台',
+  usbManagement: '通过 USB 控制后台',
   continueManagement: '点击进入后台',
   refreshNode: '立即检查',
   unpair: '解除配对',
