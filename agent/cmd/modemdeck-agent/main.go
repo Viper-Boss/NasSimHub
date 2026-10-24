@@ -351,6 +351,33 @@ type qdc507VoiceReconciler interface {
 	Reconcile(context.Context, []domain.Line) (bool, error)
 }
 
+// subscribeWithRetry keeps trying a lifecycle subscription with backoff.
+// The private bus AddMatchSignal behind it can fail transiently while
+// dbus-daemon is still coming up; a reconciler that exits on the first
+// failure would silently disable its self-healing pass until the agent
+// restarts. Returns a nil channel only when ctx is done.
+func subscribeWithRetry(
+	ctx context.Context,
+	name string,
+	subscribe func(context.Context) (<-chan struct{}, error),
+) <-chan struct{} {
+	const maxDelay = time.Minute
+	delay := 2 * time.Second
+	for {
+		events, err := subscribe(ctx)
+		if err == nil {
+			return events
+		}
+		slog.Error("subscribe "+name+" lifecycle", "error", err, "retry_after", delay)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(delay):
+			delay = min(delay*2, maxDelay)
+		}
+	}
+}
+
 func runQDC507VoiceReconciler(
 	ctx context.Context,
 	provider qdc507VoiceLineProvider,
@@ -367,11 +394,7 @@ func runQDC507VoiceReconciler(
 	const forceCooldown = 10 * time.Minute
 	consecutiveFailures := 0
 	lastForceAttempt := time.Time{}
-	events, err := provider.SubscribeModemLifecycle(ctx)
-	if err != nil {
-		slog.Error("subscribe QDC507 modem lifecycle", "error", err)
-		return
-	}
+	events := subscribeWithRetry(ctx, "QDC507 modem", provider.SubscribeModemLifecycle)
 	reconcile := func() {
 		attemptContext, cancel := context.WithTimeout(ctx, attemptTimeout)
 		defer cancel()
@@ -451,11 +474,7 @@ type radioReconciler interface {
 
 func runRadioReconciler(ctx context.Context, provider radioReconciler) {
 	const attemptTimeout = 45 * time.Second
-	events, err := provider.SubscribeRadioLifecycle(ctx)
-	if err != nil {
-		slog.Error("subscribe modem radio lifecycle", "error", err)
-		return
-	}
+	events := subscribeWithRetry(ctx, "modem radio", provider.SubscribeRadioLifecycle)
 	reconcile := func() {
 		attemptContext, cancel := context.WithTimeout(ctx, attemptTimeout)
 		defer cancel()

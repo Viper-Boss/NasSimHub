@@ -509,10 +509,13 @@ if [ "$git_deployment" = true ]; then
     updater_image=${MODEMDECK_UPDATER_IMAGE:-$(env_or_default MODEMDECK_UPDATER_IMAGE modemdeck-updater)}
 else
     deployment_source=release
-    image_name=${MODEMDECK_IMAGE:-ghcr.io/human-agent65535/modemdeck}
-    web_image=${MODEMDECK_WEB_IMAGE:-ghcr.io/human-agent65535/modemdeck-web}
-    hardware_image=${MODEMDECK_HARDWARE_IMAGE:-ghcr.io/human-agent65535/modemdeck-hardware}
-    updater_image=${MODEMDECK_UPDATER_IMAGE:-ghcr.io/human-agent65535/modemdeck-updater}
+    # Keep in sync with deploy/release-manifest.json — the manifest is the
+    # source of truth for what publish-images.yml actually publishes, and a
+    # wrong namespace here would silently pull a stranger's images.
+    image_name=${MODEMDECK_IMAGE:-ghcr.io/viper-boss/nassimhub}
+    web_image=${MODEMDECK_WEB_IMAGE:-ghcr.io/viper-boss/nassimhub-web}
+    hardware_image=${MODEMDECK_HARDWARE_IMAGE:-ghcr.io/viper-boss/nassimhub-hardware}
+    updater_image=${MODEMDECK_UPDATER_IMAGE:-ghcr.io/viper-boss/nassimhub-updater}
 fi
 settings_key_path=${MODEMDECK_SETTINGS_KEY_FILE:-$(env_or_default MODEMDECK_SETTINGS_KEY_FILE ./secrets/settings-key)}
 updater_token_path=${MODEMDECK_UPDATER_TOKEN_FILE:-$(env_or_default MODEMDECK_UPDATER_TOKEN_FILE ./secrets/updater-token)}

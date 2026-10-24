@@ -33,6 +33,9 @@ const (
 	terminalCallRetention   = 30 * time.Second
 	signalRefreshInterval   = uint32(10)
 	signalSetupRetryDelay   = 30 * time.Second
+	// Upper bound for a single ModemManager D-Bus round trip when the caller
+	// supplied no deadline of its own; see callDestination.
+	dbusCallDefaultTimeout = 30 * time.Second
 )
 
 type Provider struct {
@@ -1464,6 +1467,15 @@ func (p *Provider) callDestination(
 ) ([]any, error) {
 	if err := p.requireCaller(ctx, operation); err != nil {
 		return nil, err
+	}
+	// ModemManager can wedge while staying alive: the observer polls with the
+	// agent's lifetime context, and an unbounded Call would block forever
+	// holding callMu while /v1/health still reports healthy. Callers that
+	// already carry a tighter deadline keep it.
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, dbusCallDefaultTimeout)
+		defer cancel()
 	}
 	body, err := p.caller.Call(ctx, destination, path, method, dbus.FlagNoAutoStart, args...)
 	if err != nil {

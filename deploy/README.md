@@ -131,10 +131,10 @@ the `Publish release images` GitHub Actions workflow. It builds Linux `amd64`
 and `arm64` variants and publishes application packages under the repository
 owner's GHCR namespace:
 
-- `ghcr.io/OWNER/modemdeck:vX.Y.Z` for the API
-- `ghcr.io/OWNER/modemdeck-web:vX.Y.Z` for the Web gateway
-- `ghcr.io/OWNER/modemdeck-updater:vX.Y.Z` for the updater
-- `ghcr.io/OWNER/modemdeck-hardware:vX.Y.Z` for the Hardware runtime
+- `ghcr.io/OWNER/nassimhub:vX.Y.Z` for the API
+- `ghcr.io/OWNER/nassimhub-web:vX.Y.Z` for the Web gateway
+- `ghcr.io/OWNER/nassimhub-updater:vX.Y.Z` for the updater
+- `ghcr.io/OWNER/nassimhub-hardware:vX.Y.Z` for the Hardware runtime
 
 The workflow uses the repository `GITHUB_TOKEN`; it needs no registry secret.
 Each image also receives a `sha-COMMIT` tag and GitHub build-provenance

@@ -257,7 +257,11 @@ func serve(
 	// is a one-shot install and exits when it is done.
 	go built.downloader.Run(ctx)
 	server := &http.Server{
-		Addr:              environmentOrDefault("MODEMDECK_UPDATER_LISTEN_ADDRESS", "0.0.0.0:8081"),
+		// Loopback by default: a bare-metal updater serves one local API.
+		// Container deployments (docker-compose.ota.yml) explicitly set
+		// 0.0.0.0 because the API reaches the updater over the Compose
+		// network; keep that override when changing the default.
+		Addr:              environmentOrDefault("MODEMDECK_UPDATER_LISTEN_ADDRESS", "127.0.0.1:8081"),
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

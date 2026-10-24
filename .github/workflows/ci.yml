@@ -1,0 +1,81 @@
+name: CI
+
+# Test/lint gate for pushes and pull requests. Image publishing stays in
+# publish-images.yml. gitleaks (make secret-scan) is deliberately NOT wired
+# here yet: it scans git history, which still contains credentials until the
+# owner finishes the filter-repo cleanup (REVIEW-2026-10-25.md P0-1).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go (root + agent)
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            agent/go.sum
+      - name: Repository hygiene
+        run: ./scripts/check-repository-hygiene.sh
+      - name: Vet root module
+        run: go vet -mod=readonly ./cmd/... ./internal/...
+      - name: Test root module
+        run: go test -mod=readonly ./cmd/... ./internal/...
+      - name: Vet agent module
+        working-directory: agent
+        run: go vet -mod=readonly ./...
+      - name: Test agent module
+        working-directory: agent
+        run: go test -mod=readonly ./...
+
+  web:
+    name: Web (contracts + typecheck + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Contract tests
+        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Typecheck (sidecar)
+        run: npm run typecheck:sidecar
+      - name: Lint
+        run: npm run lint
+
+  deploy:
+    name: Deployment checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Deploy test suite
+        run: ./deploy/tests/run.sh
+      - name: Dockerfile lint (main)
+        run: docker build --check .
+      - name: Dockerfile lint (hardware)
+        run: docker build --check --file hardware/Dockerfile .
