@@ -28,9 +28,6 @@ preview.cmd
 - 转发渠道：Telegram（已接）、Bark 设置与测试（执行器待接）、拦截策略（待执行器）
 - 系统运维：模块管理、诊断、流量、录音库、NAS 预检
 
-交接文档见 [HANDOFF-CN.md](HANDOFF-CN.md)（含全部接口契约与待办）。
-![Uploading 6ea1a156a44a7a1bcf132855904ea4dc.png…]()
-
 ---
 
 以下为上游 ModemDeck 的原始说明：

@@ -120,9 +120,17 @@ Quectel_EC2xEG2xEG9xEM05_Series_AT_Commands_Manual_V2.2.pdf
 Quectel_EC2xEG2xEG9xEM05_Series_QCFG_AT_Commands_Manual_V1.6.pdf
 410sim自动激活脚本/*
 
-# AI handoff with NAS credentials - never commit
-/HANDOFF-FOR-GPT.md
+# AI handoff/session docs never belong in the tree (any level, archived
+# copies included) — they have carried live credentials before.
+HANDOFF*.md
+AI_HANDOFF.md
+CHANGES-FOR-CLAUDE*.md
+/Claude outputs/
 agent/modemdeck-agent-arm64
+
+# Root-level built binaries ship via release artifacts, not git.
+/r9*-agent
+/atprobe
 
 # Agent working memory (may contain operational details)
 .workbuddy/
