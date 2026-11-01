@@ -28,6 +28,13 @@ const (
 
 	atCallIdleObservationInterval   = time.Second
 	atCallActiveObservationInterval = 500 * time.Millisecond
+
+	// Upper bound for one observer pass. The observer runs on the agent's
+	// lifetime context with callMu held; a wedged-but-alive ModemManager
+	// answering no D-Bus call would otherwise block this pass forever and
+	// freeze every call/SMS operation while /v1/health still reports
+	// healthy (NameHasOwner is answered by dbus-daemon, not ModemManager).
+	atCallObserverPassTimeout = 30 * time.Second
 )
 
 type callControlBackend string
@@ -472,7 +479,10 @@ func (p *Provider) observeATCalls(ctx context.Context) {
 	p.callMu.Lock()
 	defer p.callMu.Unlock()
 
-	parsed, err := p.snapshotContent(ctx, operation)
+	attemptContext, cancel := context.WithTimeout(ctx, atCallObserverPassTimeout)
+	defer cancel()
+
+	parsed, err := p.snapshotContent(attemptContext, operation)
 	if err != nil {
 		slog.Debug(
 			"resolve AT call lines",
@@ -481,14 +491,14 @@ func (p *Provider) observeATCalls(ctx context.Context) {
 		)
 		return
 	}
-	p.initializeVoiceModel(ctx, operation, &parsed)
+	p.initializeVoiceModel(attemptContext, operation, &parsed)
 	changed := false
 	for index := range parsed.Lines {
 		line := &parsed.Lines[index]
 		if parsed.CallBackends[line.ID] != callControlQuectelAT {
 			continue
 		}
-		if p.refreshATLine(ctx, operation, line, parsed.LinePaths[line.ID]) {
+		if p.refreshATLine(attemptContext, operation, line, parsed.LinePaths[line.ID]) {
 			changed = true
 		}
 	}

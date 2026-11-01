@@ -17,6 +17,22 @@ scripts
 !scripts/
 !scripts/docker-entrypoint.sh
 
+# Not consumed by any COPY in Dockerfile; they only bloat the build context
+# (r90-agent alone is 42MB). hardware/ builds use hardware/Dockerfile with
+# its own whitelist .dockerignore, so excluding it here is safe too.
+deploy
+node
+dev
+init
+hardware
+Claude outputs
+HANDOFF*.md
+AI_HANDOFF.md
+CHANGES-FOR-CLAUDE*.md
+HOMESIM.md
+r90-agent
+atprobe
+
 data
 dist
 logs
