@@ -352,10 +352,16 @@ type qdc507VoiceReconciler interface {
 }
 
 // subscribeWithRetry keeps trying a lifecycle subscription with backoff.
-// The private bus AddMatchSignal behind it can fail transiently while
-// dbus-daemon is still coming up; a reconciler that exits on the first
-// failure would silently disable its self-healing pass until the agent
-// restarts. Returns a nil channel only when ctx is done.
+//
+// This is defensive. The lifecycle hubs behind SubscribeModemLifecycle and
+// SubscribeRadioLifecycle are in-process broadcasters: they refuse a
+// subscription only when the provider itself is unavailable, and the D-Bus
+// match rules that feed them are installed once when the provider is opened
+// (a failure there stops the agent at start-up). So this loop is not expected
+// to spin in practice; it exists so that a future subscription source that
+// can fail transiently does not make a reconciler exit and silently lose its
+// self-healing pass until the agent restarts. Returns a nil channel only when
+// ctx is done.
 func subscribeWithRetry(
 	ctx context.Context,
 	name string,
