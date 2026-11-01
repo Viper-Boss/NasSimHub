@@ -1,4 +1,7 @@
 #!/bin/sh
+# The greps below look for literal nginx/shell text such as $host and
+# ${tls_directory}; single quotes are intentional.
+# shellcheck disable=SC2016
 
 set -eu
 
@@ -303,21 +306,24 @@ cloudflare_redirect_target_count=$(
 # from these headers; the API never sees TLS itself. Direct HTTPS names the
 # handshake, Cloudflare names only the edge, and each is SET on every proxy so
 # a client can never supply its own.
+# Each listener proxies two paths to the API (/api/ and /sim-nodes/setting/),
+# so the HTTPS listener carries each header twice and the two Cloudflare
+# listeners four times.
 nginx_count() {
     grep -Fc -- "$1" "${repo_dir}/web/nginx.conf" || true
 }
-[ "$(nginx_count 'proxy_set_header X-ModemDeck-Edge direct;')" -eq 1 ] ||
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-Edge direct;')" -eq 2 ] ||
     fail "The HTTPS listener does not name its edge to the API"
-[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Protocol $ssl_protocol;')" -eq 1 ] ||
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Protocol $ssl_protocol;')" -eq 2 ] ||
     fail "The HTTPS listener does not pass the negotiated TLS version"
-[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Group $ssl_curve;')" -eq 1 ] ||
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Group $ssl_curve;')" -eq 2 ] ||
     fail "The HTTPS listener does not pass the key-exchange group"
-[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Cipher $ssl_cipher;')" -eq 1 ] ||
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-TLS-Cipher $ssl_cipher;')" -eq 2 ] ||
     fail "The HTTPS listener does not pass the cipher"
-[ "$(nginx_count 'proxy_set_header X-ModemDeck-Edge cloudflare;')" -eq 2 ] ||
+[ "$(nginx_count 'proxy_set_header X-ModemDeck-Edge cloudflare;')" -eq 4 ] ||
     fail "The Cloudflare listeners do not both name their edge"
 for header in X-ModemDeck-TLS-Protocol X-ModemDeck-TLS-Group X-ModemDeck-TLS-Cipher; do
-    [ "$(nginx_count "proxy_set_header ${header} \"\";")" -eq 2 ] ||
+    [ "$(nginx_count "proxy_set_header ${header} \"\";")" -eq 4 ] ||
         fail "The Cloudflare listeners do not blank ${header}"
 done
 # The card reports replay protection from TLS record sequencing, which 0-RTT
@@ -334,7 +340,7 @@ grep -Fq 'proxy_pass http://modemdeck_api;' "${repo_dir}/web/nginx.conf" ||
 grep -Fq 'proxy_buffering off;' "${repo_dir}/web/nginx.conf" ||
     fail "Nginx would buffer API event streams"
 connection_header_count=$(grep -Fc 'proxy_set_header Connection "";' "${repo_dir}/web/nginx.conf" || true)
-[ "$connection_header_count" -eq 3 ] ||
+[ "$connection_header_count" -eq 6 ] ||
     fail "Nginx API proxies do not consistently preserve upstream keepalive"
 if grep -Fq 'proxy_set_header Upgrade ' "${repo_dir}/web/nginx.conf"; then
     fail "Nginx carries an unused WebSocket upgrade header"

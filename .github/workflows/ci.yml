@@ -3,7 +3,7 @@ name: CI
 # Test/lint gate for pushes and pull requests. Image publishing stays in
 # publish-images.yml. gitleaks (make secret-scan) is deliberately NOT wired
 # here yet: it scans git history, which still contains credentials until the
-# owner finishes the filter-repo cleanup (REVIEW-2026-10-25.md P0-1).
+# owner finishes the filter-repo cleanup (docs/reviews/REVIEW-2026-10-25.md P0-1).
 on:
   push:
     branches: [main]
@@ -20,9 +20,9 @@ jobs:
       CGO_ENABLED: "0"
     steps:
       - name: Check out
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.0.0
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache-dependency-path: |
@@ -49,7 +49,7 @@ jobs:
         working-directory: web
     steps:
       - name: Check out
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Set up Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Deploy test suite
         run: ./deploy/tests/run.sh
       - name: Dockerfile lint (main)
