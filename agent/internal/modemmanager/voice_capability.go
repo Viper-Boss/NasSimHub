@@ -259,7 +259,7 @@ func (p *Provider) probeQuectelVoice(
 	if result.usbConfiguration == voiceVerificationDisabled {
 		result.callControl = false
 		result.mediaRouting = voiceVerificationDisabled
-		p.voiceProbes[key] = result
+		p.rememberVoiceProbeLocked(ctx, key, result)
 		return result
 	}
 	callList, callListErr := p.commandATPath(
@@ -282,29 +282,46 @@ func (p *Provider) probeQuectelVoice(
 	}
 	if !result.callControl {
 		result.mediaRouting = voiceVerificationDisabled
-		p.voiceProbes[key] = result
+		p.rememberVoiceProbeLocked(ctx, key, result)
 		return result
 	}
 	if runtimeResult, configured := p.applyQDC507VoiceRuntime(line, result); configured {
-		p.voiceProbes[key] = runtimeResult
+		p.rememberVoiceProbeLocked(ctx, key, runtimeResult)
 		return runtimeResult
 	}
 	if callListErr != nil || callListParseErr != nil {
 		result.mediaRouting = voiceVerificationReadFailed
 		result.reason = "call state could not be read before the PCM capability probe"
-		p.voiceProbes[key] = result
+		p.rememberVoiceProbeLocked(ctx, key, result)
 		return result
 	}
 	if len(callRecords) > 0 {
 		result.mediaRouting = voiceVerificationProbePending
 		result.reason = "PCM voice routing was not probed because the line was busy"
-		p.voiceProbes[key] = result
+		p.rememberVoiceProbeLocked(ctx, key, result)
 		return result
 	}
 
 	result = p.probeQuectelMediaCapability(ctx, operation, path, result)
-	p.voiceProbes[key] = result
+	p.rememberVoiceProbeLocked(ctx, key, result)
 	return result
+}
+
+// rememberVoiceProbeLocked caches a probe result unless the probe was cut
+// short by its context. An observer pass that reached its deadline, or an
+// agent that is shutting down, sees every AT command fail for reasons that
+// say nothing about the modem; caching that outcome would leave voice marked
+// unverified until a manual reprobe or an agent restart. The next pass probes
+// again instead. The caller holds voiceProbeMu.
+func (p *Provider) rememberVoiceProbeLocked(
+	ctx context.Context,
+	key string,
+	result voiceProbeResult,
+) {
+	if ctx.Err() != nil {
+		return
+	}
+	p.voiceProbes[key] = result
 }
 
 func (p *Provider) probeQuectelMediaCapability(

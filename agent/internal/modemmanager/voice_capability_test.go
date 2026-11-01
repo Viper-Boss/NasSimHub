@@ -626,6 +626,61 @@ func TestQuectelVoiceModelIsCachedUntilManualReprobe(t *testing.T) {
 	assertATInvocationCount(t, caller.invocations(), quectelPCMEnable, 1)
 }
 
+func TestInterruptedQuectelVoiceProbeIsNotCached(t *testing.T) {
+	t.Parallel()
+
+	objects := emptyLineObjects(true, false)
+	properties := objects[testModemPath][modemInterface]
+	properties["Manufacturer"] = dbus.MakeVariant("QUALCOMM INCORPORATED")
+	properties["Model"] = dbus.MakeVariant("QUECTEL Mobile Broadband Module")
+	properties["Revision"] = dbus.MakeVariant("EG25GGCR07A02M1G")
+
+	caller := newFakeCaller(objects)
+	caller.owner = true
+	caller.atResponses[quectelUSBVoiceQuery] =
+		`+QCFG: "usbcfg",0x2C7C,0x125,1,1,1,1,1,0,1`
+	caller.atResponses[quectelPCMStatusQuery] = quectelPCMReadyStatus
+	provider := newTestProvider(caller)
+
+	const operation = "test_interrupted_voice_probe"
+	parsed, err := provider.snapshotContent(context.Background(), operation)
+	if err != nil {
+		t.Fatalf("snapshotContent() error = %v", err)
+	}
+	if len(parsed.Lines) != 1 {
+		t.Fatalf("snapshotContent() lines = %+v", parsed.Lines)
+	}
+
+	// An AT-call observer pass that reaches its deadline sees every AT
+	// command fail. That says nothing about the modem and must not be
+	// remembered as its voice capability.
+	interrupted, cancel := context.WithCancel(context.Background())
+	cancel()
+	caller.atCommandErrors[quectelUSBVoiceQuery] = context.Canceled
+	caller.atCommandErrors[quectelCallListQuery] = context.Canceled
+	provider.initializeVoiceModel(interrupted, operation, &parsed)
+	delete(caller.atCommandErrors, quectelUSBVoiceQuery)
+	delete(caller.atCommandErrors, quectelCallListQuery)
+
+	snapshot, err := provider.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	if len(snapshot.Lines) != 1 {
+		t.Fatalf("Snapshot() lines = %+v", snapshot.Lines)
+	}
+	line := snapshot.Lines[0]
+	if !line.Capabilities.Dial || !line.Capabilities.Media {
+		t.Fatalf("interrupted probe was cached: capabilities = %+v, verification = %+v",
+			line.Capabilities, line.VoiceVerification)
+	}
+	if line.VoiceVerification == nil ||
+		line.VoiceVerification.USBConfiguration != voiceVerificationEnabled ||
+		line.VoiceVerification.MediaRouting != voiceVerificationEnabled {
+		t.Fatalf("voice verification = %+v, want a fresh successful probe", line.VoiceVerification)
+	}
+}
+
 func TestBusyQuectelVoiceModelWaitsForManualReprobe(t *testing.T) {
 	t.Parallel()
 
