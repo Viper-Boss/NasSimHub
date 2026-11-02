@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Send,
   Wifi,
+  Smartphone,
   ShieldCheck,
   SlidersHorizontal,
   UserRound,
@@ -85,6 +86,7 @@ const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsP
 const loadSmsForwardPanel = () => import('../components/settings/SmsForwardPanel.vue')
 const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
+const loadAirSIMPanel = () => import('../components/settings/AirSIMPanel.vue')
 
 const AccountPreferencesPanel = defineAsyncComponent(loadAccountPreferencesPanel)
 const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel)
@@ -104,6 +106,7 @@ const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
 const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
+const AirSIMPanel = defineAsyncComponent(loadAirSIMPanel)
 const loadWireGuardPanel = () => import('../components/settings/WireGuardPanel.vue')
 const WireGuardPanel = defineAsyncComponent(loadWireGuardPanel)
 const loadDHTPanel = () => import('../components/settings/DHTPanel.vue')
@@ -219,6 +222,12 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     label: t('settings.f50'),
     description: t('settings.f50Description'),
     icon: Wifi
+  },
+  {
+    id: 'airsim',
+    label: t('settings.airsim'),
+    description: t('settings.airsimDescription'),
+    icon: Smartphone
   },
   {
     id: 'net-switches',
@@ -350,6 +359,8 @@ function preloadSection(section: SettingsSection): void {
         return loadSmsForwardPanel
       case 'f50':
         return loadF50DevicePanel
+      case 'airsim':
+        return loadAirSIMPanel
       case 'net-switches':
         return loadNetworkSwitchesPanel
       case 'wireguard':
@@ -621,6 +632,12 @@ onMounted(() => {
             <div v-else-if="selectedSection === 'f50'" class="settings-content">
               <PageContentFrame mode="reading">
                 <F50DevicePanel />
+              </PageContentFrame>
+            </div>
+
+            <div v-else-if="selectedSection === 'airsim'" class="settings-content">
+              <PageContentFrame mode="reading">
+                <AirSIMPanel />
               </PageContentFrame>
             </div>
 

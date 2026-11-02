@@ -25,6 +25,7 @@ export function settingsSkeletonShape(section: string): SettingsSkeletonShape {
     case 'bark':
     case 'sms-forward':
     case 'f50':
+    case 'airsim':
     case 'net-switches':
       return 'form'
     case 'contacts':

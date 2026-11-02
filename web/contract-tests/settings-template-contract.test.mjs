@@ -48,6 +48,8 @@ test('settings navigation groups personal and managed surfaces behind one visibi
       'bark',
       'sms-forward',
       'f50',
+      // Pairs an iPhone that then acts for the administrator who paired it.
+      'airsim',
       'net-switches',
       'connectivity',
       'diagnostics',
@@ -72,7 +74,7 @@ test('settings navigation groups personal and managed surfaces behind one visibi
   ]) {
     assert.equal(settingsSectionGroup(section), 'management')
   }
-  for (const section of ['audio', 'contacts', 'devices', 'telegram', 'bark', 'sms-forward']) {
+  for (const section of ['audio', 'contacts', 'devices', 'telegram', 'bark', 'sms-forward', 'airsim']) {
     assert.equal(settingsSectionGroup(section), 'communication')
   }
   for (const section of ['pairing', 'f50', 'net-switches', 'connectivity', 'nkn-node', 'nkn-network', 'wireguard']) {
