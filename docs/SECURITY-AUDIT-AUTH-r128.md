@@ -26,7 +26,7 @@
   - 每个请求都从库里**重新读取** principal（角色、线路权限）（`store/auth.go: UserSessionByTokenDigest`，JOIN `enabled = 1` 的用户），不缓存在会话里。—— `TestAdversarialRoleDowngradeTakesEffectOnTheNextRequest`、`TestAdversarialLineAccessRemovalTakesEffectOnTheNextRequest`、`TestAdversarialPrincipalIsReadFreshOnEveryAuthentication`
   - 登录不会沿用请求里带来的 Cookie 值（防会话固定）。—— `TestAdversarialLoginNeverAdoptsAPresentedSessionToken`
   - 每个用户最多 8 个会话，第 9 次登录淘汰该用户最旧的一个（`store/auth.go: maxSessionsPerUser`）。—— `TestAdversarialNinthLoginEvictsOnlyTheSameUsersOldestSession`
-- 不保证：**没有服务端过期时间**（见 A-07）；会话不绑定 IP/UA（`auth/principal.go` 注释明确说明元数据“不得用作认证绑定”）。
+- 会话有服务端有效期：登录后最多 90 天、最后一次使用后 30 天，先到为准（见 A-07，2026-11 修复）；会话不绑定 IP/UA（`auth/principal.go` 注释明确说明元数据“不得用作认证绑定”）。
 
 ### 1.3 会话吊销
 | 触发 | 实现 | 效果 | 测试 |
@@ -105,12 +105,12 @@ SSE 流：`event_stream_auth.go: authorizeEventStream` 建流时认证，之后�
 | A-03 | 高 | `httpapi/auth.go: authorizeAPI`、`provisioning.go` | 已修复 | `TestAdversarialCloneRefusesInheritedSessionsAndBearerTokens` |
 | A-04 | 中 | `diagnostics/logs.go`、`barkpush`、`homesim_forward.go`、`homesim_bark.go` | 已修复 | `TestAdversarialBothLogSinksAreRedacted`、`TestAdversarialPlantedSecretsNeverReachALogOrAnErrorResponse` |
 | A-05 | 中 | `httpapi/login_limiter.go`（全局计数） | 未改（设计） | `TestAdversarialGlobalThrottleLocksEveryAccountAndRecovers` |
-| A-07 | 中 | `auth/service.go: Authenticate` | 未改（设计） | `TestAdversarialSessionHasNoServerSideExpiry`、`TestAdversarialMultiUserSessionHasNoTimeExpiry` |
-| A-11 | 中 | `httpapi/homesim_chat_nkn.go` | 未改（设计） | `TestAdversarialEveryStaticRouteHasADeclaredAudience`（表内标注） |
+| A-07 | 中 | `auth/service.go: Authenticate` | 已修（2026-11，P1-4） | `TestAdversarialSessionExpiresOnTheServer`、`TestAdversarialMultiUserSessionExpires` |
+| A-11 | 中 | `httpapi/homesim_chat_nkn.go` | 已修（2026-11，P1-6） | `TestAdversarialEveryStaticRouteHasADeclaredAudience`、`TestNKNChatIsAdministratorOnly` |
 | A-06 | 低 | `login_limiter.go: evictOldestAccount` | 未改 | `TestAdversarialEvictingAVictimsCounterCostsMoreThanItBuys` |
 | A-08 | 低 | `auth.go: getSession` | 未改（设计） | `TestAdversarialSessionProbeWithoutTheCSRFCookieRevokesTheSession` |
 | A-09 | 信息 | `auth.go: authorizeAPI` | 未改（设计） | `TestAdversarialOriginRefererAndHostAreNotInputsToAuthorization` |
-| A-10 | 低 | `auth.go: requestClientIP` | 未改 | `TestAdversarialSessionAccessIPIsClientSuppliedAndNeverAuthoritative` |
+| A-10 | 低 | `auth.go: requestClientIP` | 已修（2026-11，P2-10） | `TestAdversarialSessionAccessIPIsClientSuppliedAndNeverAuthoritative`、`TestRequestSessionClientIgnoresRelayHeadersFromAPublicPeer` |
 | A-12 | 低 | `system_metrics.go`、`vowifi_diagnostics.go`、`contact_backup.go` | 未改 | `TestAdversarialMemberRoutesAreNotMistakenForAdministratorRoutes` |
 | A-13 | 低 | `login_limiter.go: activeState` | 未改 | `TestAdversarialWindowExpiryEndsAnActiveBlockEarly` |
 | A-14 | 低 | `auth.go: accountPassword` | 未改 | `TestAdversarialPasswordChangeHasNoFailureLimiter` |
@@ -142,20 +142,22 @@ SSE 流：`event_stream_auth.go: authorizeEventStream` 建流时认证，之后�
 - 为什么不改：限流器刻意不看客户端地址，因为 API 没有可信代理名单，转发头不可信（见 `login_limiter.go` 注释）。全局计数是这一取舍的代价，去掉它就没有对“撒用户名”式猜测的任何限制。
 - 建议：引入“可信代理”配置（仅当直连对端是配置的代理时才采信 `X-ModemDeck-Client-IP`），然后把全局计数换成按客户端地址计数；在此之前由边缘（Cloudflare/nginx）做 IP 限速。
 
-### A-07（中，未改）会话没有服务端有效期
+### A-07（中，2026-11 已修，审查 P1-4）会话没有服务端有效期
 - 事实：`Authenticate` 不比较任何时间；Cookie 400 天且每次 `GET /session` 续期。会话只因退出、吊销、改密码、停用账号或被第 9 个会话挤掉而结束。这是既有的明确设计（已有测试 `auth: TestAuthenticateHasNoTimeExpiry`）。
 - 风险：被盗的 Cookie 永久有效，直到机主主动处理。
 - 建议：增加空闲超时（例如 30–90 天未使用）与绝对上限；`last_seen_at_unix` 已经在维护（`sessionMetadataRefresh` 5 分钟粒度），实现成本低。属于产品行为变化，需机主决定。
+- 修复：`Authenticate` 按 `MODEMDECK_SESSION_MAX_AGE`（默认 90d）与 `MODEMDECK_SESSION_IDLE_TIMEOUT`（默认 30d）判定，过期即按吊销处理（删行、清 Cookie）；会话列表返回 `expires_at`。测试：`auth: TestAuthenticateEnforcesSessionLifetime`、`TestAdversarialMultiUserSessionExpires`，`httpapi: TestAdversarialSessionExpiresOnTheServer`、`TestAdversarialIdleSessionExpiresBeforeItsMaximumAge`。iOS 配对凭据仍无有效期（可在设备列表吊销）。
 
-### A-11（中，未改）nMobile（NKN）聊天对所有成员开放
+### A-11（中，2026-11 已修，审查 P1-6）nMobile（NKN）聊天对所有成员开放
 - 事实：`/api/v1/nkn/chat/{messages,send,clear,peers}` 没有角色或线路检查；任何成员都能读取、以网关身份发送、清空聊天记录。前端的入口也对所有角色显示（`AppShell.vue`），所以判断为有意的共享信箱，未改。
 - 建议：若聊天应属于机主，把 `/api/v1/nkn/chat/` 加入 `adminOnlyAPIPath` 并隐藏成员的入口；一行改动。
+- 修复：按此建议执行——聊天只有一个网关 NKN 身份，无法按成员拆分收件，故限定管理员；成员入口与路由隐藏。
 
 ### 低/信息
 - **A-06**：账号表满 1024 项时淘汰最久未失败的账号，可借此清掉某个账号的计数；但需要约 1024 次失败登录，在全局限流下要数小时，换回 5 次猜测，不构成实际绕过。
 - **A-08**：`GET /session` 发现会话 Cookie 没有匹配的 CSRF Cookie 时会吊销该会话（失败即关闭）。能删除/覆盖 `modemdeck_csrf` 的一方可以让用户掉线，仅此而已；探测接口不会把正确的 CSRF 令牌发给没有它的人。
 - **A-09**：不检查 Origin/Referer/Host，见 1.5。
-- **A-10**：会话列表里的“访问 IP”取自 `X-ModemDeck-Client-IP`/`X-Real-IP`。自带的 `web/nginx.conf` 会覆盖这两个头，经它访问时可信；直连 API 端口的客户端可以随意填写。该值仅用于展示，不参与任何授权。`X-Forwarded-For` 完全不被读取。建议同 A-05（可信代理配置）。
+- **A-10**：会话列表里的“访问 IP”取自 `X-ModemDeck-Client-IP`/`X-Real-IP`。自带的 `web/nginx.conf` 会覆盖这两个头，经它访问时可信；直连 API 端口的客户端可以随意填写。该值仅用于展示，不参与任何授权。`X-Forwarded-For` 完全不被读取。建议同 A-05（可信代理配置）。**2026-11 已修（审查 P2-10）**：仅当直连对端是回环或私网地址（Compose 网络里的 nginx）时才采信这两个头，公网对端一律记录其真实地址。
 - **A-12**：成员可读 `/system-metrics`（主机负载、网卡流量）、`/vowifi-diagnostics`（出口公网 IP、运营商）；`/contacts/backup` 的响应包含服务器上的绝对目录路径。信息泄露面很小，仪表盘在用，未改。
 - **A-13**：退避超过 5 分钟窗口时，窗口到期会连同 `blockedUntil` 一起清空，封锁最多提前 60 秒结束。
 - **A-14**：`PUT /account/password` 校验 `current_password` 没有失败计数。需要有效会话＋CSRF 令牌，不是入口；但持有被盗会话的人可以按 2 并发的速度猜密码。建议复用 `loginFailures`（按用户 ID 计）。
