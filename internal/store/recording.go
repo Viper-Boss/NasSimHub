@@ -777,11 +777,10 @@ func (s *Store) RecordingEntries(
 	contactOwner := contactOwnerSQL(ctx, "contacts")
 	favoriteExpression := "COALESCE(state.is_favorite, 0)"
 	userStateJoin := ""
-	if principal, scoped := auth.PrincipalFromContext(ctx); scoped {
-		userID := strings.ReplaceAll(principal.UserID, "'", "''")
+	if _, scoped := auth.PrincipalFromContext(ctx); scoped {
 		favoriteExpression = "COALESCE(user_state.is_favorite, 0)"
 		userStateJoin = ` LEFT JOIN modemdeck_user_recording_state AS user_state
-			ON user_state.user_id = '` + userID + `'
+			ON user_state.user_id = ` + viewerUserIDSQL + `
 			AND user_state.call_id = call.id`
 	}
 	statement := fmt.Sprintf(`SELECT
@@ -888,6 +887,7 @@ func (s *Store) RecordingEntries(
 		recording.id DESC
 		LIMIT ?`
 	arguments = append(arguments, limit)
+	statement, arguments = withViewer(ctx, statement, arguments)
 
 	rows, err := s.database.QueryContext(ctx, statement, arguments...)
 	if err != nil {
