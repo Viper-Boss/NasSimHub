@@ -42,6 +42,7 @@ import { skeletonPreviewEnabled } from '../composables/useSkeletonPreview'
 import { messageComposeRoute } from '../router/messageRoute'
 import { addressesForContact, loadNknPeerNotes, noteForAddress } from '../state/nknPeerNotes'
 import { requestConfirmation } from '../state/confirmation'
+import { isAdministrator } from '../state/session'
 import { showSuccess } from '../state/feedback'
 import { openDialer } from '../state/ui'
 import {
@@ -307,7 +308,8 @@ function openNmobile(address: string): void {
 onMounted(() => {
   window.addEventListener('keydown', onSelectionKeydown)
   void waitForInitialLoad([() => loadBootstrap(), () => refreshContacts()])
-  void loadNknPeerNotes()
+  // nMobile is administrator-only; a member's request would only be refused.
+  if (isAdministrator.value) void loadNknPeerNotes()
 })
 
 onBeforeUnmount(() => {

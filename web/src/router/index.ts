@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
-import { ensureSession } from '../state/session'
+import { ensureSession, sessionState } from '../state/session'
 import {
   messageComposeContextFromReference,
   messageThreadKeyFromReference
@@ -119,6 +119,14 @@ router.beforeEach(async to => {
       name: 'login',
       query: { redirect: to.fullPath }
     }
+  }
+  // These pages are backed only by administrator routes; a member would see
+  // nothing but refusals.
+  if (
+    (to.name === 'nmobile' || to.name === 'sim-nodes') &&
+    sessionState.role !== 'admin'
+  ) {
+    return { name: 'dashboard', replace: true }
   }
   return true
 })

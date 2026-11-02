@@ -92,10 +92,10 @@ var advStaticRoutes = map[string]advAudience{
 	"/api/v1/settings/lines":              advMember,
 	"/api/v1/settings/system":             advMember,
 	"/api/v1/settings/recording":          advMember,
-	"/api/v1/nkn/chat/messages":           advMember, // finding A-11: shared mailbox
-	"/api/v1/nkn/chat/clear":              advMember,
-	"/api/v1/nkn/chat/send":               advMember,
-	"/api/v1/nkn/chat/peers":              advMember,
+	"/api/v1/nkn/chat/messages":           advAdmin, // finding A-11 / review P1-6
+	"/api/v1/nkn/chat/clear":              advAdmin,
+	"/api/v1/nkn/chat/send":               advAdmin,
+	"/api/v1/nkn/chat/peers":              advAdmin,
 	"/api/v1/devices":                     advAdminWrite,
 	"/api/v1/users":                       advAdmin,
 	"/api/v1/calls/guard":                 advAdminPost,

@@ -367,6 +367,15 @@ func adminOnlyAPIPath(path, method string) bool {
 	if strings.HasPrefix(path, "/api/v1/homesim/f50/") {
 		return true
 	}
+	// nMobile chat runs on the gateway's single NKN identity: inbound
+	// messages arrive for the gateway, not for an account, and anything sent
+	// goes out as the gateway. There is no owner to scope by, so the history,
+	// sending, clearing and peer notes belong to the administrator. Members
+	// could previously read every message and clear the whole history
+	// (review P1-6, audit A-11).
+	if strings.HasPrefix(path, "/api/v1/nkn/chat/") {
+		return true
+	}
 	if path == "/api/v1/about" ||
 		path == "/api/v1/external-access/status" ||
 		path == "/api/v1/external-access/refresh" ||

@@ -549,7 +549,7 @@ onBeforeUnmount(() => {
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'sim-nodes' }" :to="{ name: 'sim-nodes' }" :title="simNodesTitle">
           <Server :size="22" /><span>{{ simNodesTitle }}</span>
         </RouterLink>
-        <RouterLink class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
+        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
           <MessageCircleHeart :size="22" /><span>{{ t('homesim.nmobile.title') }}</span>
         </RouterLink>
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'sms-forward' }" :to="{ name: 'settings', params: { section: 'sms-forward' } }" :title="t('homesim.forward')">
