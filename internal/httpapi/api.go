@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/human-agent65535/modemdeck/internal/agentclient"
+	"github.com/human-agent65535/modemdeck/internal/airsimgw"
 	"github.com/human-agent65535/modemdeck/internal/applepush"
 	"github.com/human-agent65535/modemdeck/internal/auth"
 	"github.com/human-agent65535/modemdeck/internal/calllease"
@@ -340,6 +341,7 @@ type Options struct {
 	ReleaseRelay          ReleaseRelay
 	ApplicationVersion    string
 	SettingsSecrets       SecretBox
+	AirSIM                *airsimgw.Gateway // AirSIM iPhone app gateway; nil disables it
 	disableAuthentication bool
 	// disableLicenseEnforcement lets a test exercise a paid code path without
 	// issuing itself a certificate. Unexported and set only from _test files,
@@ -382,6 +384,7 @@ type API struct {
 	simAutoUnlockMu            sync.Mutex
 	contactBackupDirectory     string
 	settingsSecrets            SecretBox
+	airsim                     *airsimgw.Gateway
 	repository                 Repository
 	healthProbe                HealthProbe
 	capabilities               CapabilitySource
@@ -445,6 +448,7 @@ func New(repository Repository, options Options) (*API, error) {
 	api := &API{
 		contactBackupDirectory:     options.ContactBackupDirectory,
 		settingsSecrets:            options.SettingsSecrets,
+		airsim:                     options.AirSIM,
 		repository:                 repository,
 		nknNode:                    newNKNNodeManager(logger),
 		nknNetwork:                 newNKNNetworkManager(logger),
@@ -490,6 +494,9 @@ func New(repository Repository, options Options) (*API, error) {
 	// address listed in the directory has to be one that can be messaged.
 	api.nknNetwork.seed = api.managedNKNSeed
 	api.releasePeers = newReleasePeers(api)
+	if api.airsim != nil {
+		api.airsim.SetBackend(airsimBackend{api: api})
+	}
 	return api, nil
 }
 
@@ -763,6 +770,12 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		api.tlsSettings(response, request)
 	case "/api/v1/settings/tls/ca":
 		api.getOnly(response, request, api.tlsCertificateAuthority)
+	case "/api/v1/settings/airsim":
+		api.airsimSettings(response, request)
+	case "/api/v1/settings/airsim/pairing":
+		api.airsimPairing(response, request)
+	case "/api/v1/settings/airsim/devices/revoke":
+		api.postOnly(response, request, api.airsimRevoke)
 	default:
 		if id, ok := accountSessionResourceID(request.URL.Path); ok {
 			api.accountSessionResource(response, request, id)

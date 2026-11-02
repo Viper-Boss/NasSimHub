@@ -439,6 +439,15 @@ func (api *API) authorizeAPI(response http.ResponseWriter, request *http.Request
 			"这份数据来自另一台设备，会话已停用。请在界面上执行重置后重新初始化。", "")
 		return false
 	}
+	// A command from a paired AirSIM iPhone, built in process by
+	// airsimBackend: the identity was attached there after the gateway
+	// verified the phone's signature, and a context value cannot arrive
+	// from the network. There is no cookie and so no CSRF token to check.
+	if identity, ok := airsimInternalFromContext(request.Context()); ok {
+		ctx := context.WithValue(request.Context(), callLeaseSessionScopeContextKey{}, identity.scope)
+		*request = *request.WithContext(auth.ContextWithPrincipal(ctx, identity.principal))
+		return true
+	}
 	if len(request.Header.Values("Authorization")) > 0 {
 		return api.authorizeMobileAPI(response, request)
 	}

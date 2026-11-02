@@ -435,6 +435,13 @@ func run(
 			releaseRelay = client
 		}
 	}
+	airsimGateway, err := airsimConfigFromEnvironment(logger, filepath.Dir(databasePath), settingsSecrets)
+	if err != nil {
+		// Optional: a bad port setting or an unreadable state file costs the
+		// AirSIM pairing, never the gateway itself.
+		logger.Warn("AirSIM compatibility unavailable", "component", "airsim", "error", err)
+		airsimGateway = nil
+	}
 	api, err := httpapi.New(repository, httpapi.Options{
 		ContactBackupDirectory: filepath.Join(filepath.Dir(databasePath), "backups", "contacts"),
 		Communications:         communications,
@@ -492,6 +499,7 @@ func run(
 		ReleaseRelay:       releaseRelay,
 		ApplicationVersion: version,
 		SettingsSecrets:    settingsSecrets,
+		AirSIM:             airsimGateway,
 		// The issuer's PUBLIC key. Certificates are verified against it and
 		// nothing is signed here -- the private key never touches a gateway,
 		// see internal/license/certificate.go.
@@ -575,6 +583,11 @@ func run(
 		defer close(simAutoUnlockDone)
 		api.RunSIMAutoUnlockSync(signals)
 	}()
+	airsimDone := make(chan struct{})
+	go func() {
+		defer close(airsimDone)
+		runAirSIM(signals, airsimGateway, logger)
+	}()
 	server := &http.Server{
 		Addr:              listenAddress,
 		Handler:           api,
@@ -643,6 +656,7 @@ func run(
 	}
 	<-agentLogsDone
 	<-callLeaseDone
+	<-airsimDone
 	<-tlsMaintenanceDone
 	<-cloudflareDone
 	if !telegramStopped {

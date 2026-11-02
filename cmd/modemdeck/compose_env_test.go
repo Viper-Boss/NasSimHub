@@ -61,6 +61,7 @@ func TestEveryEnvironmentVariableReachesTheContainer(t *testing.T) {
 		filepath.Join("cmd", "modemdeck", "main.go"),
 		// Node settings are read beside their wiring, not in main.go.
 		filepath.Join("cmd", "modemdeck", "nassimhub_nodes.go"),
+		filepath.Join("cmd", "modemdeck", "airsim.go"),
 		filepath.Join("cmd", "modemdeck-updater", "main.go"),
 	}
 
@@ -92,6 +93,7 @@ func TestEveryEnvironmentVariableReachesTheContainer(t *testing.T) {
 		"docker-compose.cloudflare.yml",
 		"docker-compose.cloudflare-turn.yml",
 		filepath.Join("deploy", "fnos", "compose.fnos.yml"),
+		"docker-compose.airsim.yml",
 	}
 	var compose strings.Builder
 	for _, name := range composeFiles {
