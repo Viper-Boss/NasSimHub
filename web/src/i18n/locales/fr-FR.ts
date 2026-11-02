@@ -482,6 +482,7 @@ export default {
     "pendingIPhone": "Jumelage de l’appareil Apple en attente",
     "signedInAt": "Connecté le {date}",
     "lastActiveAt": "Dernière activité {date}",
+    "expiresAt": "Expire le {date}",
     "pairedAt": "Jumelé le {date}",
     "unknownBrowser": "Navigateur Web",
     "unknownDevice": "Appareil inconnu",

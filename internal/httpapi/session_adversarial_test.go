@@ -354,25 +354,51 @@ func TestAdversarialTamperedAndMalformedSessionCookies(t *testing.T) {
 	}
 }
 
-// FINDING A-07 (design): sessions have no server-side lifetime. Nothing in
-// auth.Service.Authenticate or the store compares created_at / last_seen_at
-// with the clock, and the cookie is reissued for 400 days on every
-// GET /api/v1/session. A session ends only by logout, revocation, a password
-// change, the account being disabled, or by being the ninth-oldest.
-//
-// This test pins the current behaviour so the audit's claim is checked by the
-// suite. If an idle or absolute lifetime is introduced, this is the test to
-// invert.
-func TestAdversarialSessionHasNoServerSideExpiry(t *testing.T) {
+// FINDING A-07 / review P1-4 (fixed): a session ends at most
+// auth.DefaultSessionMaxAge after sign-in and auth.DefaultSessionIdleTimeout
+// after its last use. An expired cookie is refused like a revoked one: the
+// row is deleted and the cookies are cleared, so it cannot come back.
+func TestAdversarialSessionExpiresOnTheServer(t *testing.T) {
 	harness := newAdvHarness(t)
 	client := harness.aliceClient()
+	if !client.alive() {
+		t.Fatal("a fresh session was refused")
+	}
 
 	tenYearsAgo := time.Now().Add(-10 * 365 * 24 * time.Hour).Unix()
 	harness.exec(`UPDATE modemdeck_auth_sessions SET created_at_unix = ?, last_seen_at_unix = ?`,
 		tenYearsAgo, tenYearsAgo)
+	if client.alive() {
+		t.Fatal("a ten-year-old session was accepted")
+	}
+	var sessions int
+	if err := harness.db.QueryRow(`SELECT COUNT(*) FROM modemdeck_auth_sessions WHERE user_id = ?`,
+		harness.alice.ID).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 0 {
+		t.Fatalf("%d expired session rows were kept after the cookie was refused", sessions)
+	}
+}
 
-	if !client.alive() {
-		t.Fatal("a ten-year-old session was refused: a lifetime now exists; update the audit (A-07) and invert this test")
+func TestAdversarialIdleSessionExpiresBeforeItsMaximumAge(t *testing.T) {
+	harness := newAdvHarness(t)
+	client := harness.aliceClient()
+
+	signedIn := time.Now().Add(-40 * 24 * time.Hour).Unix()
+	lastUsed := time.Now().Add(-31 * 24 * time.Hour).Unix()
+	harness.exec(`UPDATE modemdeck_auth_sessions SET created_at_unix = ?, last_seen_at_unix = ?`,
+		signedIn, lastUsed)
+	if client.alive() {
+		t.Fatal("a session unused for 31 days was accepted")
+	}
+
+	other := harness.aliceClient()
+	recent := time.Now().Add(-29 * 24 * time.Hour).Unix()
+	harness.exec(`UPDATE modemdeck_auth_sessions SET created_at_unix = ?, last_seen_at_unix = ?`,
+		signedIn, recent)
+	if !other.alive() {
+		t.Fatal("a session used 29 days ago, signed in 40 days ago, was refused")
 	}
 }
 

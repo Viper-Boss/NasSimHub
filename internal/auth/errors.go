@@ -26,6 +26,7 @@ const (
 	CodeInvalidCSRFToken         ErrorCode = "invalid_csrf_token"
 	CodeRandomSource             ErrorCode = "random_source"
 	CodeRepository               ErrorCode = "repository"
+	CodeInvalidSessionLimits     ErrorCode = "invalid_session_limits"
 )
 
 // Error is returned for all failures owned by this package. Its Code is stable
@@ -77,6 +78,7 @@ var (
 	ErrInvalidCredentials       = &Error{Code: CodeInvalidCredentials}
 	ErrInvalidSessionToken      = &Error{Code: CodeInvalidSessionToken}
 	ErrUnauthenticated          = &Error{Code: CodeUnauthenticated}
+	ErrInvalidSessionLimits     = &Error{Code: CodeInvalidSessionLimits}
 	ErrInvalidSessionRecord     = &Error{Code: CodeInvalidSessionRecord}
 	ErrSessionNotFound          = &Error{Code: CodeSessionNotFound}
 	ErrCurrentSession           = &Error{Code: CodeCurrentSession}

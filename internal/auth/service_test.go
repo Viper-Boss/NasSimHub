@@ -534,26 +534,43 @@ func TestAuthenticateRefreshesLatestSessionMetadata(t *testing.T) {
 	}
 }
 
-func TestAuthenticateHasNoTimeExpiry(t *testing.T) {
+func TestAuthenticateEnforcesSessionLifetime(t *testing.T) {
 	ctx := context.Background()
 	createdAt := time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
 	sessionToken, sessionDigest := mustSessionToken(t, 0xe1)
 	_, csrfDigest := mustCSRFToken(t, 0xe2)
 	repository := newMemoryRepository()
-	repository.sessions[sessionDigest] = SessionRecord{
-		SessionTokenDigest: sessionDigest,
-		CSRFTokenDigest:    csrfDigest,
-		CreatedAt:          createdAt,
-	}
 	service := mustService(t, repository)
-	service.now = func() time.Time { return createdAt.Add(20 * 365 * 24 * time.Hour) }
 
-	authentication, err := service.Authenticate(ctx, sessionToken)
-	if err != nil {
-		t.Fatalf("Authenticate() old session error = %v", err)
-	}
-	if !authentication.CreatedAt.Equal(createdAt) {
-		t.Fatalf("CreatedAt = %s, want %s", authentication.CreatedAt, createdAt)
+	for _, test := range []struct {
+		name     string
+		lastSeen time.Time
+		at       time.Duration
+		accepted bool
+	}{
+		{"never refreshed, inside idle timeout", time.Time{}, 29 * day, true},
+		{"never refreshed, idle timeout passed", time.Time{}, 30 * day, false},
+		{"used recently, inside absolute limit", createdAt.Add(80 * day), 89 * day, true},
+		{"used recently, absolute limit reached", createdAt.Add(89 * day), 90 * day, false},
+		{"last use more than the idle timeout ago", createdAt.Add(10 * day), 40*day + time.Second, false},
+		{"twenty years old", createdAt.Add(20 * day), 20 * 365 * day, false},
+	} {
+		repository.sessions[sessionDigest] = SessionRecord{
+			SessionTokenDigest: sessionDigest,
+			CSRFTokenDigest:    csrfDigest,
+			CreatedAt:          createdAt,
+			LastSeenAt:         test.lastSeen,
+		}
+		now := createdAt.Add(test.at)
+		service.now = func() time.Time { return now }
+		_, err := service.Authenticate(ctx, sessionToken)
+		if test.accepted && err != nil {
+			t.Fatalf("%s: Authenticate() error = %v", test.name, err)
+		}
+		if !test.accepted && !errors.Is(err, ErrUnauthenticated) {
+			t.Fatalf("%s: Authenticate() error = %v, want %v", test.name, err, ErrUnauthenticated)
+		}
 	}
 
 	repository.sessions[sessionDigest] = SessionRecord{
@@ -562,6 +579,30 @@ func TestAuthenticateHasNoTimeExpiry(t *testing.T) {
 	}
 	if _, err := service.Authenticate(ctx, sessionToken); !errors.Is(err, ErrInvalidSessionRecord) {
 		t.Fatalf("Authenticate() zero creation error = %v, want %v", err, ErrInvalidSessionRecord)
+	}
+}
+
+func TestSetSessionLimits(t *testing.T) {
+	service := mustService(t, newMemoryRepository())
+	for _, limits := range [][2]time.Duration{
+		{0, time.Hour},
+		{time.Hour, 0},
+		{59 * time.Minute, time.Hour},
+		{-time.Hour, time.Hour},
+	} {
+		if err := service.SetSessionLimits(limits[0], limits[1]); !errors.Is(err, ErrInvalidSessionLimits) {
+			t.Fatalf("SetSessionLimits(%s, %s) error = %v, want %v", limits[0], limits[1], err, ErrInvalidSessionLimits)
+		}
+	}
+	if err := service.SetSessionLimits(48*time.Hour, 2*time.Hour); err != nil {
+		t.Fatalf("SetSessionLimits() error = %v", err)
+	}
+	createdAt := time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC)
+	if got, want := service.SessionExpiresAt(createdAt, createdAt.Add(time.Hour)), createdAt.Add(3*time.Hour); !got.Equal(want) {
+		t.Fatalf("idle expiry = %s, want %s", got, want)
+	}
+	if got, want := service.SessionExpiresAt(createdAt, createdAt.Add(47*time.Hour)), createdAt.Add(48*time.Hour); !got.Equal(want) {
+		t.Fatalf("absolute expiry = %s, want %s", got, want)
 	}
 }
 

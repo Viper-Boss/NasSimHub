@@ -482,6 +482,7 @@ export default {
     "pendingIPhone": "Apple デバイスのペアリング待ち",
     "signedInAt": "{date} にログイン",
     "lastActiveAt": "最終アクティブ {date}",
+    "expiresAt": "有効期限 {date}",
     "pairedAt": "{date} にペアリング",
     "unknownBrowser": "Web ブラウザ",
     "unknownDevice": "不明なデバイス",

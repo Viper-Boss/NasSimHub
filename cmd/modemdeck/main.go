@@ -189,6 +189,23 @@ func run(
 		_ = db.Close()
 		return fmt.Errorf("create authentication service: %w", err)
 	}
+	sessionMaxAge, err := environmentDuration("MODEMDECK_SESSION_MAX_AGE",
+		os.Getenv("MODEMDECK_SESSION_MAX_AGE"), auth.DefaultSessionMaxAge)
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
+	sessionIdleTimeout, err := environmentDuration("MODEMDECK_SESSION_IDLE_TIMEOUT",
+		os.Getenv("MODEMDECK_SESSION_IDLE_TIMEOUT"), auth.DefaultSessionIdleTimeout)
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
+	if err := authenticator.SetSessionLimits(sessionMaxAge, sessionIdleTimeout); err != nil {
+		_ = db.Close()
+		return fmt.Errorf("MODEMDECK_SESSION_MAX_AGE and MODEMDECK_SESSION_IDLE_TIMEOUT must each be at least %s: %w",
+			auth.MinimumSessionLifetime, err)
+	}
 	agent, err := agentclient.New(agentSocketPath, hostAgentRequestTimeout)
 	if err != nil {
 		_ = db.Close()

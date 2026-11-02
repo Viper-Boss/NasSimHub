@@ -482,6 +482,7 @@ export default {
     "pendingIPhone": "Enlace de dispositivo Apple pendiente",
     "signedInAt": "Sesión iniciada {date}",
     "lastActiveAt": "Última actividad {date}",
+    "expiresAt": "Caduca el {date}",
     "pairedAt": "Enlazado {date}",
     "unknownBrowser": "Navegador web",
     "unknownDevice": "Dispositivo desconocido",

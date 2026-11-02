@@ -442,6 +442,7 @@ function parseAccountSessions(value: unknown): AccountSession[] {
     const createdAt = stringProperty(session, 'created_at')
     const pairedAt = stringProperty(session, 'paired_at')
     const lastSeenAt = stringProperty(session, 'last_seen_at')
+    const expiresAt = stringProperty(session, 'expires_at')
     if (
       !id ||
       (kind !== 'web' && kind !== 'ios') ||
@@ -449,6 +450,7 @@ function parseAccountSessions(value: unknown): AccountSession[] {
       !Number.isFinite(Date.parse(createdAt)) ||
       (pairedAt !== undefined && !Number.isFinite(Date.parse(pairedAt))) ||
       (lastSeenAt !== undefined && !Number.isFinite(Date.parse(lastSeenAt))) ||
+      (expiresAt !== undefined && !Number.isFinite(Date.parse(expiresAt))) ||
       typeof session.current !== 'boolean'
     ) {
       throw new ApiError(`${path} is invalid`, 0, 'invalid_response')
@@ -459,6 +461,7 @@ function parseAccountSessions(value: unknown): AccountSession[] {
       created_at: createdAt,
       paired_at: pairedAt,
       last_seen_at: lastSeenAt,
+      expires_at: expiresAt,
       user_agent: stringProperty(session, 'user_agent'),
       access_ip: stringProperty(session, 'access_ip') || undefined,
       access_host: stringProperty(session, 'access_host'),

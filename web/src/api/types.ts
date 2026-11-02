@@ -1440,6 +1440,7 @@ export type AccountSession = {
   created_at: string
   paired_at?: string
   last_seen_at?: string
+  expires_at?: string
   user_agent?: string
   access_ip?: string
   access_host?: string
