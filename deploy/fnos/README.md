@@ -44,7 +44,7 @@ python3 scripts/fnos_preflight.py \
 5. 准备数据目录下的 `tls` 子目录。数据、TLS 和录音目录应归应用 UID/GID（默认 10001:10001）所有，并允许其写入；TLS 目录需允许应用组访问。不要对已有共享目录递归 chown/chmod。
 6. 单独准备设置加密密钥文件：使用密码学随机的 32 字节密钥，保存为 Base64 文本，与上游格式一致；文件建议 root:10001、0440，秘密目录仅管理员可进入。不能使用示例密码、公开密钥或每次重启重新生成。安全备份此文件，勿粘贴给 AI 或提交仓库。
 
-**只有检查脚本与报告导入页面是只读的。** 启动完整硬件容器会接管模块，可能发送发现/初始化 AT 命令。hardware 延续上游的 privileged、host 网络与设备挂载；API 与网页保持非特权，未新增 Docker socket、云隧道或 OTA 服务。
+**只有检查脚本与报告导入页面是只读的。** 启动完整硬件容器会接管模块，可能发送发现/初始化 AT 命令。hardware 延续上游的 privileged、host 网络与设备挂载；API 与网页**不使用 privileged**，未新增 Docker socket、云隧道或 OTA 服务。fnOS trim 内核的存储沙箱只允许 fsuid 0 访问 `/mnt/docker-data`（数据目录属主 10001 也被拒），所以 `compose.fnos.yml` 让 api/web 以 root 运行，但仅加回必需的能力：api 为 `DAC_OVERRIDE`、`FOWNER`，网页为 `DAC_OVERRIDE`、`CHOWN`、`SETUID`、`SETGID`；基础文件的 `cap_drop: ALL`、只读根文件系统与 `no-new-privileges` 保持生效。
 
 ## 3. 配置与构建（仅在上述条件确认后）
 

@@ -48,10 +48,9 @@ func (s *Store) MessageThreads(ctx context.Context, query ThreadQuery) ([]Messag
 	unreadExpression := "sc.unread_count"
 	markedUnreadExpression := "sc.marked_unread"
 	favoriteExpression := "sc.is_favorite"
-	if principal, scoped := auth.PrincipalFromContext(ctx); scoped {
-		userID := strings.ReplaceAll(principal.UserID, "'", "''")
+	if _, scoped := auth.PrincipalFromContext(ctx); scoped {
 		stateJoin = ` LEFT JOIN modemdeck_user_message_thread_state AS user_state
-			ON user_state.user_id = '` + userID + `'
+			ON user_state.user_id = ` + viewerUserIDSQL + `
 			AND user_state.line_id = sc.line_id
 			AND user_state.peer = sc.peer`
 		unreadExpression = `(
@@ -146,6 +145,7 @@ func (s *Store) MessageThreads(ctx context.Context, query ThreadQuery) ([]Messag
 		sc.peer ASC
 		LIMIT ?`
 	arguments = append(arguments, limit)
+	statement, arguments = withViewer(ctx, statement, arguments)
 
 	rows, err := s.database.QueryContext(ctx, statement, arguments...)
 	if err != nil {

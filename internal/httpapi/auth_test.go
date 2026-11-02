@@ -479,9 +479,10 @@ func TestMobileAccountSessionsListsCurrentIPhoneWithoutWebCookie(t *testing.T) {
 func TestRequestSessionClientUsesNormalizedClientIP(t *testing.T) {
 	t.Parallel()
 
+	// Through the bundled nginx: the peer is on the Compose network.
 	request := httptest.NewRequest(http.MethodGet, "https://call.example.test/api/v1/session", nil)
 	request.Host = "call.example.test"
-	request.RemoteAddr = "192.0.2.7:443"
+	request.RemoteAddr = "172.18.0.7:443"
 	request.Header.Set("User-Agent", "Example Browser")
 	request.Header.Set("CF-Connecting-IP", "203.0.113.8")
 	request.Header.Set("X-ModemDeck-Client-IP", "2001:db8::8")
@@ -501,8 +502,34 @@ func TestRequestSessionClientUsesNormalizedClientIP(t *testing.T) {
 
 	request.Header.Set("X-Real-IP", "not-an-ip")
 	client = requestSessionClient(request)
-	if client.AccessIP != "192.0.2.7" {
+	if client.AccessIP != "172.18.0.7" {
 		t.Fatalf("remote address fallback = %q", client.AccessIP)
+	}
+
+	for _, peer := range []string{"127.0.0.1:5000", "[::1]:5000", "10.1.2.3:5000", "192.168.1.20:5000", "[fd00::5]:5000"} {
+		request.RemoteAddr = peer
+		request.Header.Set("X-Real-IP", "198.51.100.10")
+		if got := requestSessionClient(request).AccessIP; got != "198.51.100.10" {
+			t.Fatalf("peer %s: AccessIP = %q, want the relayed address", peer, got)
+		}
+	}
+}
+
+// Review P2-10: a client that reaches the API directly from a public address
+// cannot choose the address recorded for its session.
+func TestRequestSessionClientIgnoresRelayHeadersFromAPublicPeer(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequest(http.MethodGet, "https://call.example.test/api/v1/session", nil)
+	request.RemoteAddr = "192.0.2.7:443"
+	request.Header.Set("X-ModemDeck-Client-IP", "2001:db8::8")
+	request.Header.Set("X-Real-IP", "198.51.100.9")
+	if got := requestSessionClient(request).AccessIP; got != "192.0.2.7" {
+		t.Fatalf("AccessIP = %q, want the direct peer 192.0.2.7", got)
+	}
+	request.RemoteAddr = "[2001:db8::1]:443"
+	if got := requestSessionClient(request).AccessIP; got != "2001:db8::1" {
+		t.Fatalf("AccessIP = %q, want the direct peer 2001:db8::1", got)
 	}
 }
 

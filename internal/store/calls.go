@@ -51,10 +51,9 @@ func (s *Store) Calls(ctx context.Context, query CallQuery) ([]Call, error) {
 	stateJoin := ""
 	readExpression := "ch.read_at"
 	favoriteExpression := "ch.is_favorite"
-	if principal, scoped := auth.PrincipalFromContext(ctx); scoped {
-		userID := strings.ReplaceAll(principal.UserID, "'", "''")
+	if _, scoped := auth.PrincipalFromContext(ctx); scoped {
 		stateJoin = ` LEFT JOIN modemdeck_user_call_state AS user_state
-			ON user_state.user_id = '` + userID + `'
+			ON user_state.user_id = ` + viewerUserIDSQL + `
 			AND user_state.call_id = ch.id`
 		readExpression = `CASE
 			WHEN COALESCE(user_state.is_read, 0) = 1 THEN ch.updated_at
@@ -135,6 +134,7 @@ func (s *Store) Calls(ctx context.Context, query CallQuery) ([]Call, error) {
 	}
 	statement += " ORDER BY COALESCE(ch.ended_at, '') DESC, ch.id DESC LIMIT ?"
 	arguments = append(arguments, limit)
+	statement, arguments = withViewer(ctx, statement, arguments)
 
 	rows, err := s.database.QueryContext(ctx, statement, arguments...)
 	if err != nil {

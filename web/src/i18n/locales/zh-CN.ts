@@ -489,6 +489,7 @@ export default {
     pendingIPhone: 'Apple 设备等待完成配对',
     signedInAt: '{date} 登录',
     lastActiveAt: '{date} 最近活动',
+    expiresAt: '{date} 到期',
     pairedAt: '{date} 配对',
     unknownBrowser: 'Web 浏览器',
     unknownDevice: '未知设备',

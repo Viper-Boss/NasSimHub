@@ -507,14 +507,29 @@ func TestAdversarialSessionClientMetadataIsSanitisedAndNonAuthoritative(t *testi
 	}
 }
 
-// Stated once more at this layer, next to the existing
-// TestAuthenticateHasNoTimeExpiry (single-administrator branch): the
-// multi-user branch has no lifetime either. Audit finding A-07.
-func TestAdversarialMultiUserSessionHasNoTimeExpiry(t *testing.T) {
+// The multi-user branch enforces the same lifetime as the single
+// administrator branch (TestAuthenticateEnforcesSessionLifetime). Audit
+// finding A-07 / review P1-4: sessions used to live until revoked.
+func TestAdversarialMultiUserSessionExpires(t *testing.T) {
 	service, _ := advService(t)
+	signedInAt := time.Now().UTC()
+	service.now = func() time.Time { return signedInAt }
 	login := advLogin(t, service, "adv-alice", "adv-alice-password")
-	service.now = func() time.Time { return time.Now().Add(20 * 365 * 24 * time.Hour) }
+
+	sessions, err := service.WebSessions(context.Background(), login.SessionToken)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("WebSessions() = %v, %v", sessions, err)
+	}
+	if want := service.SessionExpiresAt(sessions[0].CreatedAt, sessions[0].LastSeenAt); !sessions[0].ExpiresAt.Equal(want) || sessions[0].ExpiresAt.IsZero() {
+		t.Fatalf("ExpiresAt = %s, want %s", sessions[0].ExpiresAt, want)
+	}
+
+	service.now = func() time.Time { return signedInAt.Add(DefaultSessionIdleTimeout - time.Minute) }
 	if _, err := service.Authenticate(context.Background(), login.SessionToken); err != nil {
-		t.Fatalf("a twenty-year-old session was refused (%v): a lifetime now exists; update audit finding A-07", err)
+		t.Fatalf("a session inside its idle timeout was refused: %v", err)
+	}
+	service.now = func() time.Time { return signedInAt.Add(20 * 365 * 24 * time.Hour) }
+	if _, err := service.Authenticate(context.Background(), login.SessionToken); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("a twenty-year-old session error = %v, want %v", err, ErrUnauthenticated)
 	}
 }

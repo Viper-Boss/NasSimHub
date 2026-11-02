@@ -23,6 +23,17 @@ const (
 	maximumAccessIPBytes   = 64
 	maximumAccessHostBytes = 255
 	sessionMetadataRefresh = 5 * time.Minute
+
+	// A browser session ends at whichever comes first: DefaultSessionMaxAge
+	// after sign-in, or DefaultSessionIdleTimeout after it was last used.
+	// Before these limits a session lived until it was revoked, so a cookie
+	// copied out of a backup, a proxy log or a discarded device stayed valid
+	// indefinitely. LastSeenAt is refreshed at most every
+	// sessionMetadataRefresh, which is why the minimum idle timeout is far
+	// above that interval.
+	DefaultSessionMaxAge      = 90 * 24 * time.Hour
+	DefaultSessionIdleTimeout = 30 * 24 * time.Hour
+	MinimumSessionLifetime    = time.Hour
 )
 
 type AdminCredentials struct {
@@ -133,6 +144,7 @@ type WebSession struct {
 	ID         string
 	CreatedAt  time.Time
 	LastSeenAt time.Time
+	ExpiresAt  time.Time
 	UserAgent  string
 	AccessIP   string
 	AccessHost string
@@ -170,9 +182,11 @@ func (a Authentication) VerifyCSRF(token CSRFToken) error {
 }
 
 type Service struct {
-	repository Repository
-	random     io.Reader
-	now        func() time.Time
+	repository  Repository
+	random      io.Reader
+	now         func() time.Time
+	maxAge      time.Duration
+	idleTimeout time.Duration
 }
 
 func NewService(repository Repository) (*Service, error) {
@@ -180,10 +194,42 @@ func NewService(repository Repository) (*Service, error) {
 		return nil, newError("create auth service", CodeRepositoryRequired, nil)
 	}
 	return &Service{
-		repository: repository,
-		random:     rand.Reader,
-		now:        time.Now,
+		repository:  repository,
+		random:      rand.Reader,
+		now:         time.Now,
+		maxAge:      DefaultSessionMaxAge,
+		idleTimeout: DefaultSessionIdleTimeout,
 	}, nil
+}
+
+// SetSessionLimits replaces the default browser-session lifetime. Both limits
+// are required and must be at least MinimumSessionLifetime.
+func (s *Service) SetSessionLimits(maxAge, idleTimeout time.Duration) error {
+	if maxAge < MinimumSessionLifetime || idleTimeout < MinimumSessionLifetime {
+		return newError("configure session limits", CodeInvalidSessionLimits, nil)
+	}
+	s.maxAge = maxAge
+	s.idleTimeout = idleTimeout
+	return nil
+}
+
+// SessionExpiresAt reports when a session created at createdAt and last seen
+// at lastSeenAt stops being accepted.
+func (s *Service) SessionExpiresAt(createdAt, lastSeenAt time.Time) time.Time {
+	createdAt = createdAt.UTC()
+	expiresAt := createdAt.Add(s.maxAge)
+	seen := lastSeenAt.UTC()
+	if seen.IsZero() || seen.Before(createdAt) {
+		seen = createdAt
+	}
+	if idle := seen.Add(s.idleTimeout); idle.Before(expiresAt) {
+		expiresAt = idle
+	}
+	return expiresAt
+}
+
+func (s *Service) sessionExpired(createdAt, lastSeenAt time.Time) bool {
+	return !s.now().UTC().Before(s.SessionExpiresAt(createdAt, lastSeenAt))
 }
 
 func (s *Service) Status(ctx context.Context) (AdminStatus, error) {
@@ -559,6 +605,11 @@ func (s *Service) Authenticate(ctx context.Context, token SessionToken) (Authent
 		if err != nil {
 			return Authentication{}, err
 		}
+		if s.sessionExpired(record.CreatedAt, record.LastSeenAt) {
+			// The caller deletes the row and clears the cookies on
+			// CodeUnauthenticated, exactly as for a revoked session.
+			return Authentication{}, newError(op, CodeUnauthenticated, nil)
+		}
 		s.refreshUserSessionMetadata(ctx, repository, record)
 		return authentication, nil
 	}
@@ -574,6 +625,9 @@ func (s *Service) Authenticate(ctx context.Context, token SessionToken) (Authent
 	createdAt := record.CreatedAt.UTC()
 	if createdAt.IsZero() {
 		return Authentication{}, newError(op, CodeInvalidSessionRecord, nil)
+	}
+	if s.sessionExpired(record.CreatedAt, record.LastSeenAt) {
+		return Authentication{}, newError(op, CodeUnauthenticated, nil)
 	}
 	s.refreshSessionMetadata(ctx, record)
 
@@ -633,10 +687,16 @@ func (s *Service) WebSessions(
 	}
 	result := make([]WebSession, 0, len(records))
 	for _, record := range records {
+		if s.sessionExpired(record.CreatedAt, record.LastSeenAt) {
+			// No longer usable; its row is removed the next time its cookie
+			// is presented.
+			continue
+		}
 		result = append(result, WebSession{
 			ID:         webSessionID(record.SessionTokenDigest),
 			CreatedAt:  record.CreatedAt.UTC(),
 			LastSeenAt: record.LastSeenAt.UTC(),
+			ExpiresAt:  s.SessionExpiresAt(record.CreatedAt, record.LastSeenAt),
 			UserAgent:  record.UserAgent,
 			AccessIP:   record.AccessIP,
 			AccessHost: record.AccessHost,

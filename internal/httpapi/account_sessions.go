@@ -53,6 +53,7 @@ type accountSessionResponse struct {
 	CreatedAt  string                    `json:"created_at"`
 	PairedAt   string                    `json:"paired_at,omitempty"`
 	LastSeenAt string                    `json:"last_seen_at,omitempty"`
+	ExpiresAt  string                    `json:"expires_at,omitempty"`
 	UserAgent  string                    `json:"user_agent,omitempty"`
 	AccessIP   string                    `json:"access_ip,omitempty"`
 	AccessHost string                    `json:"access_host,omitempty"`
@@ -100,6 +101,7 @@ func (api *API) accountSessions(response http.ResponseWriter, request *http.Requ
 				Kind:       "web",
 				CreatedAt:  session.CreatedAt.UTC().Format(time.RFC3339),
 				LastSeenAt: lastSeenAt.UTC().Format(time.RFC3339),
+				ExpiresAt:  formatOptionalTime(session.ExpiresAt),
 				UserAgent:  session.UserAgent,
 				AccessIP:   session.AccessIP,
 				AccessHost: session.AccessHost,
@@ -486,4 +488,11 @@ func accountSessionResourceID(path string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }

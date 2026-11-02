@@ -482,6 +482,7 @@ export default {
     "pendingIPhone": "Apple-Gerät-Kopplung ausstehend",
     "signedInAt": "Angemeldet {date}",
     "lastActiveAt": "Zuletzt aktiv {date}",
+    "expiresAt": "Läuft ab {date}",
     "pairedAt": "Gekoppelt {date}",
     "unknownBrowser": "Webbrowser",
     "unknownDevice": "Unbekanntes Gerät",

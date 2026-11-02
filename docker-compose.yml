@@ -105,6 +105,10 @@ services:
       MODEMDECK_TLS_HOSTS: ${MODEMDECK_TLS_HOSTS:-localhost,127.0.0.1,::1}
       MODEMDECK_SETTINGS_KEY_FILE: /run/secrets/modemdeck_settings_key
       MODEMDECK_SECURE_COOKIES: "true"
+      # Browser sessions end 90 days after sign-in or 30 days after last use,
+      # whichever is first. Override with e.g. 30d or 720h (minimum 1h).
+      MODEMDECK_SESSION_MAX_AGE: ${MODEMDECK_SESSION_MAX_AGE:-}
+      MODEMDECK_SESSION_IDLE_TIMEOUT: ${MODEMDECK_SESSION_IDLE_TIMEOUT:-}
       # There is deliberately NO MODEMDECK_LICENSE_ISSUER_PUBLIC_KEY here. The
       # licence issuer's public key is compiled into the binary, because it is
       # the trust root of the licensing scheme: anything that can set it can

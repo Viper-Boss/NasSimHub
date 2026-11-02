@@ -482,6 +482,7 @@ export default {
     "pendingIPhone": "Đang chờ ghép đôi thiết bị Apple",
     "signedInAt": "Đăng nhập {date}",
     "lastActiveAt": "Hoạt động gần nhất {date}",
+    "expiresAt": "Hết hạn {date}",
     "pairedAt": "Ghép đôi {date}",
     "unknownBrowser": "Trình duyệt Web",
     "unknownDevice": "Thiết bị không xác định",

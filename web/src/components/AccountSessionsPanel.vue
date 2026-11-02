@@ -83,6 +83,9 @@ function sessionDescription(session: AccountSession): string {
       date: formatDateTime(activityAt)
     })
   )
+  if (session.expires_at) {
+    details.push(t('account.expiresAt', { date: formatDateTime(session.expires_at) }))
+  }
   return details.filter(Boolean).join(t('common.listSeparator'))
 }
 </script>
