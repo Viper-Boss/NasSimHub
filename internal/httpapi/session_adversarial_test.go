@@ -635,12 +635,12 @@ func TestAdversarialCloneRefusesInheritedSessionsAndBearerTokens(t *testing.T) {
 	advRequireStatus(t, harness.anonymous().get("/api/v1/health/live"), http.StatusOK, "")
 }
 
-// FINDING A-10 (low): the "access IP" recorded for a session comes from the
-// X-ModemDeck-Client-IP / X-Real-IP request headers when they are present.
-// The bundled nginx overwrites both, so through it they are trustworthy; a
-// client that reaches the API port directly can write anything there. The
-// value is display-only -- it is on the signed-in-devices page and nowhere in
-// an authorisation decision -- which the second half of this test holds on to.
+// FINDING A-10 (low) / review P2-10 (fixed): the "access IP" recorded for a
+// session honours X-ModemDeck-Client-IP / X-Real-IP only when the request's
+// direct peer is loopback or private -- the Compose network the bundled nginx
+// connects from, and which overwrites both headers. A client reaching the API
+// straight from a public address is recorded under that address. The value is
+// display-only either way, which the last part of this test holds on to.
 func TestAdversarialSessionAccessIPIsClientSuppliedAndNeverAuthoritative(t *testing.T) {
 	harness := newAdvHarness(t)
 	client, response := harness.tryLogin("adv-alice", advAlicePassword, map[string]string{
@@ -653,13 +653,23 @@ func TestAdversarialSessionAccessIPIsClientSuppliedAndNeverAuthoritative(t *test
 		method: http.MethodGet, path: "/api/v1/account/sessions",
 		headers: map[string]string{"X-ModemDeck-Client-IP": "203.0.113.50"},
 	})
-	if !strings.Contains(listing.Body.String(), `"access_ip":"203.0.113.50"`) {
-		t.Fatalf("the forged header is no longer recorded; A-10 is fixed -- update the audit: %s", listing.Body)
+	if strings.Contains(listing.Body.String(), "203.0.113.50") {
+		t.Fatalf("a header forged by a public peer was recorded: %s", listing.Body)
 	}
 	// X-Forwarded-For is not consulted at all.
 	if strings.Contains(listing.Body.String(), "198.51.100.77") {
 		t.Fatalf("X-Forwarded-For reached the session record: %s", listing.Body)
 	}
+
+	// Through the proxy on the Compose network the relayed address is used.
+	relayed := client.do(advRequest{
+		method: http.MethodGet, path: "/api/v1/account/sessions", remoteAddr: "172.18.0.4:40000",
+		headers: map[string]string{"X-ModemDeck-Client-IP": "203.0.113.60"},
+	})
+	if !strings.Contains(relayed.Body.String(), `"access_ip":"203.0.113.60"`) {
+		t.Fatalf("the address relayed by the proxy was not recorded: %s", relayed.Body)
+	}
+
 	// A session used from a different address, with different claims about
 	// itself, is the same session: nothing is bound to the address.
 	moved := client.do(advRequest{

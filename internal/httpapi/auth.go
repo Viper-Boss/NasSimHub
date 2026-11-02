@@ -553,24 +553,46 @@ func requestSessionClient(request *http.Request) auth.SessionClient {
 	}
 }
 
+// requestClientIP is the address shown for a session on the signed-in
+// devices page. It is display-only and never part of an authorisation
+// decision.
+//
+// The bundled nginx overwrites X-ModemDeck-Client-IP and X-Real-IP on every
+// proxied request, and the API port is reachable only on the Compose network,
+// so the immediate peer of a genuine request is a loopback or private
+// address. Those headers are believed only from such a peer; a request that
+// arrives straight from a public address is recorded under that address
+// whatever it claims (review P2-10, audit A-10).
 func requestClientIP(request *http.Request) string {
-	for _, header := range []string{"X-ModemDeck-Client-IP", "X-Real-IP"} {
-		if value := strings.TrimSpace(request.Header.Get(header)); value != "" {
-			if address := net.ParseIP(value); address != nil {
-				return address.String()
+	peer := remoteAddressIP(request.RemoteAddr)
+	if peer == nil || trustedProxyPeer(peer) {
+		for _, header := range []string{"X-ModemDeck-Client-IP", "X-Real-IP"} {
+			if value := strings.TrimSpace(request.Header.Get(header)); value != "" {
+				if address := net.ParseIP(value); address != nil {
+					return address.String()
+				}
 			}
 		}
 	}
-	remoteAddress := strings.TrimSpace(request.RemoteAddr)
-	if host, _, err := net.SplitHostPort(remoteAddress); err == nil {
-		if address := net.ParseIP(host); address != nil {
-			return address.String()
-		}
-	}
-	if address := net.ParseIP(remoteAddress); address != nil {
-		return address.String()
+	if peer != nil {
+		return peer.String()
 	}
 	return ""
+}
+
+func remoteAddressIP(remoteAddress string) net.IP {
+	remoteAddress = strings.TrimSpace(remoteAddress)
+	if host, _, err := net.SplitHostPort(remoteAddress); err == nil {
+		remoteAddress = host
+	}
+	return net.ParseIP(remoteAddress)
+}
+
+// trustedProxyPeer reports whether a direct peer may relay the client
+// address: loopback, RFC 1918 or IPv6 unique-local, which is where the
+// Compose network's nginx connects from.
+func trustedProxyPeer(peer net.IP) bool {
+	return peer.IsLoopback() || peer.IsPrivate()
 }
 
 func (api *API) clearAuthCookies(response http.ResponseWriter) {
