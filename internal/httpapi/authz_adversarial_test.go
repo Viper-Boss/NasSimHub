@@ -137,6 +137,10 @@ var advStaticRoutes = map[string]advAudience{
 	"/api/v1/settings/homesim/f50":        advAdmin,
 	"/api/v1/settings/homesim/forwarders": advAdmin,
 
+	"/api/v1/settings/airsim":                advAdmin,
+	"/api/v1/settings/airsim/pairing":        advAdmin,
+	"/api/v1/settings/airsim/devices/revoke": advAdmin,
+
 	"/api/v1/settings/homesim/forwarders/test":  advAdmin,
 	"/api/v1/settings/homesim/network-switches": advAdmin,
 	"/api/v1/settings/homesim/call-filter":      advAdmin,

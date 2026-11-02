@@ -324,6 +324,8 @@ export default {
     "barkDescription": "Barkサーバー経由でiPhoneに通知",
     "f50": "F50 デバイス",
     "f50Description": "ZTE F50 モバイルルーター：SMS・通信量・ライブステータス",
+    "airsim": "AirSIM iPhone",
+    "airsimDescription": "AirSIM iPhone アプリをこのゲートウェイの回線とペアリングし、通話と SMS に使う",
     "netSwitches": "供給スイッチ",
     "netSwitchesDescription": "セルラー共有とNasSimHub専用供給のスイッチ",
     "iosApp": "ペアリング",

@@ -323,6 +323,8 @@ export default {
     smsForwardDescription: "把收到的短信转发到 Webhook、钉钉、飞书、企业微信等渠道",
     f50: "F50 设备",
     f50Description: "中兴 F50 随身WiFi：短信收发、流量监控与实时状态",
+    airsim: "AirSIM 手机",
+    airsimDescription: "让 AirSIM iPhone App 配对本网关的线路，用 iPhone 打电话、收发短信",
     netSwitches: "网络出口",
     netSwitchesDescription: "蜂窝代理使用指引与推送出口策略",
     nknNode: 'NKN 中继节点',

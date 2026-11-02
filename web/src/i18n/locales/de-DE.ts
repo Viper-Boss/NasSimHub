@@ -324,6 +324,8 @@ export default {
     "barkDescription": "Push notifications to iPhone through Bark servers",
     "f50": "F50 Device",
     "f50Description": "ZTE F50 MiFi: SMS, traffic and live status over HTTP",
+    "airsim": "AirSIM iPhone",
+    "airsimDescription": "Pair the AirSIM iPhone app with a line for calls and SMS on the iPhone",
     "netSwitches": "Supply switches",
     "netSwitchesDescription": "Debug cellular sharing and NasSimHub-only supply switches",
     "iosApp": "Kopplung",

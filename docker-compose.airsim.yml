@@ -1,0 +1,28 @@
+# AirSIM iPhone app compatibility: publishes the three AirSIM ports of the api
+# container on the NAS, so an iPhone on the same Wi-Fi or tailnet can pair
+# with a NasSimHub line and use it for calls and SMS.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.airsim.yml up -d
+#
+# Then Settings -> AirSIM 手机: turn it on, pick the line, start pairing, and
+# in the AirSIM app enter the NAS address, the pairing port and the 6-digit
+# code. See docs/AIRSIM-COMPAT.md.
+#
+# The gateway itself accepts only private-network clients (RFC 1918,
+# link-local, ULA, Tailscale 100.64.0.0/10) and every request is signed with
+# the per-iPhone key set up during pairing. Do NOT forward these ports from
+# the Internet: the protocol is the app's local mode, without TLS.
+#
+# Host and container port must be the same number: the pairing response
+# tells the iPhone which ports to use.
+services:
+  api:
+    environment:
+      MODEMDECK_AIRSIM: ${MODEMDECK_AIRSIM:-}
+      MODEMDECK_AIRSIM_CONTROL_PORT: ${MODEMDECK_AIRSIM_CONTROL_PORT:-7592}
+      MODEMDECK_AIRSIM_PCM_PORT: ${MODEMDECK_AIRSIM_PCM_PORT:-7593}
+      MODEMDECK_AIRSIM_PAIRING_PORT: ${MODEMDECK_AIRSIM_PAIRING_PORT:-7594}
+    ports:
+      - "${MODEMDECK_AIRSIM_BIND_ADDRESS:-0.0.0.0}:${MODEMDECK_AIRSIM_CONTROL_PORT:-7592}:${MODEMDECK_AIRSIM_CONTROL_PORT:-7592}/tcp"
+      - "${MODEMDECK_AIRSIM_BIND_ADDRESS:-0.0.0.0}:${MODEMDECK_AIRSIM_PCM_PORT:-7593}:${MODEMDECK_AIRSIM_PCM_PORT:-7593}/tcp"
+      - "${MODEMDECK_AIRSIM_BIND_ADDRESS:-0.0.0.0}:${MODEMDECK_AIRSIM_PAIRING_PORT:-7594}:${MODEMDECK_AIRSIM_PAIRING_PORT:-7594}/tcp"

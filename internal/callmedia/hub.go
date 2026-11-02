@@ -270,6 +270,37 @@ func (h *mediaHub) WritePCM(ctx context.Context, frame []byte) error {
 	}
 }
 
+// offerPCM queues one uplink frame for a client that paces itself, such as
+// the AirSIM PCM bridge. Unlike WritePCM a full queue drops the frame and
+// reports false instead of ending the call's media: a phone on Wi-Fi delivers
+// audio in bursts, and one late burst must not hang up the call.
+func (h *mediaHub) offerPCM(frame []byte) (bool, error) {
+	if h == nil || len(frame) != h.format.FrameBytes() {
+		return false, ErrInvalidArgument
+	}
+	h.startMu.Lock()
+	started := h.started
+	h.startMu.Unlock()
+	if !started {
+		return false, ErrEndpointNotStarted
+	}
+	owned := append([]byte(nil), frame...)
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+	if h.ctx.Err() != nil {
+		if err := h.Error(); err != nil {
+			return false, err
+		}
+		return false, ErrEndpointUnavailable
+	}
+	select {
+	case h.uplink <- owned:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 func (h *mediaHub) Close(ctx context.Context) error {
 	if h == nil {
 		return nil

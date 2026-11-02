@@ -63,11 +63,20 @@ type callLifetime struct {
 	cancel context.CancelFunc
 }
 
+// ownerSession is what holds a call's single media owner slot: a browser
+// WebRTC Session or a raw PCMLink (the AirSIM app's VoWLAN audio).
+type ownerSession interface {
+	shutdown(context.Context) error
+	stop(error)
+	Done() <-chan struct{}
+	connectedSignal() <-chan struct{}
+}
+
 type mediaOwner struct {
 	token     string
 	ctx       context.Context
 	cancel    context.CancelFunc
-	session   *Session
+	session   ownerSession
 	connected bool
 	done      chan struct{}
 	once      sync.Once
@@ -747,7 +756,7 @@ func (c *Core) commit(
 	callID string,
 	lifetime *callLifetime,
 	owner *mediaOwner,
-	session *Session,
+	session ownerSession,
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -798,10 +807,10 @@ func (c *Core) activeLifetimeLocked(callID string) (*callLifetime, error) {
 func (c *Core) releaseWhenDone(
 	callID string,
 	owner *mediaOwner,
-	session *Session,
+	session ownerSession,
 ) {
 	select {
-	case <-session.events.connected:
+	case <-session.connectedSignal():
 		c.mu.Lock()
 		if c.owners[callID] == owner && owner.session == session {
 			owner.connected = true
