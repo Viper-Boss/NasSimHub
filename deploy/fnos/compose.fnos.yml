@@ -40,7 +40,15 @@ services:
   api:
     container_name: nas-comm-api
     # fnOS trim-kernel storage sandbox: only fsuid 0 can access /mnt/docker-data
-    privileged: true
+    # -- verified on the NAS (2026-11-02): uid 10001 cannot open even the
+    # directories it owns. Root is therefore required, but privileged is
+    # not: root needs only DAC_OVERRIDE to read and write the 10001-owned
+    # data, and FOWNER for the chmod calls in tlsmanager and recording. The
+    # base file's cap_drop ALL, read_only and no-new-privileges still apply.
+    user: "0:0"
+    cap_add:
+      - DAC_OVERRIDE
+      - FOWNER
     security_opt:
       - label=disable
 
@@ -82,10 +90,18 @@ services:
   modemdeck:
     container_name: nas-comm-web
     # fnOS trim-kernel storage sandbox: only fsuid 0 can access /mnt/docker-data
-    privileged: true
+    # (see api above). Not privileged: nginx started as root needs
+    # DAC_OVERRIDE for the TLS directory, CHOWN for its temp paths in /tmp and
+    # SETUID/SETGID to drop its workers to the nginx user. Verified on the NAS
+    # with the base file's read_only, tmpfs /tmp and no-new-privileges.
+    user: "0:0"
+    cap_add:
+      - DAC_OVERRIDE
+      - CHOWN
+      - SETUID
+      - SETGID
     security_opt:
       - label=disable
-    user: "0:0"
 
     image: nas-comm-web:fnos-local-0.1
     volumes:
