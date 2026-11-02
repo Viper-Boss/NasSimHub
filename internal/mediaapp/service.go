@@ -190,3 +190,44 @@ func classifyCoreError(err error) error {
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 }
+
+// PCMCore is implemented by callmedia.Core; a Core without it (a test fake)
+// simply has no raw PCM clients.
+type PCMCore interface {
+	AttachPCM(context.Context, callmedia.ActiveCall, string) (*callmedia.PCMLink, error)
+}
+
+// AttachPCM claims an active call's media for a raw PCM client (the AirSIM
+// iPhone app), after the same authoritative checks Exchange makes.
+func (s *Service) AttachPCM(ctx context.Context, callID, ownerToken string) (*callmedia.PCMLink, error) {
+	callID = strings.TrimSpace(callID)
+	ownerToken = strings.TrimSpace(ownerToken)
+	if callID == "" || ownerToken == "" {
+		return nil, fmt.Errorf("%w: call id and owner token are required", ErrInvalidArgument)
+	}
+	core, ok := s.core.(PCMCore)
+	if !ok {
+		return nil, ErrUnavailable
+	}
+	if _, err := s.refresher.Refresh(ctx); err != nil {
+		return nil, fmt.Errorf("%w: authoritative call state could not be refreshed: %v", ErrUnavailable, err)
+	}
+	call, err := s.calls.CallByID(ctx, callID)
+	if errors.Is(err, store.ErrCallNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: call state could not be read: %v", ErrUnavailable, err)
+	}
+	if call.Phase != "active" {
+		return nil, ErrNotActive
+	}
+	if !call.MediaAvailable {
+		return nil, ErrUnavailable
+	}
+	link, err := core.AttachPCM(ctx, callmedia.ActiveCall{ID: call.ID, State: callmedia.CallStateActive}, ownerToken)
+	if err != nil {
+		return nil, classifyCoreError(err)
+	}
+	return link, nil
+}

@@ -303,6 +303,10 @@ func (s *Session) shutdown(ctx context.Context) error {
 	}
 }
 
+func (s *Session) connectedSignal() <-chan struct{} {
+	return s.events.connected
+}
+
 func (s *Session) Done() <-chan struct{} {
 	if s == nil {
 		done := make(chan struct{})
