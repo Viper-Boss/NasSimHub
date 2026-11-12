@@ -51,7 +51,7 @@
 - agent `go test -p 2 -mod=readonly ./...` 全部通过；
   测试构造器迁移后 cmd/modemdeck-agent、internal/modemmanager 再次通过。
 - Web 契约测试 774 项全通过；vue-tsc、TS7 sidecar、eslint 通过；
-  Vite 生产构建与 bundle budget 通过（最大启动语言合计约 238.1 KiB gzip）。
+  Vite 生产构建与 bundle budget 通过（安全更新后最大启动语言合计约 231.5 KiB gzip）。
 - `deploy/tests/run.sh` 的五组测试全通过；使用真实 Compose 5.7.1 的配置解析，
   没有 Docker daemon，也未执行容器构建/启动。
 - 真实 nginx 1.28.3 校验完整代理配置通过；五个回环 HTTP 用例验证公开来源伪造头
@@ -69,6 +69,24 @@ CI / PR 的实际运行与合并状态以对应 GitHub 页面为准，不以本�
 复核时 main 的 CI run 41486472653 三个 job 都没有执行步骤，GitHub 注释明确为
 账户付款失败或支出限额不足；这不是测试执行后报出的代码失败，也没有修改账单设置。
 本轮不向真实 SIM 拨号/发短信，不更换语音驱动，不清空 NAS 数据，不切换线上镜像。
+
+## 推送时新增的依赖告警
+
+GitHub 另报 36 条依赖告警（23 high、10 moderate、3 low），不是原报告的全部内容。
+已按具体依赖补修：
+
+- Vue 3.5.45、vue-i18n 11.4.18、Vite 8.3.8；更新锁文件中的 nanoid、
+  source-map-js、postcss-selector-parser、brace-expansion 等安全版本。
+- ESLint/TypeScript-ESLint 上游尚约束有漏洞的 minimatch 版本；只对开发工具显式
+  override minimatch 11.0.8，保留 ESLint 10，避免 npm --force 降级整套 lint。
+  Node 24 下 lint、双类型检查、774 契约、生产构建和预算全部通过。
+- iOS 构建工具更新 xmldom 0.9.12、glob 14.0.5、minimatch 11.0.8、
+  brace-expansion 5.0.13；保留 Capacitor 8.5.3。JavaScript 契约 45 项通过，
+  不代表已完成 Mac/Xcode 打包或 iPhone 真机验收。
+- Go gorilla/websocket 1.4.2 → 1.5.3；全部主模块测试再次通过。
+
+Web/iOS 的 npm audit 均为 0 告警；GitHub Dependabot 的关闭状态需要合并后索引刷新，
+不能把本地 npm 结果直接写成远端告警已经关闭。CI 补上 iOS 契约测试。
 
 需要所有者确认的收尾：
 

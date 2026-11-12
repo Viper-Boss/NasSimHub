@@ -69,6 +69,11 @@ jobs:
         run: npm run lint
       - name: Production build and bundle budget
         run: npm run build
+      - name: iOS client dependencies and contracts
+        working-directory: ios-client
+        run: |
+          npm ci --include=dev --no-audit --no-fund
+          npm test
 
   deploy:
     name: Deployment checks
