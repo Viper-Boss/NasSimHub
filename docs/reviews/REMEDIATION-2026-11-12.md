@@ -81,12 +81,16 @@ GitHub 另报 36 条依赖告警（23 high、10 moderate、3 low），不是原�
   override minimatch 11.0.8，保留 ESLint 10，避免 npm --force 降级整套 lint。
   Node 24 下 lint、双类型检查、774 契约、生产构建和预算全部通过。
 - iOS 构建工具更新 xmldom 0.9.12、glob 14.0.5、minimatch 11.0.8、
-  brace-expansion 5.0.13；保留 Capacitor 8.5.3。JavaScript 契约 45 项通过，
+  brace-expansion 5.0.13；保留 Capacitor 8.5.3。共 45 项测试，44 项通过，
+  1 项 Swift 原生恢复行为测试因非 macOS 跳过，
   不代表已完成 Mac/Xcode 打包或 iPhone 真机验收。
 - Go gorilla/websocket 1.4.2 → 1.5.3；全部主模块测试再次通过。
 
 Web/iOS 的 npm audit 均为 0 告警；GitHub Dependabot 的关闭状态需要合并后索引刷新，
 不能把本地 npm 结果直接写成远端告警已经关闭。CI 补上 iOS 契约测试。
+
+本次修复 PR 的 CI run 43200908873 也已回读确认：三个 job 均 0 个步骤，
+失败注释仍为账户付款/支出限额，未执行代码检查。本地结果与这一外部阻塞分别记录。
 
 需要所有者确认的收尾：
 
