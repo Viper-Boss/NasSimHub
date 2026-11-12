@@ -109,7 +109,7 @@ export type GatewayInteractions = Readonly<{
 export interface SessionGateway {
   getSession(): Promise<SessionResponse>
   provisionStatus(): Promise<ProvisionStatus>
-  requestProvisionReset(confirmMachineID: string): Promise<void>
+  requestProvisionReset(confirmMachineID: string, resetToken: string): Promise<void>
   setup(input: SetupInput): Promise<SessionResponse>
   login(input: LoginInput): Promise<SessionResponse>
   changePassword(input: ChangePasswordInput): Promise<void>

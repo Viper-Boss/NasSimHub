@@ -59,10 +59,10 @@ func (serialATClient) Command(
 		if written > 0 {
 			request = request[written:]
 		}
-		if writeErr == nil {
+		if writeErr == nil && written > 0 {
 			continue
 		}
-		if !errors.Is(writeErr, unix.EAGAIN) && !errors.Is(writeErr, unix.EINTR) {
+		if writeErr != nil && !errors.Is(writeErr, unix.EAGAIN) && !errors.Is(writeErr, unix.EINTR) {
 			return "", writeErr
 		}
 		if err := pollSerial(bounded, fd, unix.POLLOUT); err != nil {

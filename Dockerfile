@@ -22,7 +22,7 @@ ARG DOCKER_CLI_IMAGE=docker:28.5.2-cli@sha256:625d9431a9f54c5a2bc90f24f0e1c3d55b
 #
 # An offline NAS whose local copy is a different digest keeps its old
 # behaviour with --build-arg NKN_IMAGE=nknorg/nkn:latest, the same way
-# deploy/fnos/compose_build_api3.sh overrides GO_IMAGE.
+# historical builds overrode GO_IMAGE (docs/archive/fnos-scripts/).
 ARG NKN_IMAGE=nknorg/nkn:latest@sha256:9a96013030545d71bdacee29922bb412a01bb71325ce246c36fb13623dfed07a
 
 FROM ${NODE_IMAGE} AS web-builder
@@ -133,6 +133,7 @@ ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
 
 COPY --chown=101:101 web/nginx.conf /etc/nginx/nginx.conf
+COPY --chown=101:101 web/nginx-proxy-common.conf /etc/nginx/modemdeck-proxy-common.conf
 COPY --chown=101:101 --chmod=0755 scripts/nginx-entrypoint.sh /usr/local/bin/modemdeck-web-entrypoint
 COPY --from=web-builder --chown=101:101 /workspace/web/dist/ /usr/share/nginx/html/
 COPY LICENSE NOTICE.md THIRD_PARTY_NOTICES.md /usr/share/licenses/modemdeck/
@@ -148,6 +149,7 @@ USER 101:101
 EXPOSE 7575 7576 7577/tcp 7577/udp
 STOPSIGNAL SIGQUIT
 
+# Self-signed certificate exception is limited to this loopback health probe.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget -q -T 3 --no-check-certificate -O /dev/null https://127.0.0.1:7577/api/v1/health/live || exit 1
 

@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # r104 NAS-side Go tests: internal (main module) + agent (separate module)
 set -u

@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # Pre-pull remaining base images needed by compose build.
 # (golang:1.26.5-bookworm was pulled by compose_prepull.sh earlier.)

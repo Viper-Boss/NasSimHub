@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # dev29 (r117~r126 + GPT dev28 合入) deployment: web overlay + api full + hardware full, all --no-cache
 set -u

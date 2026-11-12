@@ -22,6 +22,15 @@ type dbusInvocation struct {
 	Args        []any
 }
 
+// Test-only constructor. Production constructors return initialization errors.
+func newProvider(caller Caller, ids *instanceIDs) *Provider {
+	provider, err := newProviderWithOptions(caller, ids, Options{})
+	if err != nil {
+		panic(err)
+	}
+	return provider
+}
+
 type fakeCaller struct {
 	mu                  sync.Mutex
 	owner               bool

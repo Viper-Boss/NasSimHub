@@ -18,6 +18,7 @@ violations="$(
         /(^|\/)(Claude outputs|init)\// ||
         /(^|\/)HANDOFF.*\.md$/ ||
         /(^|\/)(AI_HANDOFF|CHANGES-FOR-CLAUDE.*)\.md$/ ||
+        /(^|\/)\.reset-confirmation-token$/ ||
         /\.(db|db-journal|db-shm|db-wal|sqlite|sqlite3|dump|backup|bak|sql\.gz)$/ ||
         /\.(key|pem|p12|pfx|jks|keystore)$/ ||
         /\.(wav|flac|ogg|opus)$/ {

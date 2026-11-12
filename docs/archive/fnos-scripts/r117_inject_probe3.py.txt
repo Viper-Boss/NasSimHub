@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/usr/bin/env python3
 """Probe v2: getaddrinfo path + apt debug inside the failing RUN."""
 

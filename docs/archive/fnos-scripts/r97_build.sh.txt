@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # r97 deployment build: web overlay + api full rebuild (both --no-cache)
 cd /volume1/docker/homesim/source/nas-comm-gateway-r6 || exit 1

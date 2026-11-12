@@ -1060,8 +1060,20 @@ func (m *nknNodeManager) stopRequested() bool {
 
 // sleepBeforeRestart waits out the relaunch delay unless a stop was requested.
 func (m *nknNodeManager) sleepBeforeRestart() bool {
-	time.Sleep(nknNodeRestartDelay)
-	return !m.stopRequested()
+	timer := time.NewTimer(nknNodeRestartDelay)
+	defer timer.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if m.stopRequested() {
+			return false
+		}
+		select {
+		case <-timer.C:
+			return !m.stopRequested()
+		case <-ticker.C:
+		}
+	}
 }
 
 // start launches the supervisor goroutine if the node is not already running.

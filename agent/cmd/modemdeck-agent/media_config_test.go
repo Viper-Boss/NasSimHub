@@ -67,11 +67,11 @@ func TestLoadMediaBindingsRequiresAbsolutePath(t *testing.T) {
 }
 
 func TestConfigureMediaBackendsDoesNotRequireALSAForCharacterPCM(t *testing.T) {
-	backends, err := configureMediaBackends([]media.Binding{{
+	backends, err := configureMediaBackendsWithOpener([]media.Binding{{
 		AudioPort: "usb:2-1.3",
 		Backend:   media.BackendCharPCM,
 		Endpoint:  "/dev/modemdeck-pcm0",
-	}})
+	}}, func() (media.ALSAOpener, error) { return nil, errors.New("alsa-utils unavailable") })
 	if err != nil {
 		t.Fatalf("configureMediaBackends: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestConfigureMediaBackendsDoesNotRequireALSAForCharacterPCM(t *testing.T) {
 		t.Fatal("char-pcm backend is missing")
 	}
 	if backends[media.BackendALSAPCM] != nil {
-		t.Fatal("ALSA backend was configured without an ALSA binding")
+		t.Fatal("ALSA backend was configured despite unavailable alsa-utils")
 	}
 }
 
@@ -90,6 +90,21 @@ func writeMediaConfig(t *testing.T, contents string) string {
 		t.Fatalf("write config: %v", err)
 	}
 	return path
+}
+
+func TestConfigureMediaBackendsDiscoversALSAWithoutExplicitBinding(t *testing.T) {
+	backends, err := configureMediaBackendsWithOpener(nil, func() (media.ALSAOpener, error) {
+		return &media.ALSACommandOpener{}, nil
+	})
+	if err != nil || backends[media.BackendALSAPCM] == nil {
+		t.Fatalf("derived UAC bindings need an ALSA backend: %v", err)
+	}
+	_, err = configureMediaBackendsWithOpener([]media.Binding{{Backend: media.BackendALSAPCM}}, func() (media.ALSAOpener, error) {
+		return nil, errors.New("alsa-utils unavailable")
+	})
+	if err == nil {
+		t.Fatal("an explicit unavailable ALSA backend was accepted")
+	}
 }
 
 func TestLoadMediaBindingsMissingFile(t *testing.T) {

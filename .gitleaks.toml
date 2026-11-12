@@ -1,0 +1,30 @@
+title = "NasSimHub credential scan"
+
+[extend]
+useDefault = true
+
+# Reviewed deterministic crypto vectors and redaction/fixture samples only.
+# Do not exempt entire test folders or all generic-api-key findings.
+[[allowlists]]
+description = "Public synthetic test vectors, restricted to their fixture files"
+condition = "AND"
+paths = [
+  '''(^|/)internal/airsimproto/proto_test\.go$''',
+  '''(^|/)node/agent/diag/diag_test\.go$''',
+  '''(^|/)node/agent/internal/logbuf/logbuf_test\.go$''',
+  '''(^|/)node/proto/dnssd/dnssd_test\.go$''',
+  '''(^|/)web/src/api/fixture\.ts$''',
+]
+regexTarget = "match"
+regexes = [
+  '''AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA''',
+  '''eyJhbGciOiJFZDI1NTE5In0\.dGVzdA\.c2lnbmF0dXJl''',
+  '''correct-horse-battery-staple''',
+  '''d9f1c4a6b2e87350a1c4d9f1c4a6b2e87350a1c4d9f1c4a6b2e87350a1c4d9f1c''',
+  '''abcdef123456''',
+  '''nassimhub-node/1''',
+  '''Zm9vYmFyCg==''',
+  '''NSH-410-A83F29''',
+  '''Wang-Family-5G''',
+  '''md_ios_Zml4dHVyZS1wYWlyaW5nLXRva2VuLTAwMDAwMDAwMDAwMDA''',
+]

@@ -533,6 +533,17 @@ func TestRequestSessionClientIgnoresRelayHeadersFromAPublicPeer(t *testing.T) {
 	}
 }
 
+func TestRequestSessionClientIgnoresHeadersWhenPeerIsUnparseable(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
+	request.Header.Set("X-ModemDeck-Client-IP", "203.0.113.50")
+	for _, peer := range []string{"", "unknown", "broken:address"} {
+		request.RemoteAddr = peer
+		if got := requestSessionClient(request).AccessIP; got != "" {
+			t.Fatalf("unknown peer %q trusted a forged header: %s", peer, got)
+		}
+	}
+}
+
 func TestCanceledAuthenticationRequestEndsSilently(t *testing.T) {
 	t.Parallel()
 

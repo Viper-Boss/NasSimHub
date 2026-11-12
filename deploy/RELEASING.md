@@ -126,6 +126,9 @@
 
 ## 注意
 
+- updater 持有 Docker socket，属于宿主机可信计算基；当前签名为 Ed25519。
+  发行/许可密钥分离与后量子签名尚未迁移，详见 [安全边界](../docs/SECURITY-BOUNDARIES.md)。
+
 - **Actions 分钟数**：私有仓库有免费额度上限。arm64 是用 QEMU 模拟构建的，比 amd64 慢好几倍；
   只改了前端的版本只会重建 web，花得少；第一次发布四个全建，花得最多。
 - **所有基础镜像都钉了 digest**，包括内置 NKN 节点用的 `nknorg/nkn`（`deploy/tests/static-test.sh` 会检查）。

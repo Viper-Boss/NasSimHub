@@ -367,7 +367,7 @@ function parseSession(value: unknown): SessionResponse {
     typeof source.authenticated !== 'boolean' ||
     typeof source.setup_required !== 'boolean'
   ) {
-    throw new ApiError('NAS猫窝 服务返回了无效的会话状态', 0, 'invalid_response')
+    throw new ApiError(translate('serviceErrors.invalidSession'), 0, 'invalid_response')
   }
 
   const language = source.language
@@ -417,7 +417,7 @@ function parseSession(value: unknown): SessionResponse {
     session.allowed_line_ids = source.allowed_line_ids.map(value => String(value).trim())
   }
   if (session.authenticated && (!session.username || !session.csrf_token)) {
-    throw new ApiError('NAS猫窝 服务返回了不完整的会话状态', 0, 'invalid_response')
+    throw new ApiError(translate('serviceErrors.incompleteSession'), 0, 'invalid_response')
   }
   return session
 }
@@ -1030,7 +1030,7 @@ async function responseBody(response: Response): Promise<unknown> {
     return JSON.parse(text) as unknown
   } catch {
     if (!response.ok) return text
-    throw new ApiError('NAS猫窝 服务返回了无效的 JSON', response.status, 'invalid_response')
+    throw new ApiError(translate('serviceErrors.invalidJSON'), response.status, 'invalid_response')
   }
 }
 
@@ -1075,9 +1075,9 @@ async function requestWithResponse(
   } catch (error) {
     if (init.signal?.aborted || authenticationSignal?.aborted) throw error
     if (timeoutSignal.aborted) {
-      throw new ApiError('NAS猫窝 请求超时', 0, 'request_timeout')
+      throw new ApiError(translate('serviceErrors.timeout'), 0, 'request_timeout')
     }
-    throw new ApiError('无法连接 NAS猫窝 服务')
+    throw new ApiError(translate('serviceErrors.connection'))
   }
 
   let body: unknown
@@ -1086,10 +1086,10 @@ async function requestWithResponse(
   } catch (error) {
     if (init.signal?.aborted || authenticationSignal?.aborted) throw error
     if (timeoutSignal.aborted) {
-      throw new ApiError('NAS猫窝 请求超时', 0, 'request_timeout')
+      throw new ApiError(translate('serviceErrors.timeout'), 0, 'request_timeout')
     }
     if (error instanceof ApiError) throw error
-    throw new ApiError('无法读取 NAS猫窝 服务响应', response.status, 'invalid_response')
+    throw new ApiError(translate('serviceErrors.readResponse'), response.status, 'invalid_response')
   }
 
   const expectedStatuses = Array.isArray(expectedStatus)
@@ -1114,7 +1114,7 @@ async function requestWithResponse(
   }
   if (!statusExpected) {
     throw new ApiError(
-      `NAS猫窝 服务返回了意外状态（${response.status}，预期 ${expectedStatuses.join(' 或 ')}）`,
+      translate('serviceErrors.unexpectedStatus', { status: response.status, expected: expectedStatuses.join(', ') }),
       response.status,
       'unexpected_status'
     )
@@ -1355,15 +1355,14 @@ const realGateway: ConfiguredModemDeckGateway = {
    * Requests the factory reset. Records a marker; the wipe happens on the next
    * container start, before the database is opened.
    *
-   * The machine ID is typed by the operator rather than sent automatically:
-   * this endpoint cannot require a login, so echoing a value only visible on
-   * the screen is what separates a deliberate act from a stray request.
+   * Requires both the displayed target ID and a confirmation code read locally
+   * from the NAS. The public machine ID alone grants no reset authority.
    */
-  async requestProvisionReset(confirmMachineID: string): Promise<void> {
-    await writeJSON(
+  async requestProvisionReset(confirmMachineID: string, resetToken: string): Promise<void> {
+    await writePublicJSON(
       `${API_ROOT}/provision/reset`,
       'POST',
-      { confirm_machine_id: confirmMachineID },
+      { confirm_machine_id: confirmMachineID, reset_token: resetToken },
       202
     )
   },

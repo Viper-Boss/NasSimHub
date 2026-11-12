@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # Build all three images for fnos-local-0.1 and log output.
 set -e

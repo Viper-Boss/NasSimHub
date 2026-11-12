@@ -61,16 +61,10 @@ func (api *API) cloned() bool {
 
 // provisionResetRequest is the confirmation body.
 type provisionResetRequest struct {
-	// ConfirmMachineID must equal this machine's own ID, which the setup page
-	// displays.
-	//
-	// A typed confirmation rather than a bare POST. This endpoint cannot
-	// require a login -- the whole point is that the inherited credentials must
-	// not work -- so without it, anything that can reach the gateway on the
-	// local network could erase it with an empty request. Echoing a value that
-	// is only on the screen in front of the operator makes it a deliberate act
-	// rather than a stray one.
+	// Machine ID confirms the target; only the locally read ResetToken grants
+	// authority. The public machine ID alone is not proof of local access.
 	ConfirmMachineID string `json:"confirm_machine_id"`
+	ResetToken       string `json:"reset_token"`
 }
 
 // provisionResource answers /api/v1/provision.
@@ -92,6 +86,17 @@ func (api *API) provisionResource(response http.ResponseWriter, request *http.Re
 			response.Header().Set("Allow", http.MethodGet)
 			writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "仅支持读取", "")
 			return
+		}
+		if decision.Cloned() {
+			directory, ok := api.homeSIMDataDirectory()
+			if !ok {
+				writeError(response, http.StatusServiceUnavailable, "storage_unavailable", "数据目录不可用", "")
+				return
+			}
+			if err := provision.EnsureResetToken(directory); err != nil {
+				api.writeInternalError(response, request, "prepare local reset confirmation", err)
+				return
+			}
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
 			"status":              string(decision.Status),
@@ -131,6 +136,11 @@ func (api *API) provisionResource(response http.ResponseWriter, request *http.Re
 		if !ok {
 			writeError(response, http.StatusServiceUnavailable, "storage_unavailable",
 				"数据目录不可用", "")
+			return
+		}
+		if !provision.CheckResetToken(directory, input.ResetToken) {
+			writeError(response, http.StatusForbidden, "local_confirmation_required",
+				"请从 NAS 数据目录的 .reset-confirmation-token 文件读取本地重置确认码", "reset_token")
 			return
 		}
 		if err := provision.RequestReset(directory, provision.Request{

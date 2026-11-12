@@ -31,8 +31,8 @@
 
 | 客户端 | 接法 |
 | --- | --- |
-| NAS 网关（api 容器） | NAS `.env.fnos` 或 credentials.env 加 `HOMESIM_NKN_SEED_RPC=http://192.168.120.190:30003`，重建 api 容器（代码已支持，见 homesim_forward_nkn.go 的 nknSeedRPCEnv；**需重建镜像**，8400079 之后） |
-| 手机（同一 LAN） | 手机 NKN 客户端首选 `http://192.168.120.190:30003` |
+| NAS 网关（api 容器） | NAS `.env.fnos` 或 credentials.env 加 `HOMESIM_NKN_SEED_RPC=http://192.0.2.10:30003`，将示例地址替换为自己的 NAS 地址，重建 api 容器 |
+| 手机（同一 LAN） | 手机 NKN 客户端首选自己的 NAS 节点地址，例如 `http://192.0.2.10:30003`（文档示例，需替换） |
 | 手机（外网） | 走 WireGuard 隧道后用 `http://10.66.0.1:30003`（见 ../wireguard/README-CN.md） |
 
 要点：**网关和手机连到同一个节点时，两者之间的消息在该节点本地中转**，不再绕海外 ring，延迟从数百 ms 降到几十 ms 内。

@@ -3,6 +3,17 @@ import { nasPreflightEN } from '../nasPreflight'
 import { homesimEN } from '../homesimData'
 
 export default {
+  serviceErrors: {
+    invalidSession: "Invalid session response",
+    incompleteSession: "Incomplete session response",
+    invalidJSON: "The service returned invalid JSON",
+    timeout: "The request timed out",
+    connection: "Unable to connect to the service",
+    readResponse: "Unable to read the service response",
+    unexpectedStatus: "Unexpected service response (HTTP {status}; expected {expected})",
+    localResetCode: "Local reset confirmation code",
+    localResetHint: "Read .reset-confirmation-token in the NAS data directory. This code is never displayed on this page.",
+  },
   homesim: homesimEN,
   nasPreflight: nasPreflightEN,
   common: {

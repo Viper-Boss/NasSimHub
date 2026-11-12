@@ -286,7 +286,7 @@ grep -Fq 'include /tmp/modemdeck-http3.conf;' "${repo_dir}/web/nginx.conf" ||
 grep -Fq 'error_page 497 =308 https://$http_host$request_uri;' \
     "${repo_dir}/web/nginx.conf" ||
     fail "HTTPS Web listener does not upgrade plain HTTP requests"
-grep -Fq 'map $http_x_forwarded_proto $cloudflare_https_redirect {' \
+grep -Fq 'map "$tunnel_peer:$http_x_forwarded_proto" $cloudflare_https_redirect {' \
     "${repo_dir}/web/nginx.conf" ||
     fail "Nginx does not classify Cloudflare HTTP requests"
 cloudflare_redirect_count=$(
@@ -337,11 +337,13 @@ grep -Fq 'server api:8080 resolve;' "${repo_dir}/web/nginx.conf" ||
     fail "Nginx does not target the private API port"
 grep -Fq 'proxy_pass http://modemdeck_api;' "${repo_dir}/web/nginx.conf" ||
     fail "Nginx does not proxy API requests"
-grep -Fq 'proxy_buffering off;' "${repo_dir}/web/nginx.conf" ||
+grep -Fq 'proxy_buffering off;' "${repo_dir}/web/nginx-proxy-common.conf" ||
     fail "Nginx would buffer API event streams"
-connection_header_count=$(grep -Fc 'proxy_set_header Connection "";' "${repo_dir}/web/nginx.conf" || true)
+connection_header_count=$(grep -Fc 'include /etc/nginx/modemdeck-proxy-common.conf;' "${repo_dir}/web/nginx.conf" || true)
 [ "$connection_header_count" -eq 6 ] ||
     fail "Nginx API proxies do not consistently preserve upstream keepalive"
+grep -Fq 'proxy_set_header Connection "";' "${repo_dir}/web/nginx-proxy-common.conf" ||
+    fail "Shared API proxy configuration does not preserve keepalive"
 if grep -Fq 'proxy_set_header Upgrade ' "${repo_dir}/web/nginx.conf"; then
     fail "Nginx carries an unused WebSocket upgrade header"
 fi

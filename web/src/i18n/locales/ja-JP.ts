@@ -4,6 +4,17 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+  serviceErrors: {
+    invalidSession: "セッション応答が無効です",
+    incompleteSession: "セッション応答が不完全です",
+    invalidJSON: "サービスの JSON が無効です",
+    timeout: "要求がタイムアウトしました",
+    connection: "サービスに接続できません",
+    readResponse: "サービスの応答を読み取れません",
+    unexpectedStatus: "予期しない応答（HTTP {status}、想定 {expected}）",
+    localResetCode: "ローカル初期化確認コード",
+    localResetHint: "NAS データディレクトリの .reset-confirmation-token を確認してください。このページには表示されません。",
+  },
   homesim: homesimEN,
   nasPreflight: nasPreflightEN,
   "common": {
