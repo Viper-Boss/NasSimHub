@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # r116 deployment: snapshot (done) -> web overlay + api full rebuild (both --no-cache)
 set -u

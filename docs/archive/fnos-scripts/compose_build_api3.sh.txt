@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # Build api image using the golang:1.26.5-bookworm digest already fully local
 # (53eeac... = current tag content) instead of the stale pinned digest 1ecb7edf

@@ -80,7 +80,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       https: false,
-      host: '0.0.0.0',
+      host: env.VITE_DEV_HOST || '127.0.0.1',
       port: 5173,
       strictPort: false,
       proxy: {

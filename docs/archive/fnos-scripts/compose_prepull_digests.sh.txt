@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # Pre-pull all base images needed for compose build at their pinned digests.
 # buildx's parallel pull is too slow on this NAS (100KB/s per layer);

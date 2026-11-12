@@ -148,7 +148,7 @@ updater-image:
 		-t "$(UPDATER_IMAGE):$(VERSION)" \
 		.
 
-check: repository-check root-test agent-test root-vet agent-vet web-check \
+check: repository-check secret-scan root-test agent-test root-vet agent-vet web-check \
 	hardware-check deployment-check compose-config dockerfile-check
 
 repository-check:
@@ -157,7 +157,15 @@ repository-check:
 secret-scan:
 	docker run --rm \
 		--mount type=bind,source="$(CURDIR)",target=/repo,readonly \
-		$(GITLEAKS_IMAGE) git /repo --no-banner --no-color --redact=100
+		--entrypoint /bin/sh \
+		$(GITLEAKS_IMAGE) /repo/scripts/scan-secrets.sh /repo
+
+# History scanning remains a separate owner action until credential rotation
+# and coordinated history cleanup have been completed.
+secret-scan-history:
+	docker run --rm \
+		--mount type=bind,source="$(CURDIR)",target=/repo,readonly \
+		$(GITLEAKS_IMAGE) git /repo --config=/repo/.gitleaks.toml --no-banner --no-color --redact=100
 
 root-toolchain:
 	docker build \

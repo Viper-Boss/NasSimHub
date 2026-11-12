@@ -31,6 +31,7 @@ const machineID = ref('')
 const previousMachineID = ref('')
 const divergingSources = ref<string[]>([])
 const confirmMachineID = ref('')
+const resetToken = ref('')
 const resetting = ref(false)
 const resetDone = ref(false)
 
@@ -48,7 +49,7 @@ onMounted(async () => {
 })
 
 const canReset = computed(
-  () => machineID.value !== '' && confirmMachineID.value.trim() === machineID.value
+  () => machineID.value !== '' && confirmMachineID.value.trim() === machineID.value && /^[a-f0-9]{64}$/i.test(resetToken.value.trim())
 )
 
 async function requestReset(): Promise<void> {
@@ -56,7 +57,8 @@ async function requestReset(): Promise<void> {
   resetting.value = true
   submitError.value = ''
   try {
-    await gateway.requestProvisionReset(confirmMachineID.value.trim())
+    await gateway.requestProvisionReset(confirmMachineID.value.trim(), resetToken.value.trim())
+    resetToken.value = ''
     resetDone.value = true
   } catch (error) {
     submitError.value = error instanceof Error ? error.message : t('auth.provision.failed')
@@ -166,6 +168,11 @@ async function submit(): Promise<void> {
         </p>
 
         <form v-else class="login-form" @submit.prevent="requestReset">
+          <label class="field">
+            <span>{{ t('serviceErrors.localResetCode') }}</span>
+            <input v-model="resetToken" name="reset-token" type="password" autocomplete="off" :disabled="resetting" />
+            <small>{{ t('serviceErrors.localResetHint') }}</small>
+          </label>
           <label class="field">
             <span>{{ t('auth.provision.confirmLabel') }}</span>
             <input

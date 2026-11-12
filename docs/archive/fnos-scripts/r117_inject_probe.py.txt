@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/usr/bin/env python3
 """Inject DNS probes into a copy of hardware/Dockerfile on the NAS."""
 import re

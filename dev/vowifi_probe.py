@@ -17,18 +17,20 @@ import time
 
 import paramiko
 
-NAS_HOST = os.environ.get("NAS_HOST", "192.168.120.190")
-NAS_USER = os.environ.get("NAS_USER", "***REMOVED***")
+NAS_HOST = os.environ.get("NAS_HOST", "")
+NAS_USER = os.environ.get("NAS_USER", "")
 NAS_PASS = os.environ.get("NAS_PASS", "")
 CONTAINER = "nas-comm-hardware"
 SOCKET_PATH = "/run/modemdeck/agent.sock"
-ECM_IF = "enx3209127b07e1"
+ECM_IF = os.environ.get("NAS_ECM_IF", "")
 EPDG_FQDN = "epdg.epc.mnc011.mcc460.pub.3gppnetwork.org"
 CARRIER_DNS = ["202.101.172.37", "202.101.173.157"]
 
 
 class Ssh:
     def __init__(self):
+        if not all((NAS_HOST, NAS_USER, NAS_PASS, ECM_IF)):
+            raise SystemExit("Set NAS_HOST, NAS_USER, NAS_PASS and NAS_ECM_IF explicitly")
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.client.connect(NAS_HOST, username=NAS_USER, password=NAS_PASS, timeout=15)

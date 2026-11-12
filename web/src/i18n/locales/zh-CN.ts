@@ -3,6 +3,17 @@ import { nasPreflightZH } from '../nasPreflight'
 import { homesimZH } from '../homesimData'
 
 export default {
+  serviceErrors: {
+    invalidSession: "服务返回了无效的会话状态",
+    incompleteSession: "服务返回了不完整的会话状态",
+    invalidJSON: "服务返回了无效的 JSON",
+    timeout: "请求超时",
+    connection: "无法连接服务",
+    readResponse: "无法读取服务响应",
+    unexpectedStatus: "服务返回了意外状态（HTTP {status}，预期 {expected}）",
+    localResetCode: "本地重置确认码",
+    localResetHint: "请从 NAS 数据目录中的 .reset-confirmation-token 文件读取，此页面不会显示确认码。",
+  },
   homesim: homesimZH,
   nasPreflight: nasPreflightZH,
   common: {

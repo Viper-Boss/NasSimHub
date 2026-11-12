@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # Pre-pull required base images directly so they end up in docker image cache
 # (buildx pulls via concurrent resolver which is much slower on this NAS).

@@ -166,6 +166,13 @@ func TestTheResetNeedsTheMachineIDTyped(t *testing.T) {
 // And the confirmed path records the marker rather than deleting anything now.
 func TestAConfirmedResetRecordsAMarkerAndDeletesNothingYet(t *testing.T) {
 	api, directory := clonedAPI(t)
+	if err := provision.EnsureResetToken(directory); err != nil {
+		t.Fatal(err)
+	}
+	code, err := os.ReadFile(filepath.Join(directory, provision.ResetTokenName))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Something to lose, so "deletes nothing yet" is a real assertion.
 	witness := filepath.Join(directory, "modemdeck.db")
@@ -174,7 +181,7 @@ func TestAConfirmedResetRecordsAMarkerAndDeletesNothingYet(t *testing.T) {
 	}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/provision/reset",
-		strings.NewReader(`{"confirm_machine_id":"machine-here"}`))
+		strings.NewReader(`{"confirm_machine_id":"machine-here","reset_token":"`+strings.TrimSpace(string(code))+`"}`))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
@@ -207,7 +214,7 @@ func TestAConfirmedResetRecordsAMarkerAndDeletesNothingYet(t *testing.T) {
 // The status endpoint is readable without a session, because the login page
 // needs it before anyone can log in.
 func TestTheProvisionStatusIsReadableWithoutASession(t *testing.T) {
-	api, _ := clonedAPI(t)
+	api, directory := clonedAPI(t)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/provision", nil)
 	response := httptest.NewRecorder()
 	api.ServeHTTP(response, request)
@@ -224,5 +231,25 @@ func TestTheProvisionStatusIsReadableWithoutASession(t *testing.T) {
 	}
 	if payload["machine_id"] != "machine-here" {
 		t.Errorf("machine_id = %v; the page cannot show what to type", payload["machine_id"])
+	}
+	code, err := os.ReadFile(filepath.Join(directory, provision.ResetTokenName))
+	if err != nil || len(strings.TrimSpace(string(code))) != 64 {
+		t.Fatalf("local confirmation code missing: %v", err)
+	}
+	if strings.Contains(response.Body.String(), strings.TrimSpace(string(code))) {
+		t.Fatal("the public status exposed the local confirmation code")
+	}
+	for _, token := range []string{"", "wrong", strings.Repeat("0", 64)} {
+		body := `{"confirm_machine_id":"machine-here","reset_token":"` + token + `"}`
+		attempt := httptest.NewRequest(http.MethodPost, "/api/v1/provision/reset", strings.NewReader(body))
+		attempt.Header.Set("Content-Type", "application/json")
+		result := httptest.NewRecorder()
+		api.ServeHTTP(result, attempt)
+		if result.Code != http.StatusForbidden {
+			t.Fatalf("public machine ID with invalid code: %d %s", result.Code, result.Body)
+		}
+		if _, pending := provision.ResetPending(directory); pending {
+			t.Fatal("a remotely obtainable confirmation scheduled data deletion")
+		}
 	}
 }

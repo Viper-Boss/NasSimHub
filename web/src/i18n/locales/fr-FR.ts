@@ -4,6 +4,17 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+  serviceErrors: {
+    invalidSession: "Réponse de session non valide",
+    incompleteSession: "Réponse de session incomplète",
+    invalidJSON: "Le service a renvoyé un JSON non valide",
+    timeout: "Délai de la requête dépassé",
+    connection: "Connexion au service impossible",
+    readResponse: "Lecture de la réponse impossible",
+    unexpectedStatus: "Réponse inattendue (HTTP {status} ; attendu {expected})",
+    localResetCode: "Code local de confirmation",
+    localResetHint: "Lisez .reset-confirmation-token dans le répertoire de données du NAS. Le code ne sera pas affiché ici.",
+  },
   homesim: homesimEN,
   nasPreflight: nasPreflightEN,
   "common": {

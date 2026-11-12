@@ -63,6 +63,12 @@ func loadMediaBindings(path string) ([]media.Binding, error) {
 func configureMediaBackends(
 	bindings []media.Binding,
 ) (map[media.BackendKind]media.Backend, error) {
+	return configureMediaBackendsWithOpener(bindings, func() (media.ALSAOpener, error) {
+		return media.NewALSACommandOpener()
+	})
+}
+
+func configureMediaBackendsWithOpener(bindings []media.Binding, open func() (media.ALSAOpener, error)) (map[media.BackendKind]media.Backend, error) {
 	backends := map[media.BackendKind]media.Backend{
 		media.BackendCharPCM: media.NewCharPCMBackend(nil),
 	}
@@ -73,7 +79,7 @@ func configureMediaBackends(
 			break
 		}
 	}
-	opener, err := media.NewALSACommandOpener()
+	opener, err := open()
 	if err != nil {
 		// A binding that NAMES this backend and cannot have it is a
 		// misconfiguration worth refusing to start over: the operator asked for

@@ -264,33 +264,7 @@ func applyQuectelID(p serial.Port, timeout time.Duration) bool {
 }
 
 func exchange(p serial.Port, command string, timeout time.Duration) (string, error) {
-	if _, err := p.Write([]byte(command + "\r\n")); err != nil {
-		return "", err
-	}
-	deadline := time.Now().Add(timeout)
-	var buf strings.Builder
-	for time.Now().Before(deadline) {
-		chunk := make([]byte, 512)
-		n, err := p.Read(chunk)
-		if n > 0 {
-			buf.Write(chunk[:n])
-			text := buf.String()
-			upper := strings.ToUpper(text)
-			if strings.Contains(upper, "OK") || strings.Contains(upper, "ERROR") || strings.Contains(upper, "+CME ERROR") {
-				return text, nil
-			}
-		}
-		if err != nil {
-			if buf.Len() > 0 {
-				return buf.String(), nil
-			}
-			return "", err
-		}
-	}
-	if buf.Len() == 0 {
-		return "", fmt.Errorf("超时无响应")
-	}
-	return buf.String(), nil
+	return sendAndExpect(p, command, "", timeout)
 }
 
 func send(p serial.Port, command string, timeout time.Duration) error {
@@ -303,7 +277,7 @@ func flatten(s string) string {
 	kept := make([]string, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if line == "" || strings.EqualFold(line, "OK") || line == strings.ToUpper(line) && line == "AT" {
+		if line == "" || strings.EqualFold(line, "OK") || line == "AT" {
 			continue
 		}
 		if strings.HasSuffix(line, "\u0000") {
@@ -342,8 +316,10 @@ func sendAndExpect(p serial.Port, command, expect string, timeout time.Duration)
 			if expect != "" && strings.Contains(text, expect) {
 				return text, nil
 			}
-			upper := strings.ToUpper(text)
-			if strings.Contains(upper, "OK") || strings.Contains(upper, "ERROR") || strings.Contains(upper, "+CME ERROR") {
+			if complete, failed := terminalATResponse(text); complete {
+				if failed {
+					return text, fmt.Errorf("AT command rejected")
+				}
 				return text, nil
 			}
 		}

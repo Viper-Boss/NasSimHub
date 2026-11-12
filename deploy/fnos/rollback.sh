@@ -11,7 +11,8 @@
 # Services: hardware | api | web  (web maps to the compose service "modemdeck")
 set -euo pipefail
 
-REPO=/volume1/docker/homesim/source/nas-comm-gateway-r6
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO=${NAS_SOURCE_DIR:-$(cd -- "$SCRIPT_DIR/../.." && pwd)}
 IMAGES="nas-comm-hardware nas-comm-api nas-comm-web"
 
 compose_up() {

@@ -3,7 +3,7 @@
 
 把 NAS 的 IP / 用户名 / 密码放在环境变量里，不在命令行出现（避免被 ps 看到）：
 
-    export NAS_HOST=192.168.120.190
+    export NAS_HOST=192.0.2.10
     export NAS_USER=你的登录名
     export NAS_PASS='你的密码'
 

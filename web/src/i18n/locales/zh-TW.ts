@@ -4,6 +4,17 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+  serviceErrors: {
+    invalidSession: "服務傳回無效的工作階段狀態",
+    incompleteSession: "服務傳回不完整的工作階段狀態",
+    invalidJSON: "服務傳回無效的 JSON",
+    timeout: "請求逾時",
+    connection: "無法連線至服務",
+    readResponse: "無法讀取服務回應",
+    unexpectedStatus: "服務傳回非預期狀態（HTTP {status}，預期 {expected}）",
+    localResetCode: "本機重設確認碼",
+    localResetHint: "請讀取 NAS 資料目錄中的 .reset-confirmation-token 檔案，此頁面不會顯示確認碼。",
+  },
   homesim: homesimEN,
   nasPreflight: nasPreflightEN,
   common: {

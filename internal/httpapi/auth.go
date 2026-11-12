@@ -574,7 +574,7 @@ func requestSessionClient(request *http.Request) auth.SessionClient {
 // whatever it claims (review P2-10, audit A-10).
 func requestClientIP(request *http.Request) string {
 	peer := remoteAddressIP(request.RemoteAddr)
-	if peer == nil || trustedProxyPeer(peer) {
+	if peer != nil && trustedProxyPeer(peer) {
 		for _, header := range []string{"X-ModemDeck-Client-IP", "X-Real-IP"} {
 			if value := strings.TrimSpace(request.Header.Get(header)); value != "" {
 				if address := net.ParseIP(value); address != nil {

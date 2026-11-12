@@ -1,9 +1,8 @@
 name: CI
 
 # Test/lint gate for pushes and pull requests. Image publishing stays in
-# publish-images.yml. gitleaks (make secret-scan) is deliberately NOT wired
-# here yet: it scans git history, which still contains credentials until the
-# owner finishes the filter-repo cleanup (docs/reviews/REVIEW-2026-10-25.md P0-1).
+# publish-images.yml. Scan current tracked files without exposing historical
+# credentials in the CI log. Full history cleanup remains an owner action.
 on:
   push:
     branches: [main]
@@ -30,6 +29,8 @@ jobs:
             agent/go.sum
       - name: Repository hygiene
         run: ./scripts/check-repository-hygiene.sh
+      - name: Current-tree credential scan (redacted)
+        run: make secret-scan
       - name: Vet root module
         run: go vet -mod=readonly ./cmd/... ./internal/...
       - name: Test root module
@@ -66,6 +67,8 @@ jobs:
         run: npm run typecheck:sidecar
       - name: Lint
         run: npm run lint
+      - name: Production build and bundle budget
+        run: npm run build
 
   deploy:
     name: Deployment checks

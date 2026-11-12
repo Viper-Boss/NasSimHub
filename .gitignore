@@ -107,7 +107,6 @@ __pycache__/
 /reader
 *.code-workspace
 PushNotification.pdf
-Quectel_LTE_Standard_UAC_应用指导_V1.0.pdf
 go.work
 go.work.sum
 
@@ -116,9 +115,6 @@ go.work.sum
 .superpowers/*
 .codex
 .worktrees/
-Quectel_EC2xEG2xEG9xEM05_Series_AT_Commands_Manual_V2.2.pdf
-Quectel_EC2xEG2xEG9xEM05_Series_QCFG_AT_Commands_Manual_V1.6.pdf
-410sim自动激活脚本/*
 
 # AI handoff/session docs never belong in the tree (any level, archived
 # copies included) — they have carried live credentials before.
@@ -134,6 +130,6 @@ agent/modemdeck-agent-arm64
 
 # Agent working memory (may contain operational details)
 .workbuddy/
+.reset-confirmation-token
 /**/*.tar
 r8*-webdist.tar
-/固件和工具/

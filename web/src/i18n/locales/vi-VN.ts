@@ -4,6 +4,17 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+  serviceErrors: {
+    invalidSession: "Phản hồi phiên không hợp lệ",
+    incompleteSession: "Phản hồi phiên không đầy đủ",
+    invalidJSON: "Dịch vụ trả về JSON không hợp lệ",
+    timeout: "Yêu cầu đã hết thời gian",
+    connection: "Không thể kết nối dịch vụ",
+    readResponse: "Không thể đọc phản hồi",
+    unexpectedStatus: "Phản hồi không mong đợi (HTTP {status}; dự kiến {expected})",
+    localResetCode: "Mã xác nhận đặt lại cục bộ",
+    localResetHint: "Đọc .reset-confirmation-token trong thư mục dữ liệu NAS. Mã không hiển thị trên trang này.",
+  },
   homesim: homesimEN,
   nasPreflight: nasPreflightEN,
   "common": {

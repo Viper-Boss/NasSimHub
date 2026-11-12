@@ -17,6 +17,21 @@ func newTestNKNNodeManager(t *testing.T) *nknNodeManager {
 	return newNKNNodeManager(nil)
 }
 
+func TestNKNRestartWaitRespondsToStop(t *testing.T) {
+	manager := newTestNKNNodeManager(t)
+	done := make(chan bool, 1)
+	go func() { done <- manager.sleepBeforeRestart() }()
+	manager.stop()
+	select {
+	case restart := <-done:
+		if restart {
+			t.Fatal("a stopped node requested another restart")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stop waited through the restart delay")
+	}
+}
+
 func TestNKNNodeSettingsRoundTrip(t *testing.T) {
 	manager := newTestNKNNodeManager(t)
 	settings, err := manager.loadSettings()

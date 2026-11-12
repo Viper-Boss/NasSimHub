@@ -1,3 +1,4 @@
+# HISTORICAL REFERENCE ONLY. Use deploy/fnos/build.sh; do not execute this snapshot.
 #!/bin/bash
 # r117 detach wrapper: outer wrapper holds nohup+disown so ssh session teardown
 # cannot reap the build (fnOS kills setsid/sudo-detached children).

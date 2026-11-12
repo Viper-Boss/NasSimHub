@@ -169,9 +169,15 @@ func main() {
 		fmt.Println("listening for messages; Ctrl+C to quit")
 		done := make(chan os.Signal, 1)
 		signal.Notify(done, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(done)
+		window := time.NewTimer(timeout)
+		defer window.Stop()
 		for {
 			select {
-			case m := <-client.OnMessage.C:
+			case m, ok := <-client.OnMessage.C:
+				if !ok {
+					return
+				}
 				ackErr := m.Reply([]byte("nknpeer-ack"))
 				out, _ := json.Marshal(map[string]any{
 					"from":      m.Src,
@@ -183,7 +189,7 @@ func main() {
 			case <-done:
 				fmt.Println("bye")
 				return
-			case <-time.After(timeout):
+			case <-window.C:
 				fmt.Println("receive window elapsed, exiting")
 				return
 			}

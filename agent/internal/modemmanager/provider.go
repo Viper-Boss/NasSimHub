@@ -166,14 +166,6 @@ func New(caller Caller) (*Provider, error) {
 	return NewWithOptions(caller, Options{})
 }
 
-func newProvider(caller Caller, ids *instanceIDs) *Provider {
-	provider, err := newProviderWithOptions(caller, ids, Options{})
-	if err != nil {
-		panic(err)
-	}
-	return provider
-}
-
 func NewWithOptions(caller Caller, options Options) (*Provider, error) {
 	return newProviderWithOptions(caller, newInstanceIDs(), options)
 }

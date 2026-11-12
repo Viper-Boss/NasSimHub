@@ -697,13 +697,14 @@ func (manager *Manager) stopManagedProxy(current *managedProxy) error {
 			result <- runner.Close()
 		}()
 	}
+	runner := current.runner
 	manager.mu.Unlock()
 
 	timer := time.NewTimer(manager.closeTimeout)
 	defer timer.Stop()
 	select {
 	case err := <-result:
-		if err == nil && current.runner.Running() {
+		if err == nil && runner.Running() {
 			err = fmt.Errorf("proxy runner still reports running after close")
 		}
 		manager.mu.Lock()

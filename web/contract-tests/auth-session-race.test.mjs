@@ -20,6 +20,25 @@ function unauthorizedResponse() {
   )
 }
 
+test('clone reset sends local confirmation without requiring an inherited session', async () => {
+  const originalFetch = globalThis.fetch
+  let invalidations = 0
+  setAuthenticationRequiredHandler(() => { invalidations += 1 })
+  globalThis.fetch = async (path, init) => {
+    assert.equal(path, '/api/v1/provision/reset')
+    assert.equal(init.method, 'POST')
+    assert.deepEqual(JSON.parse(init.body), { confirm_machine_id: 'target', reset_token: 'local-code' })
+    return unauthorizedResponse()
+  }
+  try {
+    await assert.rejects(gateway.requestProvisionReset('target', 'local-code'), error => error.status === 401)
+    assert.equal(invalidations, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    setAuthenticationRequiredHandler(() => undefined)
+  }
+})
+
 test('a stale protected 401 cannot invalidate a newer authentication scope', async () => {
   const originalFetch = globalThis.fetch
   let resolveStaleRequest
