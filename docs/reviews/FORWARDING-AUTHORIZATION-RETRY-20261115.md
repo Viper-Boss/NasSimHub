@@ -6,7 +6,7 @@
 
 - `Users` 查询失败（含取消、超时）返回固定 `forwarding_unavailable`，不泄露原始错误；账号不存在、禁用、降为成员或线路撤权仍然拒绝。
 - 领取前、领取后的最终检查及短信业务入口的账号查询故障，都禁止发送并保留任务，以 `pending/authorization_unavailable` 延后30秒重查。
-- 尚未发送的当前领取不消耗发送预算；退款更新匹配任务次数、配置 revision 和当前 token。以前中断的租约不退款，旧 worker 不能修改新租约。
+- 尚未发送的当前领取不消耗发送预算；计数回退更新匹配任务次数、配置 revision 和当前 token。以前中断的租约保留计数，旧 worker 不能修改新租约。
 - 保留原24小时有效期、配置变更取消、每次发送前重新鉴权和短信业务防滥发边界。等待可跨重启恢复。
 
 ## 源码与构建
@@ -38,3 +38,5 @@ git diff --check
 首次环境运行还遇到临时目录禁止执行及Opus挂载路径错误，两次均未进入测试；修正后才执行上述负对照。API race 首次链接因512MiB临时目录不足失败，改用较大的独立临时目录重跑通过。三次环境失败日志保留为 `authorization-environment-noexec.log`、`authorization-api-environment-opus.log`、`authorization-api-race-environment-space.log`，未修改断言、依赖锁或CI预算以规避。
 
 本轮没有重跑前端/浏览器检查，没有真实NAS、手机、服务商联调、ARM构建或生产Docker发行构建。此前前端结果与CI计费阻塞见历史报告；计费设置未由本任务修改，CI通过与否须单独核实。
+
+推送后已核实 [CI run 43677925002](https://github.com/Viper-Boss/NasSimHub/actions/runs/43677925002)（HEAD `5d736f9c0e09b101416c63ad01ad647069dbd066`）：Go、Web、Deployment三个任务均未启动、steps为空，检查注释均为 “The job was not started because recent account payments have failed or your spending limit needs to be increased”。这是平台计费阻塞，本轮CI未执行，不能计为通过；未修改计费、工作流或手动重跑。
