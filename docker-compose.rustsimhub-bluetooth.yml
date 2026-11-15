@@ -1,0 +1,19 @@
+# Optional application transport to a RustSimHub stick. Use with the usual
+# AirSIM compose override when AirSIM private-network listeners are wanted.
+services:
+  api:
+    environment:
+      MODEMDECK_RUSTSIMHUB_BT_CONFIG: /run/rustsimhub-bt-config/peer.json
+    volumes:
+      - type: bind
+        source: ${MODEMDECK_RUSTSIMHUB_BT_CONFIG_FILE:?set the private paired config file}
+        target: /run/rustsimhub-bt-config/peer.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MODEMDECK_RUSTSIMHUB_BT_HOST_SOCKETS:?set the private N1 socket directory}
+        target: /run/rustsimhub-bt
+        read_only: true
+        bind:
+          create_host_path: false

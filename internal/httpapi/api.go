@@ -24,6 +24,7 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/recording"
 	"github.com/human-agent65535/modemdeck/internal/rtcconfig"
 	"github.com/human-agent65535/modemdeck/internal/runtimeevents"
+	"github.com/human-agent65535/modemdeck/internal/rustsimbt"
 	"github.com/human-agent65535/modemdeck/internal/store"
 	"github.com/human-agent65535/modemdeck/internal/telegramsettings"
 	"github.com/human-agent65535/modemdeck/internal/updatecheck"
@@ -302,14 +303,15 @@ type NetworkService interface {
 }
 
 type Options struct {
-	ContactBackupDirectory string
-	HealthProbe            HealthProbe
-	Capabilities           CapabilitySource
-	Communications         CommunicationService
-	DeviceConfigurations   DeviceConfigurationService
-	WireGuard              WireGuardService
-	DHT                    DHTService
-	CallServices           CallServicesService
+	RustSimHubBluetoothConfig string
+	ContactBackupDirectory    string
+	HealthProbe               HealthProbe
+	Capabilities              CapabilitySource
+	Communications            CommunicationService
+	DeviceConfigurations      DeviceConfigurationService
+	WireGuard                 WireGuardService
+	DHT                       DHTService
+	CallServices              CallServicesService
 	// IssuerPublicKey is the base64 Ed25519 key that licence certificates are
 	// verified against. Empty locks every paid feature, which is the correct
 	// behaviour for a build with no key -- see internal/license.
@@ -495,7 +497,18 @@ func New(repository Repository, options Options) (*API, error) {
 	api.nknNetwork.seed = api.managedNKNSeed
 	api.releasePeers = newReleasePeers(api)
 	if api.airsim != nil {
-		api.airsim.SetBackend(airsimBackend{api: api})
+		var backend airsimgw.Backend = airsimBackend{api: api}
+		if options.RustSimHubBluetoothConfig != "" {
+			config, err := rustsimbt.LoadConfig(options.RustSimHubBluetoothConfig)
+			if err != nil {
+				return nil, err
+			}
+			backend, err = rustsimbt.WithBluetooth(backend, config)
+			if err != nil {
+				return nil, err
+			}
+		}
+		api.airsim.SetBackend(backend)
 	}
 	return api, nil
 }
@@ -547,9 +560,12 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(request.URL.Path,usbConsoleAPI) {
-		if !api.requireAdmin(response,request){return}
-		api.nassimhubUSBConsole(response,request);return
+	if strings.HasPrefix(request.URL.Path, usbConsoleAPI) {
+		if !api.requireAdmin(response, request) {
+			return
+		}
+		api.nassimhubUSBConsole(response, request)
+		return
 	}
 	switch request.URL.Path {
 	case "/api/v1/nodes":
@@ -699,8 +715,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	case "/api/v1/security/trust/quarantine":
 		api.postOnly(response, request, api.securityTrustQuarantine)
 	case "/api/v1/security/trust/approve":
-  api.postOnly(response, request, api.securityTrustApprove)
- case "/api/v1/security/trust/restore":
+		api.postOnly(response, request, api.securityTrustApprove)
+	case "/api/v1/security/trust/restore":
 		api.postOnly(response, request, api.securityTrustRestore)
 	case "/api/v1/security/journal":
 		api.getOnly(response, request, api.securityJournal)
