@@ -30,7 +30,9 @@ func (api *API) forwardingPrincipal(ctx context.Context, owner string) (auth.Pri
 	}
 	users, err := repo.Users(ctx)
 	if err != nil {
-		return auth.Principal{}, forwarding.ErrDenied
+		// A failed lookup cannot establish revocation. Expose a fixed retryable
+		// class rather than leaking the repository error or cancelling work.
+		return auth.Principal{}, forwarding.ErrUnavailable
 	}
 	for _, user := range users {
 		if user.ID == owner && user.Enabled && user.Role == auth.RoleAdmin {
@@ -69,7 +71,10 @@ func (api *API) forwardingDispatcher() *forwarding.Dispatcher {
 			return forwarding.ErrUnavailable
 		}
 		principal, err := api.forwardingPrincipal(ctx, forwarding.SenderOwner(ctx))
-		if err != nil || !principal.CanAccessLine(line) {
+		if err != nil {
+			return err
+		}
+		if !principal.CanAccessLine(line) {
 			return forwarding.ErrDenied
 		}
 		payload, _ := json.Marshal(map[string]string{"request_id": id, "line_id": line, "to": to, "content": body})

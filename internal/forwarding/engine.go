@@ -122,7 +122,7 @@ func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 		return e.Store.Defer(ctx, t, now, next)
 	}
 	if err = e.Authorize(ctx, c.OwnerID, t.Event, ch); err != nil {
-		return e.Store.Cancel(ctx, t, "authorization_revoked")
+		return e.authorizationFailure(ctx, t, err, false)
 	}
 	now = e.currentTime()
 	if expired(t.Event, now) {
@@ -144,7 +144,7 @@ func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 		return e.Store.Cancel(ctx, t, "configuration_changed")
 	}
 	if err = e.Authorize(sendCtx, c.OwnerID, t.Event, ch); err != nil {
-		return e.Store.Cancel(ctx, t, "authorization_revoked")
+		return e.authorizationFailure(ctx, t, err, true)
 	}
 	now = e.currentTime()
 	if expired(t.Event, now) {
@@ -164,6 +164,11 @@ func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 	if err == nil {
 		return e.Store.Finish(finishCtx, t, "sent", "", now)
 	}
+	// The in-process SMS adapter can fail its final principal lookup before
+	// entering the business handler. No send was attempted in that case.
+	if ch.Type == "sms" && errors.Is(err, ErrUnavailable) {
+		return e.authorizationFailure(finishCtx, t, err, true)
+	}
 	if errors.Is(err, ErrDenied) {
 		return e.Store.Finish(finishCtx, t, "failed", "configuration_invalid", now)
 	}
@@ -173,6 +178,21 @@ func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 	// Only fixed classes are persisted: transport errors can include raw URLs,
 	// credentials, SMTP replies and message bodies. Retries are at-least-once.
 	return e.Store.Finish(finishCtx, t, "pending", "delivery_failed", now.Add(time.Duration(1<<t.Attempts)*15*time.Second))
+}
+
+func (e *Engine) authorizationFailure(ctx context.Context, t Task, cause error, claimed bool) error {
+	if errors.Is(cause, ErrDenied) {
+		return e.Store.Cancel(ctx, t, "authorization_revoked")
+	}
+	// Failure to establish current permission must prevent sending, but is not
+	// evidence of revocation. Keep the payload and refund only this worker's
+	// unused claim so an outage cannot exhaust the delivery attempt budget.
+	retryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := e.Store.deferAuthorization(retryCtx, t, e.currentTime(), claimed); err != nil {
+		return err
+	}
+	return ErrUnavailable
 }
 
 type ownerKey struct{}

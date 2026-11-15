@@ -4,6 +4,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -38,6 +39,58 @@ func forwardingBody(t *testing.T, value any) string {
 		t.Fatal(err)
 	}
 	return string(raw)
+}
+
+type forwardingUsersRepository struct {
+	Repository
+	userRepository
+	lookupUsers func(context.Context) ([]store.User, error)
+}
+
+func (r forwardingUsersRepository) Users(ctx context.Context) ([]store.User, error) {
+	return r.lookupUsers(ctx)
+}
+
+func TestForwardingUserLookupFailureIsUnavailableNotRevoked(t *testing.T) {
+	h := forwardingHarness(t)
+	users := h.api.repository.(userRepository)
+	event := forwarding.Event{Type: "incoming_sms", LineID: advLineAlpha}
+	for _, fault := range []error{errors.New("private database failure"), context.Canceled, context.DeadlineExceeded} {
+		h.api.repository = forwardingUsersRepository{Repository: h.api.repository, userRepository: users, lookupUsers: func(context.Context) ([]store.User, error) { return nil, fault }}
+		err := h.api.authorizeForwarding(context.Background(), auth.InitialAdminUserID, event, forwarding.Channel{Type: "webhook"})
+		if !errors.Is(err, forwarding.ErrUnavailable) || errors.Is(err, forwarding.ErrDenied) {
+			t.Fatal("lookup failure treated as revoked", err)
+		}
+		response := httptest.NewRecorder()
+		h.api.forwardingFailure(response, err)
+		advRequireStatus(t, response, http.StatusServiceUnavailable, "forwarding_unavailable")
+		if strings.Contains(response.Body.String(), fault.Error()) {
+			t.Fatal("repository error exposed")
+		}
+	}
+	service := &advCommunications{}
+	h.api.communications = service
+	ctx := forwarding.ContextWithSenderOwner(context.Background(), auth.InitialAdminUserID)
+	channel := forwarding.Channel{Type: "sms", Params: map[string]string{"line_id": advLineAlpha, "to": "+15555550199"}}
+	if err := h.api.forwardingDispatcher().Send(ctx, channel, forwarding.Rendered{Body: "synthetic"}, "forwarding_1001"); !errors.Is(err, forwarding.ErrUnavailable) || errors.Is(err, forwarding.ErrDenied) {
+		t.Fatal("SMS boundary hid lookup failure", err)
+	}
+	service.mu.Lock()
+	count := len(service.sends)
+	service.mu.Unlock()
+	if count != 0 {
+		t.Fatal("lookup failure reached SMS service")
+	}
+	for _, user := range []store.User{
+		{ID: "other-owner", Enabled: true, Role: auth.RoleAdmin},
+		{ID: auth.InitialAdminUserID, Enabled: false, Role: auth.RoleAdmin},
+		{ID: auth.InitialAdminUserID, Enabled: true, Role: auth.RoleMember},
+	} {
+		h.api.repository = forwardingUsersRepository{Repository: h.api.repository, userRepository: users, lookupUsers: func(context.Context) ([]store.User, error) { return []store.User{user}, nil }}
+		if err := h.api.authorizeForwarding(context.Background(), auth.InitialAdminUserID, event, channel); !errors.Is(err, forwarding.ErrDenied) {
+			t.Fatalf("revoked owner accepted: %+v err=%v", user, err)
+		}
+	}
 }
 func TestForwardingOriginalAdminAndCSRFBoundary(t *testing.T) {
 	h := forwardingHarness(t)

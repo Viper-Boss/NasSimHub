@@ -376,3 +376,24 @@ func (s *SQLStore) Defer(ctx context.Context, t Task, now, next time.Time) error
 	_, err := s.DB.ExecContext(ctx, `UPDATE modemdeck_forwarding_tasks SET status='pending',next_at=?,token='',lease_until=0 WHERE id=? AND attempts=? AND revision=(SELECT revision FROM modemdeck_forwarding_config WHERE id=1) AND (status='pending' OR (status='sending' AND (token=? OR lease_until<=?)))`, next.UnixMilli(), t.ID, t.Attempts, t.Token, now.UnixMilli())
 	return err
 }
+
+// An unavailable authorization lookup is not a delivery attempt. Only a claim
+// owned by this worker can be refunded; interrupted older claims keep their
+// attempt count because a previous worker may already have sent the payload.
+func (s *SQLStore) deferAuthorization(ctx context.Context, t Task, now time.Time, claimed bool) error {
+	refund := 0
+	if claimed {
+		if t.Attempts < 1 || t.Token == "" {
+			return ErrConflict
+		}
+		refund = 1
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE modemdeck_forwarding_tasks
+ SET status='pending',attempts=attempts-?,error_class='authorization_unavailable',next_at=?,token='',lease_until=0
+ WHERE id=? AND attempts=? AND revision=(SELECT revision FROM modemdeck_forwarding_config WHERE id=1)
+ AND ((?=1 AND status='sending' AND token=?) OR
+ (?=0 AND ((status='pending' AND next_at=?) OR (status='sending' AND token=? AND lease_until<=?))))`,
+		refund, now.Add(30*time.Second).UnixMilli(), t.ID, t.Attempts,
+		refund, t.Token, refund, t.NextAt, t.Token, now.UnixMilli())
+	return err
+}
