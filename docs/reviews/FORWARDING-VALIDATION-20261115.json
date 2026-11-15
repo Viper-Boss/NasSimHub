@@ -1,0 +1,237 @@
+{
+  "format": 1,
+  "repository": "Viper-Boss/NasSimHub",
+  "base": "b14f7e0bc5288ab3186589a6b35a777c80e93cad",
+  "product_source": "d6ee9b8405b00966d27f6ab4a95c15e4568f70cf",
+  "product_archive_sha256": "d99d94fc0c86475a5268801c0a98c36debd7177a7ffd80eb23a0562bbd6ec42a",
+  "branch": "codex/forwarding-resume-20261115",
+  "go_root": {
+    "tested_packages": 49,
+    "no_test_packages": 5,
+    "failed_packages": 0
+  },
+  "forwarding_race": "passed final product",
+  "httpapi_focused_race": "passed final product; Forwarding|AdversarialPlantedSecrets",
+  "unchanged_component_race": {
+    "source": "8d34a6ac8135d7b53ea0d024c7e73c355803f303",
+    "packages": [
+      "airsimgw",
+      "communication",
+      "telegramruntime"
+    ],
+    "passed": true,
+    "source_files_unchanged_in_final": true
+  },
+  "go_vet": true,
+  "native_cmd_build": true,
+  "go_toolchain": "go1.27.3 linux/amd64",
+  "native_libopus": "1.5.2",
+  "lockfiles_changed": false,
+  "frontend": {
+    "source": "8d34a6ac8135d7b53ea0d024c7e73c355803f303",
+    "source_tree_unchanged_in_final": true,
+    "contracts": {
+      "passed": 779,
+      "failed": 0
+    },
+    "typecheck": true,
+    "lint": true,
+    "production_build": true,
+    "bundle_budgets_unchanged": true,
+    "worst_startup_kib_gzip": 231.3,
+    "largest_js_kib_gzip": 97.7,
+    "browser": {
+      "kind": "actual-fixture-browser-interactions",
+      "browser": "154.0.8037.57",
+      "warmup_page_errors": [],
+      "cold_start_acceptance": false,
+      "results": [
+        {
+          "width": 320,
+          "locale": "en-US",
+          "passed": true,
+          "checks": [
+            "legacy-bark-link",
+            "default-off",
+            "render-does-not-dirty-configuration",
+            "negative-keyword-editor",
+            "native-match-label",
+            "overnight-quiet-hours-and-zone",
+            "nested-condition-editor",
+            "fixture-save-refused",
+            "fixture-preview-does-not-claim-rule-execution",
+            "narrow-or-desktop-layout",
+            "legacy-sms-link",
+            "airsim-multiline-selection",
+            "no-real-api-writes",
+            "no-measured-runtime-errors"
+          ],
+          "physical_device": false
+        },
+        {
+          "width": 390,
+          "locale": "en-US",
+          "passed": true,
+          "checks": [
+            "legacy-bark-link",
+            "default-off",
+            "render-does-not-dirty-configuration",
+            "negative-keyword-editor",
+            "native-match-label",
+            "overnight-quiet-hours-and-zone",
+            "nested-condition-editor",
+            "fixture-save-refused",
+            "fixture-preview-does-not-claim-rule-execution",
+            "narrow-or-desktop-layout",
+            "legacy-sms-link",
+            "airsim-multiline-selection",
+            "no-real-api-writes",
+            "no-measured-runtime-errors"
+          ],
+          "physical_device": false
+        },
+        {
+          "width": 1280,
+          "locale": "en-US",
+          "passed": true,
+          "checks": [
+            "legacy-bark-link",
+            "default-off",
+            "render-does-not-dirty-configuration",
+            "negative-keyword-editor",
+            "native-match-label",
+            "overnight-quiet-hours-and-zone",
+            "nested-condition-editor",
+            "fixture-save-refused",
+            "fixture-preview-does-not-claim-rule-execution",
+            "narrow-or-desktop-layout",
+            "legacy-sms-link",
+            "airsim-multiline-selection",
+            "no-real-api-writes",
+            "no-measured-runtime-errors"
+          ],
+          "physical_device": false
+        },
+        {
+          "width": 320,
+          "locale": "zh-CN",
+          "passed": true,
+          "checks": [
+            "legacy-bark-link",
+            "default-off",
+            "render-does-not-dirty-configuration",
+            "negative-keyword-editor",
+            "native-match-label",
+            "overnight-quiet-hours-and-zone",
+            "nested-condition-editor",
+            "fixture-save-refused",
+            "fixture-preview-does-not-claim-rule-execution",
+            "narrow-or-desktop-layout",
+            "legacy-sms-link",
+            "airsim-multiline-selection",
+            "no-real-api-writes",
+            "no-measured-runtime-errors"
+          ],
+          "physical_device": false
+        },
+        {
+          "width": 390,
+          "locale": "zh-CN",
+          "passed": true,
+          "checks": [
+            "legacy-bark-link",
+            "default-off",
+            "render-does-not-dirty-configuration",
+            "negative-keyword-editor",
+            "native-match-label",
+            "overnight-quiet-hours-and-zone",
+            "nested-condition-editor",
+            "fixture-save-refused",
+            "fixture-preview-does-not-claim-rule-execution",
+            "narrow-or-desktop-layout",
+            "legacy-sms-link",
+            "airsim-multiline-selection",
+            "no-real-api-writes",
+            "no-measured-runtime-errors"
+          ],
+          "physical_device": false
+        },
+        {
+          "width": 1280,
+          "locale": "zh-CN",
+          "passed": true,
+          "checks": [
+            "legacy-bark-link",
+            "default-off",
+            "render-does-not-dirty-configuration",
+            "negative-keyword-editor",
+            "native-match-label",
+            "overnight-quiet-hours-and-zone",
+            "nested-condition-editor",
+            "fixture-save-refused",
+            "fixture-preview-does-not-claim-rule-execution",
+            "narrow-or-desktop-layout",
+            "legacy-sms-link",
+            "airsim-multiline-selection",
+            "no-real-api-writes",
+            "no-measured-runtime-errors"
+          ],
+          "physical_device": false
+        }
+      ],
+      "assertions": 84,
+      "real_nas": false,
+      "real_notification_service": false,
+      "production_build_browser_tested": false
+    }
+  },
+  "negative_control": {
+    "source": "8d34a6ac8135d7b53ea0d024c7e73c355803f303",
+    "actual_exit": 1,
+    "expected_failure": "expired after batch delay was sent once; status sent",
+    "fixed_in_final": true,
+    "original_engine_sha256": "979b7cd96aaf9fbbf99870d24a8fcaf9e830d8f7adebe7e2db828f43d10197c9"
+  },
+  "log_sha256": {
+    "root-d6ee9b8.log": "27d1725ab116b5df3f0a47d4daf397d9362c60e8f6a7ea6e2ac9c3d54b55a215",
+    "race-d6ee9b8.log": "14ca399e5cafd516906d75b22ed7ed7ddfc26dd5afdf6771cf068df49ba687e3",
+    "api-race-d6ee9b8.log": "d838c512c6819a373fc62e63d317d4389e884caaa4002dbbecb1d57cf6e23b71",
+    "vet-d6ee9b8.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-go-d6ee9b8.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contracts-8d34a6a.log": "7194f8d602021e2036666c7ac06050923bdc8821fa914c4d52e6c5a601950bd5",
+    "typecheck-8d34a6a.log": "26cd48d10e20e8d66f59a46c504ca906ed88def7ca221fa8ab9f57ff82a394a1",
+    "lint-8d34a6a.log": "0edef4449b8a7f095ee8012f2a577f70ba1eb8e81dcc62bf00f04031522d39a2",
+    "build-web-8d34a6a.log": "f23daa6f9de83e7a4b8c0c1d8dab885a6244878edc6d935198b529976bed7139",
+    "clock-negative-executed-8d34a6a.log": "3bb902edf1f280f87d6cefa7b6d5c379c7330696f0983e0db899a90572575b6b"
+  },
+  "required_regressions": {
+    "attempt_limit_failed_stops_until_fail": true,
+    "sms_25h_expired_manual_retry_refused": true,
+    "two_events_100_channels_2_requests_198_cancelled": true,
+    "negative_keyword_combinations_and_explicit_not": true,
+    "private_source_endpoint_identifiers_survive_restart": true,
+    "owner_line_and_otp_revalidated": true,
+    "late_receipt_cannot_overwrite_new_lease": true,
+    "off_and_old_configuration_journal_not_replayed": true,
+    "lease_expiry_quiet_and_backoff_use_actual_operation_times": true,
+    "airsim_frozen_32_line_scope_sim_routing_ack_and_revoke": true
+  },
+  "not_run": [
+    "real NAS or system startup/deployment",
+    "unchanged AirSIM iPhone physical pairing and PCM interoperability",
+    "real notification providers or actual SIM calls/SMS",
+    "ARM/cross-platform builds and production Docker image build",
+    "production secrets or production service publishing",
+    "cold Vite dependency startup acceptance; browser fixture was warmed explicitly",
+    "production-built browser end-to-end against a deployed NAS"
+  ],
+  "report_only_commit_follows": true,
+  "native_artifact": {
+    "target": "linux/amd64",
+    "bytes": 44295352,
+    "sha256": "d36d44fb5881cfdb9f8b4f3decf34bd9a153a21754b5b48041bb9eb0609b4331",
+    "vcs_revision": "d6ee9b8405b00966d27f6ab4a95c15e4568f70cf",
+    "vcs_modified": false,
+    "executed_as_service": false
+  }
+}
