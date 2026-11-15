@@ -223,7 +223,8 @@
     "ARM/cross-platform builds and production Docker image build",
     "production secrets or production service publishing",
     "cold Vite dependency startup acceptance; browser fixture was warmed explicitly",
-    "production-built browser end-to-end against a deployed NAS"
+    "production-built browser end-to-end against a deployed NAS",
+    "GitHub Actions: jobs not started because account payments failed or spending limit needs increasing"
   ],
   "report_only_commit_follows": true,
   "native_artifact": {
@@ -233,5 +234,14 @@
     "vcs_revision": "d6ee9b8405b00966d27f6ab4a95c15e4568f70cf",
     "vcs_modified": false,
     "executed_as_service": false
+  },
+  "github_ci": {
+    "observed_head": "336f29be630d8cff90bc0d66d787d9ed6ae772a4",
+    "run_url": "https://github.com/Viper-Boss/NasSimHub/actions/runs/43667743090",
+    "jobs": 3,
+    "executed_steps": 0,
+    "reported_conclusion": "failure",
+    "tests_executed": false,
+    "reason": "The job was not started because recent account payments have failed or your spending limit needs to be increased."
   }
 }

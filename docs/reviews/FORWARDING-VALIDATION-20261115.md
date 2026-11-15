@@ -64,3 +64,12 @@ d6ee9b8改为实际认领/发送/完成时间，发送前再检查有效期与�
 重试是至少一次，不承诺外部恰好一次或收件人已读。Android专属功能、SMTP明文、MQTT订阅及全部上游高级通道选项不实现；这些是明确边界，不留自动执行的假壳。整体仓库双轨许可、原有签名/授权及NKN功能保持。
 
 代码交独立PR审核，不自行合并。详细公开机器证据不含原始短信、凭据、临时DB或私钥。
+
+
+## PR 与 GitHub CI 平台状态
+
+非草稿 [PR #4](https://github.com/Viper-Boss/NasSimHub/pull/4) 已提交main，未合并。首次报告头336f29be630d8cff90bc0d66d787d9ed6ae772a4触发的 [CI run43667743090](https://github.com/Viper-Boss/NasSimHub/actions/runs/43667743090) 三个任务均显示failure，但steps为空。逐任务读取annotations，三者都明确：
+
+> The job was not started because recent account payments have failed or your spending limit needs to be increased.
+
+因此GitHub Actions未运行，不能记通过，也不是该次CI执行代码后发现的测试失败。本地实际执行结果如上；未修改CI、计费设置或支出额度，未手动重跑。此补充仅文档，不改变产品源码与归档。
