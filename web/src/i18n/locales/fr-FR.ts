@@ -4,6 +4,7 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+ forwarding: { title: 'Unified forwarding', description: 'Channels, rules and delivery history' },
   serviceErrors: {
     invalidSession: "Réponse de session non valide",
     incompleteSession: "Réponse de session incomplète",

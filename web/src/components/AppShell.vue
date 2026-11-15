@@ -259,7 +259,8 @@ const mobileSettingsSection = computed(() => {
     pairing: t('settings.iosApp'),
     devices: t('settings.devices'),
     telegram: t('settings.telegram'),
-            bark: t('settings.bark'),
+            bark: t('forwarding.title'),
+ forwarding:t('forwarding.title'),
             f50: t('settings.f50'),
             'net-switches': t('settings.netSwitches'),
     connectivity: t('settings.tls'),
@@ -552,8 +553,8 @@ onBeforeUnmount(() => {
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'nmobile' }" :to="{ name: 'nmobile' }" :title="t('homesim.nmobile.title')">
           <MessageCircleHeart :size="22" /><span>{{ t('homesim.nmobile.title') }}</span>
         </RouterLink>
-        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'sms-forward' }" :to="{ name: 'settings', params: { section: 'sms-forward' } }" :title="t('homesim.forward')">
-          <Forward :size="22" /><span>{{ t('homesim.forward') }}</span>
+        <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && route.params.section === 'forwarding' }" :to="{ name: 'settings', params: { section: 'forwarding' } }" :title="t('forwarding.title')">
+          <Forward :size="22" /><span>{{ t('forwarding.title') }}</span>
         </RouterLink>
         <RouterLink v-if="sessionState.role === 'admin'" class="rail-link" :class="{ 'is-current': route.name === 'settings' && ['devices', 'diagnostics', 'about'].includes(String(route.params.section)) }" :to="{ name: 'settings', params: { section: 'devices' } }" :title="t('homesim.system')">
           <Server :size="22" /><span>{{ t('homesim.system') }}</span>

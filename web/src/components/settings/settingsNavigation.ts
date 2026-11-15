@@ -10,6 +10,7 @@ export type SettingsSection =
   | 'telegram'
   | 'bark'
   | 'sms-forward'
+  | 'forwarding'
   | 'f50'
   | 'airsim'
   | 'net-switches'
@@ -41,8 +42,7 @@ export const SETTINGS_SECTION_ORDER: readonly SettingsSection[] = [
   'users',
   'devices',
   'telegram',
-  'bark',
-  'sms-forward',
+  'forwarding',
   'f50',
   'airsim',
   'net-switches',
@@ -72,8 +72,7 @@ const ADMIN_ONLY_SECTIONS = new Set<SettingsSection>([
   'nkn-network',
   'wireguard',
   'dht',
-  'bark',
-  'sms-forward',
+  'forwarding',
   'f50',
   // Pairs a phone that then acts for the administrator who paired it.
   'airsim',
@@ -87,7 +86,7 @@ const ADMIN_ONLY_SECTIONS = new Set<SettingsSection>([
 export function settingsSectionGroup(section: SettingsSection): SettingsSectionGroup {
   if (section === 'nkn-node' || section === 'nkn-network') return 'network'
   if (section === 'wireguard' || section === 'dht') return 'network'
-  if (['audio', 'call-services', 'devices', 'contacts', 'telegram', 'bark', 'sms-forward', 'airsim'].includes(section)) return 'communication'
+  if (['audio', 'call-services', 'devices', 'contacts', 'telegram', 'forwarding', 'airsim'].includes(section)) return 'communication'
   if (['f50', 'net-switches', 'connectivity', 'pairing'].includes(section)) return 'network'
   return PERSONAL_SECTIONS.has(section) ? 'personal' : 'management'
 }

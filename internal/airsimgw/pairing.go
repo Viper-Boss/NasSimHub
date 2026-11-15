@@ -120,8 +120,28 @@ func (g *Gateway) claim(response http.ResponseWriter, request *http.Request, win
 	}
 	defer clear(secret)
 	hint := deviceHint(registration.DeviceID)
+	g.mu.Lock()
+	currentWindow := g.window == window && g.openWindowLocked() != nil
+	g.mu.Unlock()
+	if !currentWindow {
+		writeFixedJSON(response, http.StatusGone, map[string]string{"error": "pairing_expired"})
+		return
+	}
+	backend := g.currentBackend()
+	if backend == nil {
+		writeFixedJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "agent_unavailable"})
+		return
+	}
+	for _, lineID := range window.lineIDs {
+		if err := backend.Authorize(request.Context(), Identity{UserID: window.userID, LineID: lineID, LineIDs: window.lineIDs}); err != nil {
+			writeFixedJSON(response, http.StatusForbidden, map[string]string{"error": "line_not_assigned"})
+			return
+		}
+	}
+
 	pairing, err := g.store.add(Pairing{
 		UserID:     window.userID,
+		LineIDs:    window.lineIDs,
 		DeviceHint: hint,
 		CreatedAt:  g.now().UTC(),
 		LastSeenAt: g.now().UTC(),

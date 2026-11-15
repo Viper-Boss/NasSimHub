@@ -419,8 +419,9 @@ func firstNonEmptyString(values ...string) string {
 // --- administrator settings ---------------------------------------------
 
 type airsimSettingsRequest struct {
-	Enabled bool   `json:"enabled"`
-	LineID  string `json:"line_id"`
+	Enabled bool     `json:"enabled"`
+	LineID  string   `json:"line_id"`
+	LineIDs []string `json:"line_ids"`
 }
 
 type airsimRevokeRequest struct {
@@ -459,19 +460,27 @@ func (api *API) airsimSettings(response http.ResponseWriter, request *http.Reque
 			return
 		}
 		input.LineID = strings.TrimSpace(input.LineID)
-		if input.Enabled {
-			if input.LineID == "" {
-				writeError(response, http.StatusBadRequest, "line_required", "Choose the line the iPhone will use", "line_id")
-				return
-			}
-			if !api.requireLineAccess(response, request, input.LineID) {
-				return
-			}
+		if len(input.LineIDs) == 0 && input.LineID != "" {
+			input.LineIDs = []string{input.LineID}
 		}
-		if err := api.airsim.Configure(input.Enabled, input.LineID); err != nil {
-			api.writeInternalError(response, request, "save AirSIM settings", err)
+		if input.LineID != "" && len(input.LineIDs) > 0 && input.LineID != input.LineIDs[0] {
+			writeError(response, 400, "invalid_line_selection", "Conflicting primary line and line selection", "line_ids")
 			return
 		}
+		if input.Enabled && len(input.LineIDs) == 0 {
+			writeError(response, 400, "line_required", "Choose at least one line for the iPhone", "line_ids")
+			return
+		}
+		for _, id := range input.LineIDs {
+			if !api.requireLineAccess(response, request, id) {
+				return
+			}
+		}
+		if err := api.airsim.ConfigureLines(input.Enabled, input.LineIDs); err != nil {
+			writeError(response, 400, "invalid_line_selection", "Choose at most 32 distinct lines", "line_ids")
+			return
+		}
+
 		status := api.airsim.Status()
 		writeJSON(response, http.StatusOK, airsimSettingsResponse{Available: true, Status: &status})
 	default:
@@ -493,12 +502,13 @@ func (api *API) airsimPairing(response http.ResponseWriter, request *http.Reques
 			writeError(response, http.StatusConflict, "account_required", "Sign in with an administrator account to pair an iPhone", "")
 			return
 		}
-		lineID := api.airsim.Status().LineID
-		if lineID != "" && !principal.CanAccessLine(lineID) {
-			writeError(response, http.StatusForbidden, "line_not_assigned",
-				"Your account is not assigned the line AirSIM uses", "line_id")
-			return
+		for _, lineID := range api.airsim.Status().LineIDs {
+			if !principal.CanAccessLine(lineID) {
+				writeError(response, http.StatusForbidden, "line_not_assigned", "Your account is not assigned every selected AirSIM line", "line_ids")
+				return
+			}
 		}
+
 		window, err := api.airsim.StartPairing(principal.UserID)
 		switch {
 		case errors.Is(err, airsimgw.ErrDisabled):

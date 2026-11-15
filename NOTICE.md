@@ -8,9 +8,9 @@ NasSimHub 是家庭 4G/5G SIM 卡网关。本仓库包含两类代码，许可�
    继承上游 [ModemDeck](https://github.com/human-agent65535/ModemDeck) 的
    **PolyForm Noncommercial 1.0.0** 协议（见 [LICENSE](LICENSE)）——仅限非商业用途。
 2. **NasSimHub 原创新增部分**（2026-09 之后新增的设备适配与家卡功能代码，主要包括
-   `internal/devicef50/`、`internal/phonegeo/`、`internal/barkpush/`、
+   `internal/devicef50/`、`internal/phonegeo/`、`internal/forwarding/`、
    `internal/httpapi/homesim_*.go` 中新增处理器、`web/src/components/LineStatusStrip.vue`、
-   `web/src/components/settings/{BarkSettingsPanel,F50DevicePanel,NetworkSwitchesPanel}.vue`、
+   `web/src/components/settings/{ForwardingPanel,ForwardConditionEditor,F50DevicePanel,NetworkSwitchesPanel}.vue`、
    `web/src/utils/phoneRegion.ts`、`web/src/state/phoneGeo.ts`、`web/src/i18n/homesimData.ts`
    中的新增键等）：以 **GNU Affero General Public License v3.0**
    （[LICENSE-AGPL.txt](LICENSE-AGPL.txt)）授权——以网络服务形式使用同样必须开源。
@@ -65,9 +65,9 @@ of code, licensed separately:
    noncommercial use only.
 2. **NasSimHub-original additions** (device adapters and HomeSIM feature
    code added after 2026-09, including `internal/devicef50/`,
-   `internal/phonegeo/`, `internal/barkpush/`, new handlers under
+   `internal/phonegeo/`, `internal/forwarding/`, new handlers under
    `internal/httpapi/homesim_*.go`, `web/src/components/LineStatusStrip.vue`,
-   `web/src/components/settings/{BarkSettingsPanel,F50DevicePanel,NetworkSwitchesPanel}.vue`,
+   `web/src/components/settings/{ForwardingPanel,ForwardConditionEditor,F50DevicePanel,NetworkSwitchesPanel}.vue`,
    `web/src/utils/phoneRegion.ts`, `web/src/state/phoneGeo.ts`, and new keys in
    `web/src/i18n/homesimData.ts`): licensed under the
    **GNU Affero General Public License v3.0**
@@ -112,3 +112,7 @@ Project source tree above and are licensed under the same Apache License 2.0.
 
 For a summary of other bundled components and their licenses, see
 `THIRD_PARTY_NOTICES.md`.
+
+## 统一转发模块
+
+`internal/forwarding/`、统一转发API及Vue页面为NAS侧独立编写的新增实现，沿用本仓库新增部分的AGPL-3.0许可；ModemDeck衍生部分许可不变。通道分类和规则思路参考pppscn/SmsForwarder（BSD-2-Clause），不捆绑Android程序或复制其Kotlin实现。旧Bark/短信广播执行器与旧面板已移除，原上游署名保留。

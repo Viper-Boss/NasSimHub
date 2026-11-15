@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -82,6 +83,7 @@ type Gateway struct {
 type pairingWindow struct {
 	session *airsimproto.PairingSession
 	userID  string
+	lineIDs []string
 }
 
 func New(config Config) (*Gateway, error) {
@@ -257,6 +259,7 @@ func (g *Gateway) Serve(ctx context.Context) error {
 type Status struct {
 	Enabled     bool          `json:"enabled"`
 	LineID      string        `json:"line_id"`
+	LineIDs     []string      `json:"line_ids"`
 	AgentID     string        `json:"agent_id"`
 	Listening   bool          `json:"listening"`
 	ListenError string        `json:"listen_error,omitempty"`
@@ -281,6 +284,7 @@ func (g *Gateway) Status() Status {
 	status := Status{
 		Enabled:     enabled,
 		LineID:      lineID,
+		LineIDs:     func() []string { _, ids := g.store.settingsLines(); return ids }(),
 		AgentID:     g.store.agentID(),
 		Listening:   g.listening,
 		ControlPort: g.config.ControlPort,
@@ -301,18 +305,11 @@ func (g *Gateway) Status() Status {
 // Configure turns the gateway on or off and selects the line it exposes.
 // Turning it off closes any pairing window; paired iPhones are kept.
 func (g *Gateway) Configure(enabled bool, lineID string) error {
-	if enabled && lineID == "" {
-		return ErrNoLine
+	ids := []string{}
+	if lineID != "" {
+		ids = append(ids, lineID)
 	}
-	if err := g.store.setSettings(enabled, lineID); err != nil {
-		return err
-	}
-	if !enabled {
-		g.mu.Lock()
-		g.window = nil
-		g.mu.Unlock()
-	}
-	return nil
+	return g.ConfigureLines(enabled, ids)
 }
 
 // StartPairing opens a 120 s pairing window for the given administrator.
@@ -333,7 +330,8 @@ func (g *Gateway) StartPairing(userID string) (WindowStatus, error) {
 		return WindowStatus{}, err
 	}
 	g.mu.Lock()
-	g.window = &pairingWindow{session: session, userID: userID}
+	_, lineIDs := g.store.settingsLines()
+	g.window = &pairingWindow{session: session, userID: userID, lineIDs: lineIDs}
 	g.lastPaired = nil
 	g.mu.Unlock()
 	return WindowStatus{Code: session.Code, ExpiresAt: session.ExpiresAt}, nil
@@ -383,14 +381,17 @@ func (g *Gateway) forget(id string) {
 }
 
 func (g *Gateway) identity(pairing Pairing, peer string) (Identity, error) {
-	enabled, lineID := g.store.settings()
+	enabled, selected := g.store.settingsLines()
 	if !enabled {
 		return Identity{}, ErrDisabled
 	}
-	if lineID == "" {
-		return Identity{}, ErrNoLine
+	ids := frozenLines(pairing)
+	for _, id := range ids {
+		if slices.Contains(selected, id) {
+			return Identity{PairingID: pairing.ID, UserID: pairing.UserID, LineID: id, LineIDs: ids, Peer: peer}, nil
+		}
 	}
-	return Identity{PairingID: pairing.ID, UserID: pairing.UserID, LineID: lineID, Peer: peer}, nil
+	return Identity{}, ErrNoLine
 }
 
 func (g *Gateway) setOwned(pairingID, callID string) {
@@ -450,7 +451,7 @@ func (g *Gateway) keepCalls(ctx context.Context) {
 				continue
 			}
 			renewCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			err = backend.KeepCall(renewCtx, identity, callID)
+			err = (scopedBackend{Backend: backend, gateway: g}).KeepCall(renewCtx, identity, callID)
 			cancel()
 			if errors.Is(err, ErrNotFound) || errors.Is(err, ErrConflict) || errors.Is(err, ErrForbidden) {
 				g.setOwned(pairing.ID, "")

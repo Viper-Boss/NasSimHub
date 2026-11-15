@@ -3,6 +3,7 @@ import { nasPreflightEN } from '../nasPreflight'
 import { homesimEN } from '../homesimData'
 
 export default {
+ forwarding: { title: 'Unified forwarding', description: 'Channels, rules and delivery history' },
   serviceErrors: {
     invalidSession: "Invalid session response",
     incompleteSession: "Incomplete session response",

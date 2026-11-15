@@ -3,6 +3,7 @@ import { nasPreflightZH } from '../nasPreflight'
 import { homesimZH } from '../homesimData'
 
 export default {
+ forwarding: { title: '统一转发', description: '通道、规则、模板与投递记录' },
   serviceErrors: {
     invalidSession: "服务返回了无效的会话状态",
     incompleteSession: "服务返回了不完整的会话状态",

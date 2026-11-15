@@ -39,25 +39,28 @@ type Settings interface {
 type BotFactory func(string) (telegram.BotAPI, error)
 
 type Options struct {
-	BotFactory        BotFactory
-	PollOptions       telegram.PollOptions
-	Logger            *slog.Logger
-	Now               func() time.Time
-	NotificationEvery time.Duration
-	RuntimeEvents     runtimeevents.Publisher
+	// DisableNotifications leaves bot commands active while unified forwarding owns push.
+	DisableNotifications bool
+	BotFactory           BotFactory
+	PollOptions          telegram.PollOptions
+	Logger               *slog.Logger
+	Now                  func() time.Time
+	NotificationEvery    time.Duration
+	RuntimeEvents        runtimeevents.Publisher
 }
 
 type Manager struct {
-	settings          Settings
-	communications    CommunicationService
-	repository        Repository
-	botFactory        BotFactory
-	pollOptions       telegram.PollOptions
-	logger            *slog.Logger
-	now               func() time.Time
-	notificationEvery time.Duration
-	runtimeEvents     runtimeevents.Publisher
-	commandMenus      map[string][sha256.Size]byte
+	disableNotifications bool
+	settings             Settings
+	communications       CommunicationService
+	repository           Repository
+	botFactory           BotFactory
+	pollOptions          telegram.PollOptions
+	logger               *slog.Logger
+	now                  func() time.Time
+	notificationEvery    time.Duration
+	runtimeEvents        runtimeevents.Publisher
+	commandMenus         map[string][sha256.Size]byte
 }
 
 type unitRuntime struct {
@@ -103,16 +106,17 @@ func New(
 		notificationEvery = defaultNotificationEvery
 	}
 	return &Manager{
-		settings:          settings,
-		communications:    communications,
-		repository:        repository,
-		botFactory:        botFactory,
-		pollOptions:       options.PollOptions,
-		logger:            logger,
-		now:               now,
-		notificationEvery: notificationEvery,
-		runtimeEvents:     options.RuntimeEvents,
-		commandMenus:      make(map[string][sha256.Size]byte),
+		disableNotifications: options.DisableNotifications,
+		settings:             settings,
+		communications:       communications,
+		repository:           repository,
+		botFactory:           botFactory,
+		pollOptions:          options.PollOptions,
+		logger:               logger,
+		now:                  now,
+		notificationEvery:    notificationEvery,
+		runtimeEvents:        options.RuntimeEvents,
+		commandMenus:         make(map[string][sha256.Size]byte),
 	}, nil
 }
 
@@ -565,6 +569,10 @@ func (m *Manager) dispatchNotifications(
 	ctx context.Context,
 	runtimes map[string]unitRuntime,
 ) error {
+	if m.disableNotifications {
+		return nil
+	}
+
 	if len(runtimes) == 0 {
 		return nil
 	}

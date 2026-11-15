@@ -81,7 +81,10 @@ func (g *Gateway) handlePCM(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		return
 	}
-	backend := g.currentBackend()
+	var backend Backend
+	if raw := g.currentBackend(); raw != nil {
+		backend = scopedBackend{Backend: raw, gateway: g}
+	}
 	if backend == nil || backend.Authorize(ctx, identity) != nil {
 		return
 	}

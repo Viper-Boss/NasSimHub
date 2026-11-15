@@ -22,6 +22,7 @@ export interface AirSIMPairingWindow {
 export interface AirSIMStatus {
   enabled: boolean
   line_id: string
+  line_ids?: string[]
   agent_id: string
   listening: boolean
   listen_error?: string
@@ -52,6 +53,7 @@ function parseSettings(value: unknown): AirSIMSettings {
 const fixtureStatus: AirSIMStatus = {
   enabled: false,
   line_id: '',
+  line_ids: [],
   agent_id: 'nassimhub-fixture',
   listening: true,
   control_port: 7592,
@@ -65,18 +67,37 @@ export async function getAirSIMSettings(): Promise<AirSIMSettings> {
   return parseSettings(await get(`${API_ROOT}/settings/airsim`))
 }
 
-export async function saveAirSIMSettings(enabled: boolean, lineID: string): Promise<AirSIMSettings> {
-  if (fixtureMode) throw new Error('Demo mode: nothing was saved to the gateway.')
+export async function saveAirSIMSettings(
+  enabled: boolean,
+  lineID: string | readonly string[]
+): Promise<AirSIMSettings> {
+  if (fixtureMode)
+    throw new Error('Demo mode: nothing was saved to the gateway.')
+  const lineIDs =
+    typeof lineID === 'string' ? (lineID ? [lineID] : []) : [...lineID]
   return parseSettings(
-    await writeJSON(`${API_ROOT}/settings/airsim`, 'PUT', { enabled, line_id: lineID }, 200)
+    await writeJSON(
+      `${API_ROOT}/settings/airsim`,
+      'PUT',
+      { enabled, line_id: lineIDs[0] || '', line_ids: lineIDs },
+      200
+    )
   )
 }
 
 export async function startAirSIMPairing(): Promise<AirSIMPairingWindow> {
   if (fixtureMode) {
-    return { code: '042917', expires_at: new Date(Date.now() + 120_000).toISOString() }
+    return {
+      code: '042917',
+      expires_at: new Date(Date.now() + 120_000).toISOString()
+    }
   }
-  const window = (await writeJSON(`${API_ROOT}/settings/airsim/pairing`, 'POST', {}, 200)) as AirSIMPairingWindow
+  const window = (await writeJSON(
+    `${API_ROOT}/settings/airsim/pairing`,
+    'POST',
+    {},
+    200
+  )) as AirSIMPairingWindow
   if (!window || !/^\d{6}$/.test(window.code) || !window.expires_at) {
     throw new Error('Invalid AirSIM pairing response.')
   }
@@ -90,5 +111,10 @@ export async function cancelAirSIMPairing(): Promise<void> {
 
 export async function revokeAirSIMDevice(id: string): Promise<void> {
   if (fixtureMode) return
-  await writeJSON(`${API_ROOT}/settings/airsim/devices/revoke`, 'POST', { id }, 204)
+  await writeJSON(
+    `${API_ROOT}/settings/airsim/devices/revoke`,
+    'POST',
+    { id },
+    204
+  )
 }

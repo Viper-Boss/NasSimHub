@@ -79,3 +79,7 @@ provided by its packaged dependencies.
 - F50 (ZTE 5G MiFi) goform protocol behaviour — derived from the MIT-licensed
   [koldllc/f50-monitor](https://github.com/koldllc/f50-monitor) reference
   implementation (protocol behaviour only; no source code copied).
+
+## SmsForwarder（功能参考）
+
+统一转发模块参考 [pppscn/SmsForwarder](https://github.com/pppscn/SmsForwarder) 的通道目录和规则思路。原项目版权 (c) 2021 pppscn，许可 BSD-2-Clause（原文见该项目 LICENSE）。本仓库不捆绑其Android应用或复制其源码，NAS实现独立编写；原有各组件许可继续适用，不把功能参考写成与Android全量等价。

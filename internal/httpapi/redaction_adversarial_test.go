@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/human-agent65535/modemdeck/internal/forwarding"
 	"github.com/human-agent65535/modemdeck/internal/messageevents"
 )
 
@@ -80,9 +81,10 @@ func TestAdversarialPlantedSecretsNeverReachALogOrAnErrorResponse(t *testing.T) 
 		options.TelegramSettings = telegram
 	})
 	t.Setenv("ADV_PLANTED_BARK_KEY", advSecretBarkKey)
-	workerContext, stopWorker := context.WithCancel(context.Background())
-	defer stopWorker()
-	harness.api.StartHomeSIMForwarderWorker(workerContext)
+	harness.api.forwardingStore = &forwarding.SQLStore{DB: harness.db}
+	if err := harness.api.forwardingStore.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	admin := harness.admin()
 	alice := harness.aliceClient()
@@ -131,22 +133,22 @@ func TestAdversarialPlantedSecretsNeverReachALogOrAnErrorResponse(t *testing.T) 
 	record(admin.send(http.MethodPut, "/api/v1/users/adv-missing-user/password", `{"password":"`+advSecretNewPassword+`"}`))
 
 	webhook := "https://127.0.0.1:1/hook/" + advSecretWebhookPath + "?access_token=" + advSecretAccessToken
-	forwarder := `{"id":"adv-hook","name":"adv","type":"dingtalk","enabled":true,"events":["sms"],` +
-		`"config":{"webhook_url":"` + webhook + `","secret":"` + advSecretSigning + `"}}`
-	response := record(admin.send(http.MethodPut, "/api/v1/settings/homesim/forwarders",
-		`{"revision":1,"forwarders":[`+forwarder+`]}`))
+	cfg := forwarding.DefaultConfig()
+	cfg.Enabled = true
+	cfg.Channels = []forwarding.Channel{{ID: "adv-hook", Name: "adv", Type: "dingtalk", Enabled: true, Params: map[string]string{}, Secrets: map[string]forwarding.Secret{"url": {Value: webhook}, "signing_key": {Value: advSecretSigning}}}}
+	cfg.Rules = []forwarding.Rule{{ID: "adv-rule", Enabled: true, Events: []string{"incoming_sms"}, ChannelIDs: []string{"adv-hook"}, TemplateID: "default", Logic: "all", Condition: forwarding.Condition{Op: "always"}}}
+	encoded, _ := json.Marshal(cfg)
+	response := record(admin.send(http.MethodPut, forwardingAPI, string(encoded)))
 	advRequireStatus(t, response, http.StatusOK, "")
-	if strings.Contains(response.Body.String(), advSecretSigning) {
-		t.Errorf("saving a channel echoed its signing secret: %s", response.Body)
+	if strings.Contains(response.Body.String(), advSecretSigning) || strings.Contains(response.Body.String(), advSecretWebhookPath) {
+		t.Fatal("channel secret echoed")
 	}
-	response = record(admin.send(http.MethodPost, "/api/v1/settings/homesim/forwarders/test", forwarder))
-	advRequireStatus(t, response, http.StatusBadGateway, "forward_failed")
-
-	response = record(admin.send(http.MethodPut, "/api/v1/settings/homesim/bark",
-		`{"revision":1,"server_url":"https://127.0.0.1:1","credential_ref":"ADV_PLANTED_BARK_KEY","group":"adv","sound":""}`))
-	advRequireStatus(t, response, http.StatusOK, "")
-	response = record(admin.send(http.MethodPost, "/api/v1/settings/homesim/bark/test", "{}"))
-	advRequireStatus(t, response, http.StatusBadGateway, "push_failed")
+	response = record(admin.send(http.MethodPost, forwardingAPI+"/test", `{"channel_id":"adv-hook"}`))
+	advRequireStatus(t, response, http.StatusBadGateway, "delivery_failed")
+	for _, path := range []string{"/api/v1/settings/homesim/forwarders", "/api/v1/settings/homesim/bark"} {
+		advRequireStatus(t, record(admin.send(http.MethodPut, path, `{}`)), http.StatusGone, "forwarding_replaced")
+		advRequireStatus(t, record(admin.send(http.MethodPost, path+"/test", `{}`)), http.StatusGone, "forwarding_replaced")
+	}
 
 	response = record(admin.send(http.MethodPut, "/api/v1/settings/homesim/f50",
 		`{"revision":1,"base_url":"http://127.0.0.1:1","username":"admin","password":"`+advSecretF50Password+`"}`))
@@ -161,20 +163,25 @@ func TestAdversarialPlantedSecretsNeverReachALogOrAnErrorResponse(t *testing.T) 
 		`{"display_name":"adv","enabled":true,"bot_token":"`+advSecretBotToken+`","chat_id":"1","admin_id":"1","line_scopes":[],"incoming_sms":true}`))
 	advRequireStatus(t, response, http.StatusInternalServerError, "internal_error")
 
-	// --- an incoming SMS, fanned out to the unreachable channel -----------
-	events.Publish(messageevents.IncomingSMS{
-		MessageID: "adv-sms-1", LineID: advLineAlpha, Peer: advSecretPhone, Content: "your code is " + advSecretSMSCode,
-	})
-	deadline := time.Now().Add(15 * time.Second)
-	for !strings.Contains(harness.sink.String(), "SMS forward failed") {
-		if time.Now().After(deadline) {
-			t.Fatal("the forwarding failure was never logged; the test would be searching an empty log")
-		}
-		time.Sleep(20 * time.Millisecond)
+	// An actual durable event traverses the new queue and local unreachable
+	// HTTP transport. No in-memory broadcaster is an alternative send authority.
+	now := time.Now().UTC()
+	if _, err := harness.db.Exec(`INSERT INTO modemdeck_notification_events(event_key,event_type,resource_id,line_id,peer,body,occurred_at) VALUES('adv-sms-1','incoming_sms','adv-sms-1',?,?,?,?)`, advLineAlpha, advSecretPhone, "your code is "+advSecretSMSCode, now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
 	}
+	engine := &forwarding.Engine{Store: harness.api.forwardingStore, Sender: harness.api.forwardingDispatcher(), Authorize: harness.api.authorizeForwarding}
+	if err := engine.Step(context.Background(), now); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := harness.api.forwardingStore.History(context.Background(), 0)
+	if err != nil || len(rows) != 1 || rows[0].ErrorClass != "delivery_failed" {
+		t.Fatalf("the forwarding failure was not exercised: %+v %v", rows, err)
+	}
+	deliveryHistory := admin.get(forwardingAPI + "/deliveries")
+	advRequireStatus(t, deliveryHistory, http.StatusOK, "")
 
 	// --- read the logs back every way there is ----------------------------
-	sinks := map[string]string{"process log": harness.sink.String()}
+	sinks := map[string]string{"process log": harness.sink.String(), "forwarding history": deliveryHistory.Body.String()}
 	history := admin.get("/api/v1/diagnostics/logs?limit=2000")
 	advRequireStatus(t, history, http.StatusOK, "")
 	sinks["/diagnostics/logs"] = history.Body.String()
@@ -212,7 +219,11 @@ func TestAdversarialPlantedSecretsNeverReachALogOrAnErrorResponse(t *testing.T) 
 		"query value":             advSecretSearch,
 	}
 	for name, text := range sinks {
-		for _, marker := range []string{"SMS forward failed", "create Telegram unit"} {
+		markers := []string{"create Telegram unit"}
+		if name == "forwarding history" {
+			markers = []string{"delivery_failed"}
+		}
+		for _, marker := range markers {
 			if !strings.Contains(text, marker) {
 				t.Errorf("%s does not contain %q; it is not showing the lines this test planted", name, marker)
 			}

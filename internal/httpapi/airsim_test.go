@@ -187,3 +187,23 @@ func TestAirSIMSettingsWithoutAGatewayReportUnavailable(t *testing.T) {
 	advRequireStatus(t, harness.admin().send(http.MethodPost, "/api/v1/settings/airsim/pairing", "{}"),
 		http.StatusServiceUnavailable, "airsim_unavailable")
 }
+
+func TestAirSIMMultipleLinesStayInsideCurrentAdministratorScope(t *testing.T) {
+	h, _, _, gateway := airsimHarness(t)
+	admin := h.admin()
+	response := admin.send(http.MethodPut, "/api/v1/settings/airsim", `{"enabled":true,"line_ids":["`+advLineAlpha+`","`+advLineBeta+`"]}`)
+	advRequireStatus(t, response, 200, "")
+	if len(gateway.Status().LineIDs) != 2 || gateway.Status().LineID != advLineAlpha {
+		t.Fatal("missing multi-line settings")
+	}
+	advRequireStatus(t, admin.send(http.MethodPost, "/api/v1/settings/airsim/pairing", `{}`), 200, "")
+	advRequireStatus(t, admin.send(http.MethodPut, "/api/v1/settings/airsim", `{"enabled":true,"line_ids":["`+advLineAlpha+`","not-assigned"]}`), 404, "")
+	if len(gateway.Status().LineIDs) != 2 {
+		t.Fatal("invalid save changed selection")
+	}
+	advRequireStatus(t, admin.send(http.MethodPut, "/api/v1/settings/airsim", `{"enabled":true,"line_ids":["`+advLineAlpha+`","`+advLineAlpha+`"]}`), 400, "invalid_line_selection")
+	if _, err := h.db.Exec(`DELETE FROM modemdeck_user_lines WHERE user_id=? AND line_id=?`, h.adminID, advLineBeta); err != nil {
+		t.Fatal(err)
+	}
+	advRequireStatus(t, admin.send(http.MethodPost, "/api/v1/settings/airsim/pairing", `{}`), 403, "line_not_assigned")
+}

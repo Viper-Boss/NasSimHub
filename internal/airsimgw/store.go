@@ -37,6 +37,7 @@ type Pairing struct {
 	ID         string    `json:"id"`
 	UserID     string    `json:"user_id"`
 	LineID     string    `json:"line_id"`
+	LineIDs    []string  `json:"line_ids,omitempty"`
 	DeviceHint string    `json:"device_hint,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	LastSeenAt time.Time `json:"last_seen_at,omitempty"`
@@ -62,6 +63,7 @@ type storedState struct {
 	AgentID  string          `json:"agent_id"`
 	Enabled  bool            `json:"enabled"`
 	LineID   string          `json:"line_id,omitempty"`
+	LineIDs  []string        `json:"line_ids,omitempty"`
 	Pairings []storedPairing `json:"pairings"`
 }
 
@@ -100,6 +102,9 @@ func openStore(path string, secrets SecretBox) (*store, error) {
 			return nil, fmt.Errorf("decode AirSIM state: %w", err)
 		}
 	}
+	if _, err := normalizeLines(s.state.LineIDs); err != nil {
+		return nil, err
+	}
 	if s.state.AgentID == "" {
 		var raw [8]byte
 		if _, err := rand.Read(raw[:]); err != nil {
@@ -112,6 +117,17 @@ func openStore(path string, secrets SecretBox) (*store, error) {
 	}
 	kept := s.state.Pairings[:0]
 	for _, record := range s.state.Pairings {
+		if len(record.LineIDs) == 0 {
+			if record.LineID == "" {
+				record.LineID = s.state.LineID
+			}
+			if record.LineID != "" {
+				record.LineIDs = []string{record.LineID}
+			}
+		}
+		if _, err := normalizeLines(record.LineIDs); err != nil {
+			return nil, err
+		}
 		secret, err := secrets.Open(record.Secret.Nonce, record.Secret.Ciphertext, []byte(secretAssociation+record.ID))
 		if err != nil || len(secret) < 32 {
 			// A secret that no longer opens (settings key rotated) is useless:
@@ -147,6 +163,10 @@ func (s *store) setSettings(enabled bool, lineID string) error {
 	defer s.mu.Unlock()
 	s.state.Enabled = enabled
 	s.state.LineID = lineID
+	s.state.LineIDs = nil
+	if lineID != "" {
+		s.state.LineIDs = []string{lineID}
+	}
 	return s.saveLocked()
 }
 
@@ -155,7 +175,9 @@ func (s *store) list() []Pairing {
 	defer s.mu.Unlock()
 	result := make([]Pairing, 0, len(s.state.Pairings))
 	for _, record := range s.state.Pairings {
-		result = append(result, record.Pairing)
+		pairing := record.Pairing
+		pairing.LineIDs = slices.Clone(pairing.LineIDs)
+		result = append(result, pairing)
 	}
 	return result
 }
@@ -167,6 +189,7 @@ func (s *store) withSecrets() []Pairing {
 	result := make([]Pairing, 0, len(s.state.Pairings))
 	for _, record := range s.state.Pairings {
 		pairing := record.Pairing
+		pairing.LineIDs = slices.Clone(pairing.LineIDs)
 		pairing.secret = s.keys[record.ID]
 		result = append(result, pairing)
 	}
@@ -185,6 +208,18 @@ func (s *store) add(pairing Pairing, secret []byte) (Pairing, error) {
 			return Pairing{}, err
 		}
 		pairing.ID = hex.EncodeToString(raw[:])
+	}
+	if len(pairing.LineIDs) == 0 {
+		if pairing.LineID == "" {
+			pairing.LineID = s.state.LineID
+		}
+		if pairing.LineID != "" {
+			pairing.LineIDs = []string{pairing.LineID}
+		}
+	}
+	pairing.LineIDs = slices.Clone(pairing.LineIDs)
+	if len(pairing.LineIDs) > 0 {
+		pairing.LineID = pairing.LineIDs[0]
 	}
 	nonce, ciphertext, err := s.secrets.Seal(secret, []byte(secretAssociation+pairing.ID))
 	if err != nil {
@@ -321,4 +356,32 @@ func (s *store) saveLocked() error {
 		return err
 	}
 	return os.Rename(temporary, s.path)
+}
+
+func (s *store) settingsLines() (bool, []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.state.LineIDs) > 0 {
+		return s.state.Enabled, slices.Clone(s.state.LineIDs)
+	}
+	if s.state.LineID != "" {
+		return s.state.Enabled, []string{s.state.LineID}
+	}
+	return s.state.Enabled, []string{}
+}
+func (s *store) setLines(enabled bool, ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prior := s.state
+	s.state.Enabled = enabled
+	s.state.LineIDs = slices.Clone(ids)
+	s.state.LineID = ""
+	if len(ids) > 0 {
+		s.state.LineID = ids[0]
+	}
+	if err := s.saveLocked(); err != nil {
+		s.state = prior
+		return err
+	}
+	return nil
 }

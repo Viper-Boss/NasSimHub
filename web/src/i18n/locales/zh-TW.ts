@@ -4,6 +4,7 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+ forwarding: { title: '统一转发', description: '通道、规则、模板与投递记录' },
   serviceErrors: {
     invalidSession: "服務傳回無效的工作階段狀態",
     incompleteSession: "服務傳回不完整的工作階段狀態",

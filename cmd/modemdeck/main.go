@@ -25,6 +25,7 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/callmedia"
 	"github.com/human-agent65535/modemdeck/internal/communication"
 	"github.com/human-agent65535/modemdeck/internal/diagnostics"
+	"github.com/human-agent65535/modemdeck/internal/forwarding"
 	"github.com/human-agent65535/modemdeck/internal/httpapi"
 	"github.com/human-agent65535/modemdeck/internal/license"
 	"github.com/human-agent65535/modemdeck/internal/mediaapp"
@@ -175,6 +176,11 @@ func run(
 		return fmt.Errorf("open database: %w", err)
 	}
 
+	forwardingStore := &forwarding.SQLStore{DB: db}
+	if err := forwardingStore.Init(ctx); err != nil {
+		_ = db.Close()
+		return fmt.Errorf("initialize unified forwarding: %w", err)
+	}
 	repository, err := store.New(db)
 	if err != nil {
 		_ = db.Close()
@@ -373,8 +379,9 @@ func run(
 		communications,
 		repository,
 		telegramruntime.Options{
-			Logger:        logger.With("component", "telegram"),
-			RuntimeEvents: runtimeEvents,
+			DisableNotifications: true,
+			Logger:               logger.With("component", "telegram"),
+			RuntimeEvents:        runtimeEvents,
 		},
 	)
 	if err != nil {
@@ -498,8 +505,9 @@ func run(
 		UpdateManager:      updateManager,
 		ReleaseRelay:       releaseRelay,
 		ApplicationVersion: version,
-		SettingsSecrets:    settingsSecrets,
-		AirSIM:             airsimGateway,
+		ForwardingStore:    forwardingStore, ForwardingOTP: nodes.allowOTPForward,
+		SettingsSecrets: settingsSecrets,
+		AirSIM:          airsimGateway,
 		// The issuer's PUBLIC key. Certificates are verified against it and
 		// nothing is signed here -- the private key never touches a gateway,
 		// see internal/license/certificate.go.
@@ -521,7 +529,7 @@ func run(
 
 	signals, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	api.StartHomeSIMForwarderWorker(signals)
+	forwardingDone := api.StartForwardingWorker(signals)
 	api.StartHomeSIMNKNWorker(signals)
 	api.StartHomeSIMNKNOptionalServices(signals)
 	// WireGuard and the DHT persist an enabled flag and, until this call
@@ -649,6 +657,7 @@ func run(
 			runErr = errors.Join(runErr, fmt.Errorf("serve HTTP: %w", serveErr))
 		}
 	}
+	<-forwardingDone
 	<-syncDone
 	<-nodesDone
 	if applePushDone != nil {

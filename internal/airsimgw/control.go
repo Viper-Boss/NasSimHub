@@ -94,7 +94,10 @@ func (g *Gateway) serveControl(response http.ResponseWriter, request *http.Reque
 		writeFixedJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "gateway_disabled"})
 		return
 	}
-	backend := g.currentBackend()
+	var backend Backend
+	if raw := g.currentBackend(); raw != nil {
+		backend = scopedBackend{Backend: raw, gateway: g}
+	}
 	if backend == nil {
 		writeFixedJSON(response, http.StatusServiceUnavailable, map[string]string{"error": "agent_unavailable"})
 		return
@@ -274,6 +277,11 @@ func (g *Gateway) health(call *controlRequest) {
 		g.backendError(call, err)
 		return
 	}
+	slots, err := g.slots(call)
+	if err != nil {
+		g.backendError(call, err)
+		return
+	}
 	agentID := g.store.agentID()
 	call.write(http.StatusOK, map[string]any{
 		"ok":                 true,
@@ -287,7 +295,7 @@ func (g *Gateway) health(call *controlRequest) {
 		"manufacturer":       line.Manufacturer,
 		"model":              line.Model,
 		"phone_number":       line.PhoneNumber,
-		"sim_slots":          simSlots(line),
+		"sim_slots":          slots,
 	})
 }
 
@@ -343,16 +351,18 @@ func (g *Gateway) modemStatus(call *controlRequest) {
 // --- calls --------------------------------------------------------------
 
 type callRecord struct {
-	ID        string  `json:"id"`
-	Index     int     `json:"index"`
-	Direction string  `json:"direction"`
-	State     string  `json:"state"`
-	Number    string  `json:"number"`
-	StartedAt string  `json:"started_at"`
-	UpdatedAt string  `json:"updated_at"`
-	EndedAt   *string `json:"ended_at,omitempty"`
-	Missed    bool    `json:"missed"`
-	AndroidID string  `json:"android_id"`
+	LineID     string  `json:"line_id,omitempty"`
+	SIMAccount string  `json:"sim_account,omitempty"`
+	ID         string  `json:"id"`
+	Index      int     `json:"index"`
+	Direction  string  `json:"direction"`
+	State      string  `json:"state"`
+	Number     string  `json:"number"`
+	StartedAt  string  `json:"started_at"`
+	UpdatedAt  string  `json:"updated_at"`
+	EndedAt    *string `json:"ended_at,omitempty"`
+	Missed     bool    `json:"missed"`
+	AndroidID  string  `json:"android_id"`
 }
 
 type callStatus struct {
@@ -416,6 +426,7 @@ func iso(value time.Time) string {
 
 func toRecord(call Call, index int) callRecord {
 	record := callRecord{
+		LineID: call.LineID, SIMAccount: call.SIMAccount,
 		ID: call.ID, Index: index, Direction: call.Direction, State: airsimState(call),
 		Number: call.Number, StartedAt: iso(call.CreatedAt), UpdatedAt: iso(call.UpdatedAt),
 		Missed: call.Missed, AndroidID: call.ID,
@@ -491,10 +502,15 @@ func (g *Gateway) snapshot(call *controlRequest) (eventStatus, bool, error) {
 	revision, smsRevision := watch.revision, watch.smsRev
 	g.mu.Unlock()
 
+	slots, err := g.slots(call)
+	if err != nil {
+		return eventStatus{}, false, err
+	}
 	status.Revision = revision
 	return eventStatus{
 		Revision: revision, SMSRevision: smsRevision, SMSPending: len(messages),
 		Call: status, SIMRevision: 1,
+		SIMSlots: slots,
 	}, changed, nil
 }
 
@@ -567,8 +583,9 @@ func operationRequestID(prefix, operationID string) string {
 
 func (g *Gateway) dial(call *controlRequest) {
 	var input struct {
-		Number      string `json:"number"`
-		OperationID string `json:"operation_id"`
+		Number      string          `json:"number"`
+		OperationID string          `json:"operation_id"`
+		SIMAccount  json.RawMessage `json:"sim_account"`
 	}
 	if !decodeBody(call, &input) {
 		return
@@ -578,7 +595,12 @@ func (g *Gateway) dial(call *controlRequest) {
 		call.fail(http.StatusBadRequest, "number_required")
 		return
 	}
-	created, err := call.backend.Dial(call.ctx(), call.identity, number,
+	selected, selectErr := g.selectAccount(call.identity, input.SIMAccount)
+	if selectErr != nil {
+		call.fail(http.StatusBadRequest, "invalid_sim_account")
+		return
+	}
+	created, err := call.backend.Dial(call.ctx(), selected, number,
 		operationRequestID("airsim-dial-", input.OperationID))
 	if err != nil {
 		g.backendError(call, err)
@@ -679,6 +701,9 @@ func (g *Gateway) pendingMessages(call *controlRequest) ([]Message, error) {
 		}
 		pending = append(pending, message)
 	}
+	if len(pending) > messageLimit {
+		pending = pending[:messageLimit]
+	}
 	return pending, nil
 }
 
@@ -693,7 +718,8 @@ func (g *Gateway) listMessages(call *controlRequest) {
 		item := map[string]any{
 			"sender": message.Sender, "content": message.Content,
 			"timestamp": iso(message.Timestamp), "delivery_id": message.DeliveryID,
-			"direction": "incoming",
+			"direction":   "incoming",
+			"sim_account": message.SIMAccount, "line_id": message.LineID,
 		}
 		if code := verificationCode(message.Content); code != "" {
 			item["code"] = code
@@ -705,8 +731,9 @@ func (g *Gateway) listMessages(call *controlRequest) {
 
 func (g *Gateway) sendMessage(call *controlRequest) {
 	var input struct {
-		Phone   string `json:"phone"`
-		Message string `json:"message"`
+		Phone      string          `json:"phone"`
+		Message    string          `json:"message"`
+		SIMAccount json.RawMessage `json:"sim_account"`
 	}
 	if !decodeBody(call, &input) {
 		return
@@ -716,7 +743,12 @@ func (g *Gateway) sendMessage(call *controlRequest) {
 		call.fail(http.StatusBadRequest, "invalid_message")
 		return
 	}
-	if err := call.backend.SendMessage(call.ctx(), call.identity, phone, input.Message,
+	selected, selectErr := g.selectAccount(call.identity, input.SIMAccount)
+	if selectErr != nil {
+		call.fail(http.StatusBadRequest, "invalid_sim_account")
+		return
+	}
+	if err := call.backend.SendMessage(call.ctx(), selected, phone, input.Message,
 		operationRequestID("airsim-sms-", "")); err != nil {
 		g.backendError(call, err)
 		return
