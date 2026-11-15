@@ -354,3 +354,70 @@ func TestInvalidTimestampExpiresWithoutBlockingFollowingJournal(t *testing.T) {
 		t.Fatalf("timestamp poison journal: %+v", rows)
 	}
 }
+
+type senderFunc func(context.Context, Channel, Rendered, string) error
+
+func (f senderFunc) Send(ctx context.Context, ch Channel, r Rendered, id string) error {
+	return f(ctx, ch, r, id)
+}
+func TestExpiredDuringBatchWaitCannotBeMadeFreshByBatchClock(t *testing.T) {
+	s, _ := openTestStore(t)
+	configFor(t, s, 1, "all")
+	batch := time.Now().UTC().Add(-25 * time.Hour)
+	insertEvent(t, s, batch, "expired while waiting")
+	var sends atomic.Int32
+	engine := &Engine{Store: s, Authorize: allowed, Sender: senderFunc(func(context.Context, Channel, Rendered, string) error { sends.Add(1); return nil })}
+	if err := engine.Step(context.Background(), batch); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := s.History(context.Background(), 0)
+	if len(rows) != 1 || rows[0].Status != "expired" || sends.Load() != 0 {
+		t.Fatal("stale batch clock authorized an expired send", rows, sends.Load())
+	}
+}
+func TestLeaseAndRetryDeadlinesUseClaimAndCompletionTimes(t *testing.T) {
+	s, _ := openTestStore(t)
+	configFor(t, s, 1, "all")
+	batch := time.Now().UTC()
+	insertEvent(t, s, batch, "synthetic")
+	clock := batch.Add(5 * time.Minute)
+	var lease int64
+	engine := &Engine{Store: s, Authorize: allowed, Now: func() time.Time { return clock }, Sender: senderFunc(func(_ context.Context, _ Channel, _ Rendered, id string) error {
+		if err := s.DB.QueryRow(`SELECT lease_until FROM modemdeck_forwarding_tasks WHERE status='sending'`).Scan(&lease); err != nil {
+			t.Fatal(err)
+		}
+		clock = clock.Add(20 * time.Second)
+		return ErrDelivery
+	})}
+	if err := engine.Step(context.Background(), batch); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := s.History(context.Background(), 0)
+	if lease != batch.Add(5*time.Minute+45*time.Second).UnixMilli() {
+		t.Fatal("lease started at stale batch time", lease)
+	}
+	if len(rows) != 1 || rows[0].NextAt != clock.Add(30*time.Second).UnixMilli() {
+		t.Fatal("retry used pre-send time", rows)
+	}
+}
+func TestQuietHoursAreRecheckedAfterWaitingForDispatch(t *testing.T) {
+	s, _ := openTestStore(t)
+	c := configFor(t, s, 1, "all")
+	c.Rules[0].Quiet = QuietHours{Enabled: true, Start: "22:00", End: "08:00", Timezone: "UTC"}
+	if _, err := s.Save(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	batch := time.Date(2026, 11, 15, 21, 59, 0, 0, time.UTC)
+	dispatch := batch.Add(31 * time.Minute)
+	insertEvent(t, s, batch, "synthetic")
+	var sends atomic.Int32
+	engine := &Engine{Store: s, Authorize: allowed, Now: func() time.Time { return dispatch }, Sender: senderFunc(func(context.Context, Channel, Rendered, string) error { sends.Add(1); return nil })}
+	if err := engine.Step(context.Background(), batch); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := s.History(context.Background(), 0)
+	want := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC).UnixMilli()
+	if len(rows) != 1 || rows[0].Status != "pending" || rows[0].NextAt != want || rows[0].Attempts != 0 || sends.Load() != 0 {
+		t.Fatal("quiet hours ignored after batch delay", rows)
+	}
+}

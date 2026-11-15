@@ -257,6 +257,7 @@ func (s *SQLStore) Claim(ctx context.Context, t Task, now time.Time) (Task, bool
 	}
 	t.Attempts++
 	t.Status = "sending"
+	t.LeaseUntil = now.Add(45 * time.Second).UnixMilli()
 	return t, true, tx.Commit()
 }
 func stopFollowing(ctx context.Context, tx *sql.Tx, t Task, status string) error {
@@ -366,5 +367,12 @@ func (s *SQLStore) Prune(ctx context.Context, now time.Time) error {
 		return err
 	}
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM modemdeck_forwarding_tasks WHERE status NOT IN ('pending','sending') AND next_at<?`, now.Add(-7*24*time.Hour).UnixMilli())
+	return err
+}
+
+// Re-enter quiet hours without consuming another attempt. A currently leased
+// task may only defer itself with its retained token; stale owners cannot move it.
+func (s *SQLStore) Defer(ctx context.Context, t Task, now, next time.Time) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE modemdeck_forwarding_tasks SET status='pending',next_at=?,token='',lease_until=0 WHERE id=? AND attempts=? AND revision=(SELECT revision FROM modemdeck_forwarding_config WHERE id=1) AND (status='pending' OR (status='sending' AND (token=? OR lease_until<=?)))`, next.UnixMilli(), t.ID, t.Attempts, t.Token, now.UnixMilli())
 	return err
 }

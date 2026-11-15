@@ -17,6 +17,7 @@ type Engine struct {
 	Sender    Sender
 	Authorize Authorizer
 	Report    func(string)
+	Now       func() time.Time
 	stepMu    sync.Mutex
 }
 
@@ -27,7 +28,7 @@ func (e *Engine) Run(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
-		if err := e.Step(ctx, time.Now().UTC()); err != nil {
+		if err := e.Step(ctx, e.currentTime()); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -70,7 +71,7 @@ func (e *Engine) Step(ctx context.Context, now time.Time) error {
 		go func(t Task) {
 			defer wg.Done()
 			defer func() { <-pool }()
-			if err := e.deliver(ctx, t, now); err != nil {
+			if err := e.deliver(ctx, t, e.currentTime()); err != nil {
 				mu.Lock()
 				if first == nil {
 					first = err
@@ -83,7 +84,7 @@ func (e *Engine) Step(ctx context.Context, now time.Time) error {
 	if first != nil {
 		return first
 	}
-	return e.Store.Prune(ctx, now)
+	return e.Store.Prune(ctx, e.currentTime())
 }
 func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 	if expired(t.Event, now) {
@@ -117,8 +118,15 @@ func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 	if !foundChannel || !foundRule {
 		return e.Store.Cancel(ctx, t, "configuration_changed")
 	}
+	if next := rule.Quiet.Next(now); next.After(now) {
+		return e.Store.Defer(ctx, t, now, next)
+	}
 	if err = e.Authorize(ctx, c.OwnerID, t.Event, ch); err != nil {
 		return e.Store.Cancel(ctx, t, "authorization_revoked")
+	}
+	now = e.currentTime()
+	if expired(t.Event, now) {
+		return e.Store.Cancel(ctx, t, "expired")
 	}
 	claimed, ok, err := e.Store.Claim(ctx, t, now)
 	if err != nil || !ok {
@@ -138,11 +146,19 @@ func (e *Engine) deliver(ctx context.Context, t Task, now time.Time) error {
 	if err = e.Authorize(sendCtx, c.OwnerID, t.Event, ch); err != nil {
 		return e.Store.Cancel(ctx, t, "authorization_revoked")
 	}
+	now = e.currentTime()
+	if expired(t.Event, now) {
+		return e.Store.Cancel(ctx, t, "expired")
+	}
+	if next := rule.Quiet.Next(now); next.After(now) {
+		return e.Store.Defer(ctx, t, now, next)
+	}
 	rendered, err := c.Render(rule, t.Event)
 	if err != nil {
 		return e.Store.Finish(ctx, t, "failed", "template_invalid", now)
 	}
 	err = e.Sender.Send(context.WithValue(sendCtx, ownerKey{}, c.OwnerID), ch, rendered, taskRequestID(t.ID))
+	now = e.currentTime()
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer finishCancel()
 	if err == nil {
@@ -165,4 +181,13 @@ func SenderOwner(ctx context.Context) string { id, _ := ctx.Value(ownerKey{}).(s
 
 func ContextWithSenderOwner(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, ownerKey{}, id)
+}
+
+// A batch can wait behind four slow senders. Each claim, final send check and
+// retry uses its own wall time rather than granting leases from batch start.
+func (e *Engine) currentTime() time.Time {
+	if e.Now != nil {
+		return e.Now().UTC()
+	}
+	return time.Now().UTC()
 }

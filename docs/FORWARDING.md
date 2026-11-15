@@ -55,7 +55,7 @@ SMTP不允许明文模式，不跳过证书验证；MQTT/TCP可显式启用TLS�
 
 新模块在同一SQLite库中建立自己的 config、AUTOINCREMENT journal、cursor 和 tasks 表。原通知事件的 AFTER INSERT trigger 在原短信/通话事务内记录 journal；回滚同时撤销 journal。初装不回填已有历史通知，游标和任务在一个事务内提交，任务按事件/规则/通道去重。事件还绑定接收时的配置 revision/开关，不能在一次启用或修改收件人后把旧事件套到新配置上。
 
-最多4路并发；45秒租约、随机 attempt token、有限5次尝试和指数退避。完成更新要求仍持有该token，旧进程的迟到回执不能覆盖新租约。串行任务在LIMIT100**之前**排除被前序 pending/sending 阻挡的候选；停止策略一次取消组内剩余pending任务，避免大批次饥饿。
+最多4路并发；45秒租约、随机 attempt token、有限5次尝试和指数退避。批次等待后按实际认领/发送/完成时间重新计算租约、有效期、免打扰和退避，不复用批次开始时间。完成更新要求仍持有该token，旧进程的迟到回执不能覆盖新租约。串行任务在LIMIT100**之前**排除被前序 pending/sending 阻挡的候选；停止策略一次取消组内剩余pending任务，避免大批次饥饿。
 
 每次发送重新读取配置，并在最终发送边界检查当前所有者账号仍启用/仍为管理员、来源线路权限、SMS发送线路权限及原设备OTP策略。私有载荷保留原 `endpoint_line_id`/`endpoint_message_id`，重启后不得从不完整序列化结果推断“不是受限设备”。SMS使用稳定的 `forwarding_<task-id>` 请求ID并进入原短信业务handler，不绕过反滥发或原请求重放控制。
 
