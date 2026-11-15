@@ -12,6 +12,7 @@ type Identity struct {
 	PairingID string
 	UserID    string
 	LineID    string
+	LineIDs   []string
 	Peer      string
 }
 
@@ -36,6 +37,8 @@ type Line struct {
 // Call phases are NasSimHub's: dialing, ringing, connecting, active, ending,
 // ended, failed.
 type Call struct {
+	LineID         string
+	SIMAccount     string
 	ID             string
 	Direction      string // incoming | outgoing
 	Phase          string
@@ -48,6 +51,8 @@ type Call struct {
 }
 
 type Message struct {
+	LineID     string
+	SIMAccount string
 	DeliveryID string
 	Sender     string
 	Content    string

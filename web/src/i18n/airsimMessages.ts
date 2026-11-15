@@ -6,14 +6,13 @@ export type AirSIMMessages = Record<string, string>
 const english: AirSIMMessages = {
   title: 'AirSIM iPhone app',
   subtitle:
-    'Pair the AirSIM app (an iPhone app written for an Android phone gateway) with a line on ' +
-    'this gateway. The iPhone then makes and answers calls and sends and receives SMS on that ' +
-    'line, with the call audio on the phone.',
+    'Pair the unchanged AirSIM app with up to 32 selected lines on ' +
+    'this gateway. Selection order defines SIM accounts; pairings retain their original scope. Only one PCM audio session runs at a time.',
   unavailable: 'AirSIM compatibility is not running on this gateway (MODEMDECK_AIRSIM is off).',
   loadFailed: 'Could not load the AirSIM settings: {error}',
   enable: 'Allow AirSIM iPhones',
   enableHint: 'Off: paired iPhones are kept but every request they send is refused.',
-  line: 'Line used by the iPhone',
+  line: 'Lines used by the iPhone (up to 32; selection order defines SIM accounts)',
   noLines: 'No line is available yet.',
   save: 'Save',
   saved: 'Saved.',
@@ -55,13 +54,12 @@ const english: AirSIMMessages = {
 const chinese: AirSIMMessages = {
   title: 'AirSIM 手机',
   subtitle:
-    '让 AirSIM（原本配合安卓手机网关使用的 iPhone App）与本网关的一条线路配对。配对后 iPhone 可以用这条线路' +
-    '拨打和接听电话、收发短信，通话声音在 iPhone 上。',
+    '让原版 AirSIM App 与最多 32 条线路配对，按选择顺序分配 SIM 账户。配对权限固定，增加线路需要重新配对；同一时间仅支持一个 PCM 音频会话。',
   unavailable: '本网关没有启用 AirSIM 兼容（MODEMDECK_AIRSIM 为 off）。',
   loadFailed: '无法读取 AirSIM 设置：{error}',
   enable: '允许 AirSIM iPhone 接入',
   enableHint: '关闭后已配对的 iPhone 会保留，但它们的所有请求都会被拒绝。',
-  line: 'iPhone 使用的线路',
+  line: 'iPhone 使用的线路（最多 32 条，按勾选顺序分配 SIM 账户）',
   noLines: '还没有可用的线路。',
   save: '保存',
   saved: '已保存。',

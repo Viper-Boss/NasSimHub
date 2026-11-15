@@ -1,7 +1,7 @@
 # NAS猫窝 NasSimHub
 
 > NAS猫窝（NasSimHub）——部署在飞牛 NAS 上的家庭 SIM 卡窝：把手机 SIM 卡放进模组，
-> 网页收发短信、打电话（WebRTC）、看流量与套餐余量、Bark/Telegram/iOS 推送、
+> 网页收发短信、打电话（WebRTC）、看流量与套餐余量、统一转发与 iOS 推送、
 > NKN 去中心化消息、AI 接听草稿、任务管理器式系统面板，多设备接入。
 > 已支持：百旺 QDC507（USB/AT + ADB 语音与模组监控，主线路）+ 中兴 F50 随身WiFi（HTTP，短信/流量/状态）。
 
@@ -25,7 +25,8 @@ preview.cmd
 - 网页打电话（WebRTC，EG25-G 语音）+ 通话录音（NAS 保存）
 - 多设备：EG25-G USB 模组 / 中兴 F50 随身WiFi（HTTP）
 - 顶栏 SIM 状态条：信号/4G/VoLTE/套餐余量圆环/号码归属地
-- 转发渠道：Telegram（已接）、Bark 设置与测试（执行器待接）、拦截策略（待执行器）
+- [统一转发](docs/FORWARDING.md)：15类NAS通道、组合规则、模板、免打扰、持久化队列与脱敏投递记录；默认关闭，显式迁移旧Bark/短信配置
+- [原版AirSIM兼容](docs/AIRSIM-COMPAT.md)：最多32条NAS线路、冻结配对范围及按SIM账户路由，不改手机App；同一时间一个PCM会话
 - 系统运维：模块管理、诊断、流量、录音库、NAS 预检
 
 ---

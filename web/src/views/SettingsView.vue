@@ -12,7 +12,6 @@ import {
   House,
   Info,
   KeyRound,
-  MessageSquareText,
   LoaderCircle,
   LogOut,
   RadioTower,
@@ -82,8 +81,7 @@ const loadPairingSettingsPanel = () =>
 const loadConnectivitySettingsPanel = () =>
   import('../components/ConnectivitySettingsPanel.vue')
 const loadTelegramSettingsForm = () => import('../components/TelegramSettingsForm.vue')
-const loadBarkSettingsPanel = () => import('../components/settings/BarkSettingsPanel.vue')
-const loadSmsForwardPanel = () => import('../components/settings/SmsForwardPanel.vue')
+const loadForwardingPanel = () => import('../components/settings/ForwardingPanel.vue')
 const loadNetworkSwitchesPanel = () => import('../components/settings/NetworkSwitchesPanel.vue')
 const loadF50DevicePanel = () => import('../components/settings/F50DevicePanel.vue')
 const loadAirSIMPanel = () => import('../components/settings/AirSIMPanel.vue')
@@ -102,8 +100,7 @@ const ConnectivitySettingsPanel = defineAsyncComponent(
   loadConnectivitySettingsPanel
 )
 const TelegramSettingsForm = defineAsyncComponent(loadTelegramSettingsForm)
-const BarkSettingsPanel = defineAsyncComponent(loadBarkSettingsPanel)
-const SmsForwardPanel = defineAsyncComponent(loadSmsForwardPanel)
+const ForwardingPanel = defineAsyncComponent(loadForwardingPanel)
 const NetworkSwitchesPanel = defineAsyncComponent(loadNetworkSwitchesPanel)
 const F50DevicePanel = defineAsyncComponent(loadF50DevicePanel)
 const AirSIMPanel = defineAsyncComponent(loadAirSIMPanel)
@@ -205,18 +202,7 @@ const sectionCatalog = computed<SettingsSectionDefinition[]>(() => [
     description: t('settings.telegramDescription'),
     icon: Send
   },
-  {
-    id: 'bark',
-    label: t('settings.bark'),
-    description: t('settings.barkDescription'),
-    icon: BellRing
-  },
-  {
-    id: 'sms-forward',
-    label: t('settings.smsForward'),
-    description: t('settings.smsForwardDescription'),
-    icon: MessageSquareText
-  },
+  { id: 'forwarding', label: t('forwarding.title'), description: t('forwarding.description'), icon: BellRing },
   {
     id: 'f50',
     label: t('settings.f50'),
@@ -309,7 +295,9 @@ watch(
   ([value]) => {
     const section = String(value || '')
     let destination: SettingsSection | '' = ''
-    if (section === 'account') {
+    if (section === 'bark' || section === 'sms-forward') {
+ destination = sessionState.role === 'admin' ? 'forwarding' : 'preferences'
+ } else if (section === 'account') {
       destination = sessionState.role === 'admin' ? 'users' : 'preferences'
     } else if (section === 'external-access') {
       destination = canManageExternalAccess.value
@@ -354,9 +342,9 @@ function preloadSection(section: SettingsSection): void {
       case 'telegram':
         return loadTelegramSettingsForm
       case 'bark':
-        return loadBarkSettingsPanel
       case 'sms-forward':
-        return loadSmsForwardPanel
+      case 'forwarding':
+        return loadForwardingPanel
       case 'f50':
         return loadF50DevicePanel
       case 'airsim':
@@ -617,16 +605,8 @@ onMounted(() => {
               <TelegramSettingsForm />
             </div>
 
-            <div v-else-if="selectedSection === 'bark'" class="settings-content">
-              <PageContentFrame mode="reading">
-                <BarkSettingsPanel />
-              </PageContentFrame>
-            </div>
-
-            <div v-else-if="selectedSection === 'sms-forward'" class="settings-content">
-              <PageContentFrame mode="reading">
-                <SmsForwardPanel />
-              </PageContentFrame>
+            <div v-else-if="selectedSection === 'forwarding'" class="settings-content">
+              <PageContentFrame mode="reading"><ForwardingPanel /></PageContentFrame>
             </div>
 
             <div v-else-if="selectedSection === 'f50'" class="settings-content">

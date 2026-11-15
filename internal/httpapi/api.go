@@ -17,6 +17,7 @@ import (
 	"github.com/human-agent65535/modemdeck/internal/calllease"
 	"github.com/human-agent65535/modemdeck/internal/communication"
 	"github.com/human-agent65535/modemdeck/internal/diagnostics"
+	"github.com/human-agent65535/modemdeck/internal/forwarding"
 	"github.com/human-agent65535/modemdeck/internal/messageevents"
 	"github.com/human-agent65535/modemdeck/internal/mobilepairing"
 	"github.com/human-agent65535/modemdeck/internal/networkruntime"
@@ -340,6 +341,8 @@ type Options struct {
 	UpdateManager         UpdateManager
 	ReleaseRelay          ReleaseRelay
 	ApplicationVersion    string
+	ForwardingStore       *forwarding.SQLStore
+	ForwardingOTP         func(context.Context, store.Message) bool
 	SettingsSecrets       SecretBox
 	AirSIM                *airsimgw.Gateway // AirSIM iPhone app gateway; nil disables it
 	disableAuthentication bool
@@ -356,6 +359,8 @@ type Options struct {
 }
 
 type API struct {
+	forwardingStore            *forwarding.SQLStore
+	forwardingOTP              func(context.Context, store.Message) bool
 	nodeFleet                  NasSimHubNodeService
 	contactBackupMu            sync.Mutex
 	homeSIMDraftMu             sync.Mutex
@@ -446,6 +451,7 @@ func New(repository Repository, options Options) (*API, error) {
 		healthProbe, _ = options.Communications.(HealthProbe)
 	}
 	api := &API{
+		forwardingStore: options.ForwardingStore, forwardingOTP: options.ForwardingOTP,
 		contactBackupDirectory:     options.ContactBackupDirectory,
 		settingsSecrets:            options.SettingsSecrets,
 		airsim:                     options.AirSIM,
@@ -547,9 +553,17 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(request.URL.Path,usbConsoleAPI) {
-		if !api.requireAdmin(response,request){return}
-		api.nassimhubUSBConsole(response,request);return
+	if request.URL.Path == forwardingAPI || strings.HasPrefix(request.URL.Path, forwardingAPI+"/") {
+		api.forwardingResource(response, request)
+		return
+	}
+
+	if strings.HasPrefix(request.URL.Path, usbConsoleAPI) {
+		if !api.requireAdmin(response, request) {
+			return
+		}
+		api.nassimhubUSBConsole(response, request)
+		return
 	}
 	switch request.URL.Path {
 	case "/api/v1/nodes":
@@ -699,8 +713,8 @@ func (api *API) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	case "/api/v1/security/trust/quarantine":
 		api.postOnly(response, request, api.securityTrustQuarantine)
 	case "/api/v1/security/trust/approve":
-  api.postOnly(response, request, api.securityTrustApprove)
- case "/api/v1/security/trust/restore":
+		api.postOnly(response, request, api.securityTrustApprove)
+	case "/api/v1/security/trust/restore":
 		api.postOnly(response, request, api.securityTrustRestore)
 	case "/api/v1/security/journal":
 		api.getOnly(response, request, api.securityJournal)

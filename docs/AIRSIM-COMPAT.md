@@ -2,7 +2,7 @@
 
 [AirSIM](https://github.com/kai-wu-cortex/AirSIM) 是一个 iPhone App，原本配合一台装了 AirSIM 安卓网关的手机使用：iPhone 通过局域网（App 里叫 VoWLAN）控制那台手机打电话、收短信，通话声音走 iPhone。
 
-NasSimHub 冒充这台安卓网关，**不修改 AirSIM App 的任何代码**：App 配对、签名、音频格式全部按它自己的协议来。配对后 iPhone 用 NasSimHub 的一条线路拨打和接听电话、收发短信。
+NasSimHub 冒充这台安卓网关，**不修改 AirSIM App 的任何代码**：App 配对、签名、音频格式全部按它自己的协议来。配对后 iPhone 可使用最多32条选定的NasSimHub线路；服务器保留配对时的线路范围，短信聚合保留来源，写操作按sim_account路由。手机App不修改。
 
 ## 使用
 
@@ -36,7 +36,7 @@ NasSimHub 冒充这台安卓网关，**不修改 AirSIM App 的任何代码**：
 - 只接受私有网络来源：127/8、10/8、172.16/12、192.168/16、链路本地、IPv6 ULA、100.64/10（Tailscale）。**不要把这三个端口映射到公网**：这是 App 的本地模式协议，没有 TLS。
 - 配对：X25519 + HKDF-SHA256（盐 = 会话 ID，info = `AirSIMPair/v1:` + 验证码）+ AES-256-GCM。验证码只显示在管理员页面；窗口单次有效，120 秒过期；错误验证码不消耗窗口。
 - 每台 iPhone 有自己的 32 字节 VoWLAN 密钥，用设置加密密钥（与 SIM PIN 相同的 secretbox）加密后存在 `数据目录/homesim/airsim.json`（0600）。每个请求 HMAC-SHA256 签名，时间戳 ±30 秒，nonce 防重放。
-- 身份：iPhone 以**配对它的管理员账号**行事，但权限降为普通成员、只能访问网关选定的那一条线路。每个请求都重新读取账号：账号被停用、删除或失去管理员角色，下一个请求就被拒绝并清除它的配对；账号没有被分配所选线路时请求被拒绝，但配对保留。
+- 身份：iPhone 以**配对它的管理员账号**行事，但权限降为普通成员、只能访问配对时冻结的所选线路范围。每个请求都重新读取账号：账号被停用、删除或失去管理员角色，下一个请求就被拒绝并清除它的配对；账号没有被分配所选线路时请求被拒绝，但配对保留。
 - 所有命令走与浏览器相同的处理函数：线路权限、通话所有权（call lease）、防骚扰拨号限制都照常生效。
 - 通话所有权：每台 iPhone 是独立的持有者，和浏览器会话互斥；网关在 iPhone 保持连接期间续租，iPhone 离线约 45 秒后停止续租，租约随之到期。
 - 音频：通话的媒体所有者槽同一时间只能有一个——浏览器 WebRTC 或 iPhone PCM。
@@ -64,3 +64,14 @@ NasSimHub 冒充这台安卓网关，**不修改 AirSIM App 的任何代码**：
 - `internal/callmedia/pcmlink.go`：原始 PCM 媒体所有者。
 
 协议依据 AirSIM 仓库 commit `93db925`。App 升级若改了线格式，`internal/airsimproto` 的向量测试会先失败。
+
+
+## 多线路范围（NAS侧）
+
+设置页可选择1–32条不同且当前账号获授权的线路；选择顺序定义SIM账户。保留旧line_id请求兼容，新增line_ids数组，line_id为首项。单线路配对向后兼容。
+
+新配对冻结所选line_ids。以后添加或重排全局线路，不扩大或重排旧配对的权限；新线路需重新配对。删除全局线路或撤回账号线路权限会拒绝相应访问，账号停用/降级会撤销配对。旧v1单线路记录恢复时只固定原主线路，不自动得到新线路。
+
+手机从原health/events的sim_slots读取opaque账户ID：首项nassimhub-line，后续nassimhub-line-2等。短信和通话写操作支持对应sim_account；数值1/2…也按冻结顺序路由，缺省/0为原首项。无效、未配对、已取消选择的账户拒绝，不能用原始线路ID绕过映射。聚合短信返回sim_account/line_id；多线路delivery_id带来源前缀，ACK不会清除另一线路同名回执。
+
+通话仍走原NasSimHub权限、反滥发、call lease及媒体所有者验证；PCM根据已验证call ID选择线路，但同一时间仍只有一个PCM会话。不实现原App云relay或推送唤醒；原版AirSIM手机和真实NAS多线路尚待实机联调，隔离签名请求测试不等同于手机验收。

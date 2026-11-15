@@ -4,6 +4,7 @@ import fallback from './en-US'
 import { homesimEN } from '../homesimData'
 
 export default {
+ forwarding: { title: 'Unified forwarding', description: 'Channels, rules and delivery history' },
   serviceErrors: {
     invalidSession: "セッション応答が無効です",
     incompleteSession: "セッション応答が不完全です",

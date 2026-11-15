@@ -1026,3 +1026,10 @@ func (b *fakeBot) snapshots() ([][]telegram.BotCommand, []telegram.SendMessageRe
 	}
 	return commands, append([]telegram.SendMessageRequest(nil), b.messages...)
 }
+
+func TestUnifiedForwardingDisablesOnlyLegacyNotificationDispatch(t *testing.T) {
+	manager := &Manager{disableNotifications: true}
+	if err := manager.dispatchNotifications(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+}
